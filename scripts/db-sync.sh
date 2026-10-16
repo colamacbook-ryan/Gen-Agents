@@ -3,8 +3,9 @@
 # Không còn vendor từ Second-Brain (cơ chế cũ: `--rev <sha>` chép theo commit SB — đã gỡ). SYNC.json nay là MANIFEST sinh từ chính db/spec:
 # sha256 từng file, số đối tượng, hàm app_* mà schema gọi, tổng test Python — để db:gen / db:test / CI đọc một chỗ.
 #
-#   pnpm db:sync              sinh lại schema_v2_2.sql từ schema_v2_2.py, chạy bộ test Python, ghi db/spec/SYNC.json
-#   pnpm db:sync -- --check   (CI) schema_v2_2.sql TRÙNG BYTE đầu ra generator + sha256 file khớp SYNC.json
+#   pnpm db:sync              sinh lại schema_v2_2.sql từ schema_v2_2.py + seed_reference.json từ gen_seed.py (rev = HEAD; nội dung không đổi ⇒
+#                             giữ tệp cũ), chạy bộ test Python, ghi db/spec/SYNC.json
+#   pnpm db:sync -- --check   (CI) schema_v2_2.sql + seed_reference.json TRÙNG BYTE đầu ra bộ sinh + sha256 file khớp SYNC.json
 #                             (sửa spec mà quên chạy db:sync, hoặc sửa tay schema_v2_2.sql ⇒ đỏ)
 #
 # Sau khi sync: `pnpm db:gen` (migration + kiểu) rồi `pnpm db:test`. Phiên bản DB = mục đầu của db/spec/CHANGELOG.md.
@@ -12,7 +13,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPEC="$ROOT/db/spec"
-FILES=(schema_v2_2.py schema_v2_2.sql views_v2_2.sql tests_v2_2.py)
+FILES=(schema_v2_2.py schema_v2_2.sql views_v2_2.sql tests_v2_2.py gen_seed.py seed_reference.json)
 
 check=0
 while [ $# -gt 0 ]; do
@@ -31,6 +32,7 @@ cp "$SPEC/schema_v2_2.py" "$SPEC/views_v2_2.sql" "$tmp/"
 python3 -I "$tmp/schema_v2_2.py" >/dev/null
 
 if [ "$check" -eq 1 ]; then
+  python3 -B -I "$SPEC/gen_seed.py" --check
   python3 -I - "$SPEC" "$tmp/schema_v2_2.sql" <<'PY'
 import hashlib, json, os, sys
 spec, regen = sys.argv[1], sys.argv[2]
@@ -56,6 +58,8 @@ fi
 
 cp "$tmp/schema_v2_2.sql" "$SPEC/schema_v2_2.sql"
 echo "  ✓ schema_v2_2.sql sinh lại từ schema_v2_2.py"
+version="$(sed -n 's/^## v\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' "$SPEC/CHANGELOG.md" | head -n 1)"
+python3 -B -I "$SPEC/gen_seed.py" --rev "$(git -C "$ROOT" rev-parse HEAD)" --version "$version"
 python3 -I - "$SPEC" "${FILES[@]}" <<'PY'
 import datetime, hashlib, json, os, re, sqlite3, subprocess, sys
 spec, files = sys.argv[1], sys.argv[2:]

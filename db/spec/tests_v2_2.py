@@ -5,6 +5,7 @@ import sqlite3, hashlib, hmac, json, os, sys, time, re, datetime, zoneinfo
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import schema_v2_2 as S
+import gen_seed as G          # v2.3.4: bộ sinh seed tham chiếu (SEED-ref đối chiếu với seed() bên dưới)
 S.build()
 
 SYS = S.SYS
@@ -534,13 +535,14 @@ def seed(with_fn=True):
     # v2.2.6 (CONTRACT-r6 B1.2): codex = coming_soon ở MVP (PS §5) — vẫn nằm trong danh mục; Tùng/Khoa của seed demo đổi sang Claude Code
     # v2.2.7 (CNS-092): core_capable; v2.2.8 (Q-I5 [CHỐT — Ryan 2026-10-16], CONTRACT-r8 §C): antigravity = 1 (mặc định), claude-code = 1,
     # openclaw = 1 (coming_soon ở MVP ⇒ hiện mờ "sắp có", chưa chọn được), codex = 0
-    for slug, name, vendor, prio, consent, st, core in (('antigravity', 'Antigravity', 'google', 1, 1, 'ready', 1),
-                                                        ('claude-code', 'Claude Code', 'anthropic', 2, 0, 'ready', 1),
-                                                        ('codex', 'Codex', 'openai', 3, 0, 'coming_soon', 0),
-                                                        ('openclaw', 'OpenClaw', 'openclaw', 4, 0, 'coming_soon', 1)):
+    # v2.3.4: cli_binary / tos_risk theo DATABASE §5 / §11.2 (v2.3.3 trở về trước: cli_binary = slug, tos_risk 'grey' cho mọi loại) — SEED-ref đối chiếu
+    for slug, name, vendor, cli, prio, risk, consent, st, core in (('antigravity', 'Antigravity', 'google', 'agy', 1, 'high', 1, 'ready', 1),
+                                                                   ('claude-code', 'Claude Code', 'anthropic', 'claude', 2, 'grey', 0, 'ready', 1),
+                                                                   ('codex', 'Codex', 'openai', 'codex', 3, 'grey', 0, 'coming_soon', 0),
+                                                                   ('openclaw', 'OpenClaw', 'openclaw', 'openclaw', 4, 'grey', 0, 'coming_soon', 1)):
         db.execute("""INSERT INTO engines(slug,name,vendor,cli_binary,adapter_status,priority_order,tos_risk,tos_notice_key,tos_notice_version,
                       requires_consent,core_capable) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                   (slug, name, vendor, slug, st, prio, 'grey', 'tos.' + slug, '1', consent, core))
+                   (slug, name, vendor, cli, st, prio, risk, 'tos.' + slug, '1', consent, core))
     for ws in (W, W2):
         A[(ws, 'owner')] = uid(f'actor:{ws}:owner')
         db.execute("INSERT INTO actors(id,workspace_id,kind,user_id,label) VALUES(?,?,?,?,?)", (A[(ws, 'owner')], ws, 'user', ryan, 'Ryan'))
@@ -6826,6 +6828,125 @@ def t_v234_engine_unrestricted():
            f"owner đổi loại {'được' if tc else 'BỊ CHẶN'} ⇒ {r_tc}")
     _show(c)
 
+def _seed_ukeys(db, t):
+    """Bộ cột của PK + index UNIQUE KHÔNG điều kiện (= uniqueKeys của bên áp TS) — conflictKey phải trùng một bộ."""
+    pk = [r[1] for r in sorted(db.execute(f'PRAGMA table_info("{t}")'), key=lambda r: r[5]) if r[5]]
+    keys = [pk] if pk else []
+    for _s, name, uniq, _o, partial in db.execute(f'PRAGMA index_list("{t}")').fetchall():
+        if uniq and not partial:
+            keys.append([r[2] for r in db.execute(f'PRAGMA index_info("{name}")')])
+    return keys
+
+def _seed_apply(D, tables, resolve, actor):
+    """Bên áp seed tham chiếu — cùng thuật toán với applyGlobalSeed / applyWorkspaceSeed của @ga/db: MỘT giao dịch, app_actor() = actor system của workspace,
+    created_by = actor đó, INSERT … SELECT … WHERE NOT EXISTS theo conflictKey (không ON CONFLICT). Trả (đã chèn, đã có); lỗi ⇒ rollback + ném."""
+    db, q = D.raw, (lambda c: '"' + c + '"')
+    out, prev = [0, 0], D.ctx.actor
+    D.ctx.actor = actor
+    db.execute("BEGIN")
+    try:
+        for t in tables:
+            name, ck = t['table'], t['conflictKey']
+            cols_db = [r[1] for r in db.execute(f'PRAGMA table_info("{name}")')]
+            if not cols_db or not any(sorted(k) == sorted(ck) for k in _seed_ukeys(db, name)):
+                raise ValueError(f'{name}: bảng lạ hoặc conflictKey {ck} không phải PK / UNIQUE')
+            for raw in t['rows']:
+                row = {c: (resolve(v) if isinstance(v, dict) else v) for c, v in raw.items()}
+                if 'created_by' in cols_db:
+                    row['created_by'] = actor
+                if [c for c in row if c not in cols_db]:
+                    raise ValueError(f'{name}: cột lạ')
+                cols = list(row)
+                n = db.execute(f"INSERT INTO {q(name)} ({', '.join(map(q, cols))}) SELECT {', '.join('?' * len(cols))} "
+                               f"WHERE NOT EXISTS (SELECT 1 FROM {q(name)} WHERE {' AND '.join(q(k) + ' IS ?' for k in ck)})",
+                               [row[c] for c in cols] + [row[k] for k in ck]).rowcount
+                out[0 if n > 0 else 1] += 1
+        db.execute("COMMIT")
+    except Exception:
+        if db.in_transaction:
+            db.execute("ROLLBACK")
+        raise
+    finally:
+        D.ctx.actor = prev
+    return tuple(out)
+
+def t_v234_seed_reference():
+    """v2.3.4 (CNS-170, contracts seed.ts ga.seed-reference.v1 — lane DB sinh): seed_reference.json (1) trùng byte đầu ra gen_seed.py với rev / version ghi trong
+    tệp, sha256 = sha256(JSON chuẩn hoá bỏ sha256), không created_by, global không $ref, mọi hàng có cột conflictKey; (2) áp lên DB TRỐNG bằng thuật toán của
+    bên áp (WHERE NOT EXISTS, created_by = actor system) qua MỌI guard — global một lần, perWorkspace cho hai tenant (hàng workspaces do app ghi trước); chạy lại
+    0 hàng mới; id_counters = số lớn nhất đã dùng; id tất định seed_row_id(workspace, key) dạng ULID, khác nhau giữa tenant; (3) ON CONFLICT DO NOTHING trùng
+    khoá bị trigger chống REPLACE chặn (lý do bên áp dùng WHERE NOT EXISTS); (4) ĐỐI CHIẾU seed() của bộ test (seed thật dùng cho mọi test): global (workspace
+    hệ thống, actor, engines, dna_field_defs) + tenant W (actor, settings, PS-0001, ví Kho bạc / Sink, system_agents, gói skin) trùng từng cột seed sinh ra.
+    Không đối chiếu: tools built-in (seed() chưa dựng — TL- của seed() là tool demo), id_counters (seed demo cấp thêm số), positions.title (seed() đã render
+    title_template với tên owner — kiểm bằng render)."""
+    path = os.path.join(HERE, 'seed_reference.json')
+    raw = open(path, encoding='utf-8').read()
+    seed_ = json.loads(raw)
+    gen_ok = _val(lambda: G.render(G.build(seed_['source']['rev'], seed_['databaseVersion']))) == raw
+    sha_ok = hashlib.sha256(G.canonical({k: v for k, v in seed_.items() if k != 'sha256'}).encode('utf-8')).hexdigest() == seed_['sha256']
+    rows_of = lambda part: [(t, r) for t in seed_[part] for r in t['rows']]
+    fmt_ok = (seed_['format'] == 'ga.seed-reference.v1' and not [1 for _t, r in rows_of('global') + rows_of('perWorkspace') if 'created_by' in r]
+              and not [1 for _t, r in rows_of('global') if any(isinstance(v, dict) for v in r.values())]
+              and all(k in r for t, r in rows_of('global') + rows_of('perWorkspace') for k in t['conflictKey']))
+    n_g, n_w = len(rows_of('global')), len(rows_of('perWorkspace'))
+    # --- áp lên DB trống
+    ctx = Ctx(); D = DB(connect(ctx, True), ctx); load_schema(D.raw)
+    gsys = next(r['id'] for t in seed_['global'] if t['table'] == 'actors' for r in t['rows'] if r['system_key'] == 'system')
+    g1 = _val(lambda: _seed_apply(D, seed_['global'], None, gsys))
+    g2 = _val(lambda: _seed_apply(D, seed_['global'], None, gsys))
+    ten = {}
+    for tag, code in (('seedref-a', 'SRA1'), ('seedref-b', 'SRB1')):
+        w = uid('ws:' + tag)
+        D.raw.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (w, 'tenant', tag, tag.title(), code))   # app: Onboarding
+        acts = {k: uid(f'actor:{w}:{k}') for k in G.ACTOR_KEYS}                                                                     # app cấp trước
+        res = lambda ref, w=w, acts=acts: w if ref['$ref'] == 'workspace' else acts[ref['key']] if ref['$ref'] == 'actor' else G.seed_row_id(w, ref['key'])
+        ten[w] = (_val(lambda res=res, acts=acts: _seed_apply(D, seed_['perWorkspace'], res, acts['system'])),
+                  _val(lambda res=res, acts=acts: _seed_apply(D, seed_['perWorkspace'], res, acts['system'])))
+    WA, WB = list(ten)
+    apply_ok = g1 == (n_g, 0) and g2 == (0, n_g) and all(v == ((n_w, 0), (0, n_w)) for v in ten.values())
+    cnt = {(w, p): n for w, p, n in D.raw.execute("SELECT workspace_id, prefix, last_seq FROM id_counters")}
+    used = {}
+    for t in seed_['perWorkspace']:
+        if 'display_seq' in t['rows'][0]:
+            for w in (WA, WB):
+                for p, n in D.raw.execute(f'SELECT substr(display_id, 1, instr(display_id, \'-\') - 1), max(display_seq) FROM "{t["table"]}" '
+                                          'WHERE workspace_id=? GROUP BY 1', (w,)):
+                    used[(w, p)] = n
+    ctr_ok = bool(used) and cnt == used
+    ULID = re.compile(r'^[0-9A-HJKMNP-TV-Z]{26}$')
+    st17 = [D.one("SELECT id FROM settings WHERE workspace_id=? AND display_id='ST-0017'", w) for w in (WA, WB)]
+    ids = [G.seed_row_id(w, 'settings:st-0017') for w in (WA, WB)]
+    all_ids = [r[0] for t in [x['table'] for x in seed_['perWorkspace'] if 'id' in x['rows'][0]]
+               for r in D.raw.execute(f'SELECT id FROM "{t}" WHERE workspace_id IN (?, ?)', (WA, WB))]
+    id_ok = (st17 == ids and ids[0] != ids[1] and all(ULID.match(i) for i in all_ids + [gsys]) and len(set(all_ids)) == len(all_ids)
+             and G.seed_row_id(WA, 'settings:st-0017') == ids[0])
+    oc, oc_msg = expect_fail(D.raw, lambda: D.raw.execute(
+        "INSERT INTO engines(slug, name, vendor, cli_binary, priority_order, tos_risk, tos_notice_key, tos_notice_version) "
+        "VALUES('antigravity', 'x', 'x', 'x', 9, 'ok', 'k', '1') ON CONFLICT DO NOTHING"), re.escape(S.MSG_NO_REPLACE.format(t='engines')))
+    # --- đối chiếu seed() của bộ test
+    D2, X2 = seed()
+    W = X2['W']
+    diffs, compared = [], 0
+    for part, ws in (('global', SYS), ('perWorkspace', W)):
+        for t in seed_[part]:
+            if t['table'] in ('tools', 'id_counters'):
+                continue
+            for r in t['rows']:
+                key = {k: (ws if isinstance(r[k], dict) else r[k]) for k in t['conflictKey']}
+                cols = [c for c, v in r.items() if c not in ('id', 'title') and not isinstance(v, dict)]
+                got = D2.raw.execute(f'SELECT {", ".join(cols)} FROM "{t["table"]}" WHERE ' + ' AND '.join(f'{k} IS ?' for k in key), list(key.values())).fetchall()
+                compared += 1
+                if got != [tuple(r[c] for c in cols)]:
+                    diffs.append((t['table'], key, got[:1]))
+    ps = seed_['perWorkspace'][[t['table'] for t in seed_['perWorkspace']].index('positions')]['rows'][0]
+    title_ok = D2.one("SELECT title FROM positions WHERE workspace_id=? AND display_seq=1", W) == ps['title_template'].replace('{owner_name}', 'Ryan')
+    ok = (gen_ok and sha_ok and fmt_ok and apply_ok and ctr_ok and id_ok and oc and not diffs and title_ok)
+    report("SEED-ref", ok, f"seed_reference.json (rev {seed_['source']['rev'][:12]}, DB v{seed_['databaseVersion']}): = đầu ra gen_seed.py ({gen_ok}), sha256 ({sha_ok}), "
+           f"định dạng ({fmt_ok}); DB trống: global {g1} rồi chạy lại {g2}, perWorkspace 2 tenant {list(ten.values())} — qua mọi guard, WHERE NOT EXISTS; "
+           f"id_counters = số lớn nhất đã dùng ({ctr_ok}); id tất định dạng ULID, khác nhau giữa tenant ({id_ok}); ON CONFLICT DO NOTHING trùng khoá bị chặn "
+           f"({'đúng' if oc else 'SAI'}: \"{oc_msg[:48]}…\"); đối chiếu seed(): {compared - len(diffs)}/{compared} hàng trùng từng cột, PS-0001 title = render "
+           f"title_template ({title_ok})" + (f"; LỆCH: {diffs[:4]}" if diffs else ""))
+
 def t_v234_pair_u():
     """v2.3.4 (mutation toàn bộ trigger — mẫu CI: nửa _u của 4 cặp guard viết tay không có ca, chỉ nửa _i có): ca UPDATE, mỗi ca chỉ guard đích chặn
     (thông điệp riêng). instruction_versions_role_target_u: ngoài bảo trì instruction_versions_no_update chặn trước mọi đổi change_set_id ⇒ ca chạy TRONG
@@ -7139,5 +7260,5 @@ if __name__ == '__main__':
     t_v231_cli_install(); t_v231_card_measured(); t_v231_anchor(); t_v231_relogin()
     t_v232_anchor_writer(); t_v232_cli_writer(); t_v232_writer_meta()
     t_v233_actor_meta(); t_v233_actor_guard(); t_v233_actor_claims(); t_v233_actor_inner(); t_v233_cred_writer(); t_v233_anchor_parse()
-    t_v234_nul_checks(); t_v234_sql_noname(); t_v234_secret_kind(); t_v234_generated_guards(); t_v234_fts_sync(); t_v234_pair_u(); t_v234_engine_unrestricted()
+    t_v234_nul_checks(); t_v234_sql_noname(); t_v234_secret_kind(); t_v234_generated_guards(); t_v234_fts_sync(); t_v234_pair_u(); t_v234_engine_unrestricted(); t_v234_seed_reference()
     print("\nTỔNG:", sum(1 for r in RESULTS if r[1]), "/", len(RESULTS), "PASS — SQLite", sqlite3.sqlite_version)

@@ -27,6 +27,24 @@ Quy trình: sửa `schema_v2_2.py` / `views_v2_2.sql` / `tests_v2_2.py` → `pnp
 ### Mới
 - **`engine_unrestricted`** (contracts `ENGINE_UNRESTRICTED_REASON`): `engine_installs.tool_restriction_version` = phiên bản CLI app đã kiểm có cơ chế giới hạn
   công cụ của adapter; chỉ tính khi = `installed_version`. `CORE_READY` + `v_core_agent_accounts.is_ready` đòi; lý do O4 nhánh cuối, sự cố.
+- **Seed tham chiếu máy đọc được** (CNS-170, contracts `ga.seed-reference.v1`): bộ sinh `db/spec/gen_seed.py` → `db/spec/seed_reference.json` (nguồn duy
+  nhất của dữ liệu seed tham chiếu; `pnpm db:sync` sinh, `--check` so byte; manifest `SYNC.json` + bản sao đột biến có cả hai tệp).
+  - **id (`idFor`, lane DB quyết):** `seed_row_id(workspace_id, key)` = `'0000000000'` + 16 ký tự Crockford của 80 bit đầu
+    `sha256('ga.seed-reference.v1:' + workspace_id + ':' + key)`; key = `'<bảng>:<display_id viết thường>'`. TS: `seedRowId` / `seedIdFor`
+    (`packages/db/src/seed/ids.ts`, vector đối chiếu Python). Global ghi sẵn id bằng cùng hàm (workspace hệ thống).
+  - **`source.rev`** = HEAD lúc sinh (bản sinh nằm ở commit con); nội dung không đổi ⇒ giữ tệp cũ.
+  - **Ghi chú cho tầng repos: dùng `WHERE NOT EXISTS`, không dùng `ON CONFLICT`.** Trigger chống REPLACE (`<bảng>_no_replace_i`, BEFORE INSERT) chạy
+    TRƯỚC bước giải xung đột ⇒ `INSERT … ON CONFLICT DO NOTHING / DO UPDATE` trùng khoá bị RAISE ("UNIQUE (chống REPLACE…)"), không lặng lẽ bỏ qua.
+    Áp seed / upsert idempotent: `INSERT … SELECT … WHERE NOT EXISTS (SELECT 1 … WHERE <conflictKey> IS ?)` (applyGlobalSeed / applyWorkspaceSeed đã
+    làm vậy); cập nhật = UPDATE riêng. Ngoại lệ: `id_counters`, `jobs` (NO_REPLACE_EXEMPT — cấp số bằng upsert §2.1). Test `SEED-ref` chứng minh.
+  - **Nghĩa vụ app:** hàng `workspaces` của tenant (slug / tên / short_code nhập ở Onboarding) ghi TRƯỚC `applyWorkspaceSeed` — seed không chứa; hiện
+    `conn.bootstrap` đòi actor system tồn tại cuối giao dịch nên ghi hàng này cần một lối của L0 (vd tham số cho `applyWorkspaceSeed`). Actor hệ thống của
+    tenant: app cấp trước đủ 10 khoá. `positions.title` = render `title_template` khi biết owner (seed ghi 'Trợ lý'). CT-0001 (container AI Hệ thống) không
+    nằm trong seed (tên `ga-sys-<short_code>` theo tenant) — app tạo ở Onboarding.
+  - Nội dung: global = workspace hệ thống, 10 actor hệ thống, 4 engines, 31 `dna_field_defs`; mỗi tenant = 10 actor, 12 settings (ST-0002…0009,
+    0015…0018), PS-0001, ví Kho bạc + Sink, 4 `system_agents` (model chọn ở Onboarding bước 4), 5 tool built-in, 10 skin chibi, `id_counters`.
+    [ĐỀ XUẤT — lane DB, chờ Gen]: tos_risk claude-code / openclaw = 'grey' (§11.2 không ghi); risk_level / default_mode / tên tool built-in.
+  - `seed()` của bộ test: engines theo DATABASE §5 (cli_binary `agy` / `claude` / `codex` / `openclaw`, antigravity tos_risk `high`).
 
 ### Test
 - Ca âm sinh tự động cho mọi guard sinh từ DDL (`GEN-guards`: 249 guard), danh sách kỳ vọng lấy từ generator; ca UPDATE cho 4 guard viết tay (`PAIR-u`);
