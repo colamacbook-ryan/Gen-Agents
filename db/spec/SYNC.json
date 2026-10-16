@@ -1,28 +1,28 @@
 {
   "source_repo": "colamacbook-ryan/Second-Brain",
-  "rev": "359e59bb1fe8d895318e44c1c7e8d501345aad0e",
+  "rev": "70903fdd54cb8f2adf231d9222e5436090c06f07",
   "source_dir": "01-projects/gen-agents/spec/db-v2.2",
-  "database_version": "2.3.1",
+  "database_version": "2.3.2",
   "database_md": {
     "path": "01-projects/gen-agents/spec/DATABASE.md",
-    "sha256": "e4a06549fa4b1f47938960a6422829b74cb336330e5072f58d04e0f41c28f3f7"
+    "sha256": "9662e59cad83f1b5184bf9c3c82510d1abe9f8127bfaca9c35bd2e30ec51922f"
   },
   "files": {
     "schema_v2_2.py": {
       "source": "01-projects/gen-agents/spec/db-v2.2/schema_v2_2.py",
-      "sha256": "4891f5df7b3946ac6455747211c2a9986b2dd14a5bfe54583bf01eda4bf9b32f"
+      "sha256": "8f5fdc07a3ba8ecca8e4ba930502d1450508b14a45d215195d34b1276ed60f74"
     },
     "schema_v2_2.sql": {
       "source": "01-projects/gen-agents/spec/db-v2.2/schema_v2_2.sql",
-      "sha256": "89fb22a58705e7b2727003089c3c0fd21a0dba274ddacf8980f11278052bbc84"
+      "sha256": "0c8dbe249f6a1feaaa3cba3d0ee756c4cb3804d40005811e75464ae94055c3a7"
     },
     "views_v2_2.sql": {
       "source": "01-projects/gen-agents/spec/db-v2.2/views_v2_2.sql",
-      "sha256": "359b44d2cb936b1a378668c1bbaab1f375dfe4f0654ba6514c59881d07137cf0"
+      "sha256": "f365ac256ce011c28fabbd386274b7b4224982b3b8e72684052bc99a5a9ffcbb"
     },
     "tests_v2_2.py": {
       "source": "01-projects/gen-agents/spec/db-v2.2/tests_v2_2.py",
-      "sha256": "f7e99ade3da4fa651ea5fd9b8c423ab4197ec5686f916114e8ced74ccf2bb769"
+      "sha256": "0c1b5dddafb621662f666b544fe343ce04cbf61b612261d951e87750518d03d6"
     }
   },
   "app_functions": [
@@ -34,13 +34,13 @@
     "tables": 81,
     "virtual_tables": 1,
     "indexes": 284,
-    "triggers": 408,
+    "triggers": 415,
     "views": 31
   },
   "python_tests": {
-    "passed": 98,
-    "total": 98,
+    "passed": 101,
+    "total": 101,
     "sqlite": "3.45.1"
   },
-  "synced_at": "2026-10-16T12:13:39Z"
+  "synced_at": "2026-10-16T13:01:39Z"
 }

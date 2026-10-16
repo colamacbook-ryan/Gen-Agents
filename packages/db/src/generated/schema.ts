@@ -1,4 +1,4 @@
-// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 359e59b (DATABASE v2.3.1) — KHÔNG SỬA TAY.
+// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 70903fd (DATABASE v2.3.2) — KHÔNG SỬA TAY.
 // Bảng: Generated<T> khi cột có DEFAULT hoặc là INTEGER PRIMARY KEY; union từ CHECK (col IN (…)).
 // View: chỉ đọc (ColumnType<T, never, never>); cột biểu thức không có kiểu khai báo ⇒ SqlValue.
 import type { ColumnType, Generated } from 'kysely';
@@ -1371,6 +1371,7 @@ export interface Secrets {
   status: Generated<'active' | 'rotated' | 'revoked'>;
   rotated_from_id: string | null;
   last_used_at: string | null;
+  allowed_host: string | null;
 }
 
 export interface Sessions {

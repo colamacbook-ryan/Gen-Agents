@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""DDL SQLite cho DATABASE.md v2.2 → v2.3.1 (gen-agents) — sinh từ một DSL nhỏ.
-(v2.3.x: thư mục / tên tệp giữ "v2_2" — bằng chứng nối tiếp từ v2.2.x; xem DATABASE.md changelog v2.2.13 → v2.3.0 và v2.3.0 → v2.3.1.)
+"""DDL SQLite cho DATABASE.md v2.2 → v2.3.2 (gen-agents) — sinh từ một DSL nhỏ.
+(v2.3.x: thư mục / tên tệp giữ "v2_2" — bằng chứng nối tiếp từ v2.2.x; xem DATABASE.md changelog v2.2.13 → v2.3.0, v2.3.0 → v2.3.1, v2.3.1 → v2.3.2.)
 v2.3.1 (ADR 0004 [Gen quyết 2026-10-16], BUILD-PLAN §D.4, CNS-157): SQL TRƯỚC — DDL sinh ở đây (đã test) CHÍNH LÀ nguồn schema; không có Drizzle.
 Repo code vendor theo MỘT commit của SB (db-sync, SYNC.json) rồi tách: baseline `0001_baseline.sql` = CHỈ bảng + index (+ bảng ảo FTS);
 `R__triggers.sql` = mọi trigger (luật cột, chống REPLACE, nghiệp vụ, đồng bộ FTS) — repeatable, runner DROP + CREATE lại sau mỗi lượt migration và
@@ -696,7 +696,7 @@ table('engines', 'P', cols=[
 # v2.3.1 (BUILD-PLAN §A.2-5, §B.7, §F.6 n; CNS-137 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN]): TRẠNG THÁI CÀI CLI theo workspace × loại CLI. Image KHÔNG chứa
 # binary CLI của hãng: install.sh / "Cài lại" chạy ga-engine-install tải từ nguồn chính chủ vào volume ga-engines (/opt/engines/<slug>/<version>/, mount
 # chỉ đọc vào container). App ghi hàng theo `ga-engine-install status` (supervisor báo) — DB không kiểm được sự thật của việc cài, chỉ giữ trạng thái
-# đã báo. Không prefix (En): hàng định danh bằng engine_slug như danh mục engines (§2.1). Thiếu hàng sống ⇒ coi như 'not_installed' (fail-closed:
+# đã báo; v2.3.2: CHỈ actor system của workspace ghi (engine_installs_writer_i/_u) — owner / admin không ghi tay 'installed'. Không prefix (En): hàng định danh bằng engine_slug như danh mục engines (§2.1). Thiếu hàng sống ⇒ coi như 'not_installed' (fail-closed:
 # v_engine_installs, CORE_READY). Core agent sẵn sàng đòi CLI của loại Core agent 'installed' ⇒ lý do O4 'engine_not_installed'.
 INSTALL_STATES = ['not_installed', 'installing', 'installed', 'failed']
 INSTALL_FAIL = ['domain_blocked', 'unsupported_arch', 'network', 'checksum_mismatch', 'unknown']
@@ -1228,7 +1228,12 @@ table('secrets', 'E', 'SEC', cols=[
     "label TEXT NOT NULL", "ciphertext BLOB NOT NULL", "nonce BLOB NOT NULL", "wrapped_dek BLOB NOT NULL",
     "dek_nonce BLOB NOT NULL", "kek_id TEXT NOT NULL", "alg TEXT NOT NULL DEFAULT 'A256GCM'", "last4 TEXT",
     "fingerprint TEXT NOT NULL", enum('status', ['active', 'rotated', 'revoked'], default='active'),
-    "rotated_from_id TEXT REFERENCES secrets(id) ON DELETE SET NULL", "last_used_at TEXT"],
+    "rotated_from_id TEXT REFERENCES secrets(id) ON DELETE SET NULL", "last_used_at TEXT",
+    # v2.3.2 (review bảo mật HIGH trên v2.3.1, L-20261016-32 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN]; "chỉ owner" là [Gen quyết 2026-10-16]): token GẮN với ĐÍCH —
+    # host được phép đẩy token tới (chữ thường, không scheme / path / '@'; có thể kèm ':cổng'). Chỉ secret kind anchor_remote_token có host (CHECK); ghi một lần
+    # (secrets_allowed_host_u) ⇒ đổi host = nhập token mới (secret mới). Host trong URL của backup.remote_anchor phải TRÙNG host này (settings_remote_anchor_i/_u).
+    "allowed_host TEXT CHECK (allowed_host IS NULL OR (length(allowed_host) BETWEEN 1 AND 253 AND allowed_host NOT GLOB '*[^a-z0-9.:-]*'))"],
+    cons=["CHECK ((kind = 'anchor_remote_token') = (allowed_host IS NOT NULL))"],
     idx=["CREATE INDEX ix_sec_fp ON secrets(workspace_id, fingerprint)"])
 
 table('consents', 'A', 'CN', cols=[
@@ -1548,14 +1553,16 @@ def CORE_CALM(ws):
     đạt) = type_change_in_progress — cũng "êm", TRỪ khi lần kiểm của nó đã xong mà không đạt (view: login_check_failed / _partial ⇒ sự cố, Gen ghi chú 3
     vòng 8c); binding cũ đã tắt khác loại nên không khớp na.engine_slug = CORE. v2.2.11 (CONTRACT-r8d §E): 'in_progress' QUÁ 15 phút (LOGIN_STALLED) không
     còn "êm" ⇒ login_stalled là sự cố (cảnh báo + nút đổi loại hiện lại). v2.3.1 (CNS-137): CLI của loại Core agent chưa cài (ENGINE_INSTALLED sai) đứng
-    TRƯỚC consent / đăng nhập trong thứ tự lý do ⇒ không bao giờ "êm" (engine_not_installed là sự cố — kể cả lúc owner đang đổi loại sang CLI chưa cài)."""
+    TRƯỚC consent / đăng nhập trong thứ tự lý do. v2.3.2 (Gen quyết 2026-10-16): CLI ĐANG CÀI (ENGINE_INSTALLING — owner bấm "Cài lại CLI" / đang tải) ⇒ "êm"
+    (không sự cố, như relogin_in_progress); chưa cài / cài lỗi / thiếu hàng ⇒ vẫn sự cố (kể cả lúc owner đổi loại sang CLI chưa cài)."""
     return (f"EXISTS (SELECT 1 FROM engine_bindings nb JOIN engine_accounts na ON na.id = nb.engine_account_id AND na.workspace_id = nb.workspace_id "
             f"WHERE nb.workspace_id = {ws} AND nb.consumer_kind = 'system' AND nb.deleted_at IS NULL AND na.deleted_at IS NULL "
             f"AND na.engine_slug = {CORE(ws)} AND EXISTS (SELECT 1 FROM containers nc WHERE nc.workspace_id = {ws} AND nc.kind = 'system' "
-            f"AND nc.deleted_at IS NULL AND nc.desired_state <> 'absent') AND {ENGINE_INSTALLED(ws, 'na.engine_slug')} "
+            f"AND nc.deleted_at IS NULL AND nc.desired_state <> 'absent') AND ({ENGINE_INSTALLING(ws, 'na.engine_slug')} "
+            f"OR ({ENGINE_INSTALLED(ws, 'na.engine_slug')} "
             f"AND ({CONSENT_IDENTITY_CHANGED('na')} OR ({CONSENT_OK('na')} "
             f"AND nb.is_enabled = 1 AND na.status = 'active' AND na.login_status = 'in_progress' AND NOT ({TYPE_CHANGE_FAILED('na', ws)}) "
-            f"AND NOT {LOGIN_STALLED('na')})))")
+            f"AND NOT {LOGIN_STALLED('na')})))))")
 # v2.2.11 (CONTRACT-r8d §E, CNS-123 — [ĐỀ XUẤT — Gen vòng 8d]): ĐỒNG HỒ = SQL function app_now() do app đăng ký ở MỌI kết nối (như app_maint(), §9.3;
 # kết nối không đăng ký ⇒ "no such function", fail-closed) — production: giờ hệ thống UTC; test: đồng hồ giả. NOW_TS chuẩn hoá về ts 24 ký tự (§2.4).
 LOGIN_STALL_MIN = 15
@@ -1591,6 +1598,11 @@ def ENGINE_INSTALLED(ws, slug):
     Thiếu hàng ⇒ chưa cài (fail-closed). = v_core_agent_accounts.engine_install_state = 'installed' (nhánh 'engine_not_installed' của not_ready_reason)."""
     return (f"EXISTS (SELECT 1 FROM engine_installs ei WHERE ei.workspace_id = {ws} AND ei.engine_slug = {slug} AND ei.deleted_at IS NULL "
             f"AND ei.install_state = 'installed')")
+def ENGINE_INSTALLING(ws, slug):
+    """v2.3.2 (Gen quyết 2026-10-16): CLI loại {slug} ĐANG CÀI (owner bấm "Cài lại CLI", hoặc đang tải lúc cài) — hàng engine_installs sống, install_state
+    'installing'. = v_core_agent_status.sub_reason 'installing' (engine_not_installed KHÔNG phải sự cố, như relogin_in_progress)."""
+    return (f"EXISTS (SELECT 1 FROM engine_installs eg WHERE eg.workspace_id = {ws} AND eg.engine_slug = {slug} AND eg.deleted_at IS NULL "
+            f"AND eg.install_state = 'installing')")
 def CORE_READY(ws):
     """Tài khoản Core agent SẴN SÀNG — MỘT định nghĩa (= v_core_agent_accounts.is_ready = mẫu số OB-04): binding hệ thống sống + bật,
     tài khoản active cùng loại Core agent, login_status = 'logged_in' (cache của lần kiểm mới nhất từ mọi nguồn: probe, hoặc lỗi 401/403
@@ -1890,29 +1902,85 @@ BEGIN SELECT RAISE(ABORT, '{MSG_AV_SET}'); END""",
 # sau thì lần push neo lỗi và UI báo; xoá mềm setting hỏng vẫn được):
 #  (a) url bắt đầu 'https://' (http, ssh://, git@host:… bị chặn);  (b) url không có '@' (không nhét user:token vào URL — settings có audit before/after
 #      và vào backup, token nằm trong URL là lộ bản rõ);  (c) secret_id trỏ secret CÙNG workspace, kind 'anchor_remote_token';
-#  thiếu khoá / sai kiểu ⇒ COALESCE về 0 ⇒ chặn (CHECK không bao giờ NULL, §9.1). Lối vào: INSERT; UPDATE key / value_json / deleted_at / workspace_id;
-#  đổi khoá đi / về bị chặn (như settings_avatar_*). Không giới hạn người ghi (không tuyên bố "chỉ owner").
+#  thiếu khoá / sai kiểu ⇒ COALESCE về 0 ⇒ chặn (CHECK không bao giờ NULL, §9.1; v2.3.2: mọi mệnh đề nằm TRONG EXISTS ⇒ luôn 0/1 theo cấu trúc). Lối vào: INSERT; UPDATE key / value_json / deleted_at / workspace_id;
+#  đổi khoá đi / về bị chặn (như settings_avatar_*).
+# v2.3.2 (review bảo mật HIGH trên v2.3.1: "không giới hạn người ghi" ⇒ ai ghi được settings đổi được URL neo sang host của kẻ tấn công và job audit_anchor đẩy token
+#  tới đó — L-20261016-32; cổng [Gen quyết 2026-10-16: chỉ owner]): (w) CỔNG NGƯỜI GHI ở mọi lối — INSERT created_by / UPDATE (kể cả xoá mềm) updated_by phải là
+#  OWNER còn là thành viên (OWNER_ONLY — admin cũng không) hoặc actor `system` của chính workspace (lúc dựng / khôi phục); DELETE cứng chỉ trong bảo trì
+#  (settings_remote_anchor_d); (h) host của URL (phần giữa 'https://' và '/' đầu tiên — không có path hoặc host rỗng ⇒ host '' ⇒ không secret nào khớp vì
+#  allowed_host dài ≥ 1; mutation v2.3.2 bắt mệnh đề "có path" riêng là thừa nên đã bỏ) TRÙNG secrets.allowed_host của secret (kind
+#  anchor_remote_token suy ra từ CHECK của secrets) ⇒ đổi host = secret mới; (s) secret còn sống (deleted_at NULL) và status 'active' (đã thu hồi / đã
+#  xoay ⇒ không làm token neo được). Thay (b) "không có @" của v2.3.1: '@' (user:token) làm host lệch ⇒ chặn ở (h).
+#  Luật B2 (§9.1): tiền tố 'https://' đưa vào TRONG EXISTS ⇒ RA_VALID là EXISTS thuần — không bao giờ NULL theo cấu trúc; COALESCE(…, 0) cũ là thừa
+#  (mutation v2.3.2 đổi về COALESCE(…, NULL) vẫn xanh: tiền tố chỉ NULL khi url NULL, lúc đó EXISTS = 0 ⇒ NULL AND 0 = 0) nên bỏ.
 RA_KEY = 'backup.remote_anchor'
 RA_URL = "json_extract(NEW.value_json, '$.url')"
-RA_VALID = (f"COALESCE(substr({RA_URL}, 1, 8) = 'https://' AND instr({RA_URL}, '@') = 0 "
-            f"AND EXISTS (SELECT 1 FROM secrets rs WHERE rs.id = json_extract(NEW.value_json, '$.secret_id') AND rs.workspace_id = NEW.workspace_id "
-            f"AND rs.kind = 'anchor_remote_token'), 0)")
-MSG_RA = ('settings (v2.3.1): backup.remote_anchor = {"url": "https://…" (chỉ HTTPS, không có @ / user:token trong URL), "secret_id": secret cùng workspace '
-          'kind anchor_remote_token} — neo audit ngoài máy chỉ qua HTTPS + token trong secrets; SSH chưa hỗ trợ ở MVP')
-MSG_RESTORED = ('workspaces.restored_at (v2.3.1): mốc khôi phục chỉ tiến — không xoá, không lùi (danh sách "cần đăng nhập lại sau khôi phục" '
-                'v_relogin_required không được ẩn bằng cách sửa mốc)')
+RA_REST = f"substr({RA_URL}, 9)"                                          # sau 'https://'
+RA_VALID = (f"EXISTS (SELECT 1 FROM secrets rs WHERE rs.id = json_extract(NEW.value_json, '$.secret_id') AND rs.workspace_id = NEW.workspace_id "
+            f"AND rs.deleted_at IS NULL AND rs.status = 'active' "
+            f"AND substr({RA_URL}, 1, 8) = 'https://' "
+            f"AND rs.allowed_host = substr({RA_REST}, 1, instr({RA_REST}, '/') - 1))")
+def SYS_ACTOR(x):
+    """v2.3.2: {x} là actor `system` (system_key 'system' — app / supervisor) của CHÍNH workspace NEW.workspace_id (tác tử hệ thống khác, actor workspace khác ⇒ không)."""
+    return f"EXISTS (SELECT 1 FROM actors sy WHERE sy.id = {x} AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system')"
+MSG_RA = ('settings (v2.3.2): backup.remote_anchor = {"url": "https://<host>/<path>", "secret_id": secret cùng workspace, còn sống, active, allowed_host = <host>} — '
+          'neo audit ngoài máy chỉ qua HTTPS + token gắn host; đổi host = nhập token mới; SSH chưa hỗ trợ ở MVP')
+MSG_RA_WRITER = ('settings (v2.3.2): backup.remote_anchor định tuyến credential — chỉ OWNER còn là thành viên (admin cũng không) hoặc actor system của workspace '
+                 'được ghi / sửa / xoá mềm (created_by / updated_by); xoá cứng chỉ trong bảo trì')
+MSG_RESTORED = ('workspaces.restored_at (v2.3.2): mốc khôi phục chỉ tiến và không ở tương lai — không xoá, không lùi, không vượt app_now() (danh sách "cần '
+                'đăng nhập lại sau khôi phục" v_relogin_required không bị ẩn, cũng không kẹt mãi)')
+SECRET_SENSITIVE = ['kind', 'label', 'ciphertext', 'nonce', 'wrapped_dek', 'dek_nonce', 'kek_id', 'alg', 'last4', 'fingerprint', 'status',
+                    'rotated_from_id', 'allowed_host', 'workspace_id', 'deleted_at']          # không gồm last_used_at (cache), version, updated_*
+MSG_SEC_WRITER = ('secrets (v2.3.2): chỉ owner / admin còn là thành viên hoặc actor system của workspace tạo / thay bí mật; kind anchor_remote_token (token gắn '
+                  'đích) CHỈ OWNER — created_by / updated_by; bảo trì (xoay KEK) miễn')
+MSG_SEC_HOST = 'secrets (v2.3.2): allowed_host ghi một lần — đổi host đích = nhập token mới (secret mới)'
+MSG_EI_WRITER = ('engine_installs (v2.3.2): trạng thái cài CLI chỉ actor system của workspace (app theo ga-engine-install status) ghi — owner / admin / tác tử '
+                 'khác không ghi tay (created_by / updated_by)')
 V231_TRIGGERS = [
-# §B.9 (CNS-145): mốc khôi phục — lối vào: UPDATE restored_at (NULL → giá trị, tiến tới được; về NULL / lùi bị chặn). INSERT workspace mang sẵn mốc: không chặn
-# (workspace mới chưa có tài khoản nào để ẩn).
+# §B.9 (CNS-145): mốc khôi phục — lối vào: UPDATE restored_at (về NULL / lùi bị chặn; v2.3.2: + không ở tương lai), INSERT workspace mang sẵn mốc tương lai (v2.3.2).
+# workspaces KHÔNG có cột người ghi ⇒ không kiểm actor được (Không tuyên bố, DATABASE v2.3.2).
 f"""CREATE TRIGGER workspaces_restored_u BEFORE UPDATE OF restored_at ON workspaces
-WHEN OLD.restored_at IS NOT NULL AND (NEW.restored_at IS NULL OR NEW.restored_at < OLD.restored_at)
+WHEN (OLD.restored_at IS NOT NULL AND (NEW.restored_at IS NULL OR NEW.restored_at < OLD.restored_at)) OR NEW.restored_at > {NOW_TS}
+BEGIN SELECT RAISE(ABORT, '{MSG_RESTORED}'); END""",
+f"""CREATE TRIGGER workspaces_restored_i BEFORE INSERT ON workspaces
+WHEN NEW.restored_at > {NOW_TS}
 BEGIN SELECT RAISE(ABORT, '{MSG_RESTORED}'); END""",
 f"""CREATE TRIGGER settings_remote_anchor_i BEFORE INSERT ON settings
-WHEN NEW.key = '{RA_KEY}' AND NOT {RA_VALID}
-BEGIN SELECT RAISE(ABORT, '{MSG_RA}'); END""",
+WHEN NEW.key = '{RA_KEY}'
+BEGIN
+  SELECT RAISE(ABORT, '{MSG_RA_WRITER}') WHERE NOT ({OWNER_ONLY('NEW.created_by')} OR {SYS_ACTOR('NEW.created_by')});
+  SELECT RAISE(ABORT, '{MSG_RA}') WHERE NOT {RA_VALID};
+END""",
 f"""CREATE TRIGGER settings_remote_anchor_u BEFORE UPDATE OF key, value_json, deleted_at, workspace_id ON settings
-WHEN (NEW.key = '{RA_KEY}' OR OLD.key = '{RA_KEY}') AND NOT (NEW.key IS OLD.key AND (NEW.deleted_at IS NOT NULL OR {RA_VALID}))
-BEGIN SELECT RAISE(ABORT, '{MSG_RA}'); END""",
+WHEN NEW.key = '{RA_KEY}' OR OLD.key = '{RA_KEY}'
+BEGIN
+  SELECT RAISE(ABORT, '{MSG_RA_WRITER}') WHERE NOT ({OWNER_ONLY('NEW.updated_by')} OR {SYS_ACTOR('NEW.updated_by')});
+  SELECT RAISE(ABORT, '{MSG_RA}') WHERE NOT (NEW.key IS OLD.key AND (NEW.deleted_at IS NOT NULL OR {RA_VALID}));
+END""",
+f"""CREATE TRIGGER settings_remote_anchor_d BEFORE DELETE ON settings
+WHEN OLD.key = '{RA_KEY}' AND app_maint() = 0
+BEGIN SELECT RAISE(ABORT, '{MSG_RA_WRITER}'); END""",
+# v2.3.2 (L-20261016-32): bí mật — cổng người ghi ở INSERT + UPDATE cột nhạy cảm; anchor_remote_token chỉ owner; host ghi một lần. Đổi kind ra / vào
+# anchor_remote_token luôn đổi allowed_host (CHECK kind ⇔ host) ⇒ secrets_allowed_host_u chặn — nên _u chỉ xét NEW.kind (mutation: OLD.kind thừa).
+f"""CREATE TRIGGER secrets_writer_i BEFORE INSERT ON secrets
+WHEN NOT (CASE WHEN NEW.kind = 'anchor_remote_token' THEN {OWNER_ONLY('NEW.created_by')}
+               ELSE ({OWNER_ADMIN('NEW.created_by')} OR {SYS_ACTOR('NEW.created_by')}) END)
+BEGIN SELECT RAISE(ABORT, '{MSG_SEC_WRITER}'); END""",
+f"""CREATE TRIGGER secrets_writer_u BEFORE UPDATE OF {', '.join(SECRET_SENSITIVE)} ON secrets
+WHEN app_maint() = 0 AND NOT (CASE WHEN NEW.kind = 'anchor_remote_token' THEN {OWNER_ONLY('NEW.updated_by')}
+                                   ELSE ({OWNER_ADMIN('NEW.updated_by')} OR {SYS_ACTOR('NEW.updated_by')}) END)
+BEGIN SELECT RAISE(ABORT, '{MSG_SEC_WRITER}'); END""",
+f"""CREATE TRIGGER secrets_allowed_host_u BEFORE UPDATE OF allowed_host ON secrets
+WHEN NEW.allowed_host IS NOT OLD.allowed_host
+BEGIN SELECT RAISE(ABORT, '{MSG_SEC_HOST}'); END""",
+# v2.3.2 (Gen, rà v2.3.1): trạng thái cài CLI — chỉ actor system của workspace ghi (mọi INSERT / UPDATE, kể cả xoá mềm). DELETE cứng không chặn: xoá = "chưa cài"
+# (fail-closed, Core agent mất sẵn sàng — không mở được gì).
+f"""CREATE TRIGGER engine_installs_writer_i BEFORE INSERT ON engine_installs
+WHEN NOT {SYS_ACTOR('NEW.created_by')}
+BEGIN SELECT RAISE(ABORT, '{MSG_EI_WRITER}'); END""",
+f"""CREATE TRIGGER engine_installs_writer_u BEFORE UPDATE ON engine_installs
+WHEN NOT {SYS_ACTOR('NEW.updated_by')}
+BEGIN SELECT RAISE(ABORT, '{MSG_EI_WRITER}'); END""",
 ]
 
 BUSINESS_TRIGGERS = [

@@ -512,6 +512,9 @@ WHERE sa.deleted_at IS NULL;
 --     chưa cài / đang tải / cài lỗi — image không chứa CLI của hãng): is_incident 1 (cả lúc đang tải lại — vẫn không chạy được AI Hệ thống), auto_recheck 0,
 --     fix_target a5.system, owner_action "Cài lại CLI"; cột engine_install_state = trạng thái cài CLI của LOẠI Core agent hiện hành (ST-0017; có cả khi chưa
 --     có tài khoản — Onboarding bước 2). Trước mốc khoá (mode setup) không overlay — Onboarding bước 2 đọc v_engine_installs ("CLI chưa cài" + "Cài lại").
+--   v2.3.2 ([Gen quyết 2026-10-16]): install_state 'installing' (owner bấm "Cài lại CLI" / đang tải) ⇒ sub_reason 'installing', KHÔNG phải sự cố
+--     (is_incident 0 qua luật sub_reason, như relogin_in_progress): overlay "Đang cài CLI. Hoàn tất trước khi tiếp tục.", A0 warn, không chuông / Telegram
+--     (= ENGINE_INSTALLING trong CORE_CALM); not_installed / failed / thiếu hàng vẫn là sự cố.
 CREATE VIEW v_core_agent_status AS
 WITH wk AS (
   SELECT w.id AS workspace_id, w.core_agent_locked_at,
@@ -543,7 +546,8 @@ WITH wk AS (
               WHEN 'login_stalled' THEN 'đăng nhập bị bỏ dở'
               WHEN 'engine_not_installed' THEN 'CLI chưa được cài'                                                             -- v2.3.1 (CNS-137)
               END AS reason_text,
-         CASE WHEN x.reason = 'consent_missing' AND x.consent_state = 'identity_changed' THEN 'identity_changed' END AS sub_reason,
+         CASE WHEN x.reason = 'consent_missing' AND x.consent_state = 'identity_changed' THEN 'identity_changed'
+              WHEN x.reason = 'engine_not_installed' AND x.engine_install_state = 'installing' THEN 'installing' END AS sub_reason,   -- v2.3.2 (Gen quyết)
          CASE WHEN x.is_ready = 0 AND x.core_agent_locked_at IS NOT NULL THEN 1 ELSE 0 END AS blocks
   FROM x
 ), u AS (
@@ -580,6 +584,7 @@ SELECT u.workspace_id, u.core_slug, u.core_name, u.core_agent_locked_at, u.engin
             WHEN u.reason = 'type_change_in_progress' THEN 'Core agent đang đổi loại CLI. Hoàn tất đăng nhập trước khi tiếp tục.'
             WHEN u.sub_reason = 'identity_changed'
                  THEN 'Tài khoản Core agent vừa đổi cần đồng ý điều khoản ' || u.core_name || '. Đồng ý trước khi tiếp tục.'
+            WHEN u.sub_reason = 'installing' THEN 'Đang cài CLI. Hoàn tất trước khi tiếp tục.'                                 -- v2.3.2 (Gen quyết)
             ELSE 'Core agent đang đăng nhập lại. Hoàn tất đăng nhập trước khi tiếp tục.' END AS overlay_text,
        CASE WHEN u.is_ready = 1 THEN NULL
             ELSE CASE u.fix_target WHEN 'a5.container' THEN 'A5 › Container (Hạ tầng)' ELSE 'A5 › AI Hệ thống' END || ': ' || u.owner_action

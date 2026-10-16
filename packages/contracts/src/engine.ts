@@ -52,7 +52,8 @@ export const ExecResult = z.strictObject({
 export type ExecResult = z.infer<typeof ExecResult>;
 
 // ---------------------------------------------------------------- trạng thái cài CLI (CNS-137)
-// = bảng DB `engine_installs` (DATABASE v2.3.1): install_state + failure_reason; THIẾU HÀNG nghĩa là chưa cài (fail-closed).
+// = bảng DB `engine_installs` (DATABASE v2.3.1+): install_state + failure_reason; THIẾU HÀNG nghĩa là chưa cài (fail-closed).
+// v2.3.2: chỉ actor system được ghi (engine_installs_writer_i/_u) ⇒ app ghi created_by / updated_by = actor system của workspace.
 export const ENGINE_INSTALL_STATES = ['not_installed', 'installing', 'installed', 'failed'] as const;
 export type EngineInstallState = (typeof ENGINE_INSTALL_STATES)[number];
 

@@ -2,7 +2,7 @@
 -- compat_min_app_version: 0.0.0
 -- expand_only: false
 -- breaking: baseline — trước v0.1.0 được sinh lại khi DB spec đổi; từ v0.1.0 forward-only (BUILD-PLAN §D.4)
--- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 359e59b (DATABASE v2.3.1) — KHÔNG SỬA TAY.
+-- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 70903fd (DATABASE v2.3.2) — KHÔNG SỬA TAY.
 -- Chỉ bảng + index (+ bảng ảo FTS5). Trigger ở R__triggers.sql, view ở R__views.sql (CNS-157).
 
 -- @ga:object table workspaces
@@ -2180,6 +2180,8 @@ CREATE TABLE secrets (
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'rotated', 'revoked')),
   rotated_from_id TEXT REFERENCES secrets(id) ON DELETE SET NULL,
   last_used_at TEXT,
+  allowed_host TEXT CHECK (allowed_host IS NULL OR (length(allowed_host) BETWEEN 1 AND 253 AND allowed_host NOT GLOB '*[^a-z0-9.:-]*')),
+  CHECK ((kind = 'anchor_remote_token') = (allowed_host IS NOT NULL)),
   UNIQUE (workspace_id, display_seq)
 );
 
