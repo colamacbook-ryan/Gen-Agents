@@ -1,7 +1,14 @@
 // Bộ phát hiện credential dùng chung (CNS-133, CNS-169, STD-11): mỗi lối vào một ca thuận + ca âm; biến thể mã hoá;
 // ca KHÔNG chặn có chủ đích (hex thuần, UUID); che log giữ JSON hợp lệ.
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { CREDENTIAL_KEY_NAMES, CREDENTIAL_PATTERN_IDS, credentialBlockedAudit } from '@ga/contracts';
+import { fileURLToPath } from 'node:url';
+import {
+  CREDENTIAL_DETECTORS,
+  CREDENTIAL_KEY_NAMES,
+  CREDENTIAL_PATTERN_IDS,
+  credentialBlockedAudit,
+} from '@ga/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   auditPatternId,
@@ -16,7 +23,7 @@ import {
   scanText,
   screenPayload,
 } from '../src/index.ts';
-import { CANARY, SAMPLES } from './helpers.ts';
+import { B64_ALPHABET, base64Secrets, CANARY, JS_SPACES, SAMPLES, URL_PASSWORD, urlCorpus } from './helpers.ts';
 
 const wrap = (s: string) => `Báo cáo xong việc. Chi tiết: ${s} — hết.`;
 
@@ -60,7 +67,11 @@ describe('ca âm từng luật (chỉ chính luật đó lẽ ra phải bắt �
       'https://git.example.com/repo.git',
       'mailto:user@example.com',
       'https://user@host.example.com/',
-      'https://u:@h.example.com/',
+      'mailto:a:b@c',
+      'urn:x:y@z',
+      'https://u@h',
+      'ws: lúc 10:30 gửi a@b',
+      'xem http://a.example/c lúc 10:30 x@y',
     ],
     env_secret_assignment: [
       'MY_TOKEN_COUNT=5',
@@ -438,5 +449,203 @@ describe('sửa sau review MEDIUM (2026-10-16)', () => {
     ]) {
       expect(detectCredential(s), s).toBeNull();
     }
+  });
+});
+
+describe('URL userinfo — xấp xỉ TRÊN của parser URL (thuật toán chung với contracts, Gen 2026-10-16)', () => {
+  const P = URL_PASSWORD;
+  it('ca security review: scheme dính chữ phía trước, không gạch / nhiều gạch, `\\` thay `/`, TAB / LF / CR chen giữa', () => {
+    for (const s of [
+      `1.https://u:${P}@h`,
+      `x.ftp://u:${P}@h`,
+      `https:\\\\u:${P}@h`,
+      `https:u:${P}@h`,
+      `https:///u:${P}@h`,
+      `HtTpS:/\\u:${P}@h`,
+      `ht\ttps:/\n/u:${P}@h/x`,
+      `wss:u:${P}@h`,
+      `FILE://u:${P}@h`,
+      `foo://u:${P}@h`,
+      `https://:${P}@h`,
+      `https://u@x:${P}@h`,
+    ]) {
+      expect(detectCredential(s), JSON.stringify(s)).toBe('url_userinfo');
+      expect(redactText(`clone ${s} xong`), JSON.stringify(s)).not.toContain(P);
+    }
+    expect(redactText(`clone https:u:${P}@h.example.com/r xong`)).toBe(
+      'clone https:u:[REDACTED:url_userinfo]@h.example.com/r xong',
+    );
+  });
+  it('ca âm: mailto:, urn:, chỉ tên đăng nhập, scheme khác không có `//`, câu thường có giờ + email', () => {
+    for (const s of [
+      'mailto:a:b@c',
+      'urn:x:y@z',
+      'https://u@h',
+      'redis:u:p@h',
+      'ws: lúc 10:30 gửi a@b',
+      'xem http://a/b 1:2 c@d',
+    ]) {
+      expect(detectCredential(s), s).toBeNull();
+      expect(redactText(s)).toBe(s);
+    }
+  });
+  it('mật khẩu rỗng (`u:@h`): vẫn báo như contracts, đoạn che rỗng nên chuỗi che giữ nguyên', () => {
+    expect(detectCredential('https://u:@h')).toBe('url_userinfo');
+    expect(redactText('https://u:@h')).toBe('https://u:@h');
+    // xấp xỉ trên có chủ đích: tên scheme khớp ở BẤT KỲ đâu (`news:` kết thúc bằng `ws:`) ⇒ chặn nhầm hiếm, không lọt
+    expect(detectCredential('news:comp.lang:x@y')).toBe('url_userinfo');
+  });
+  it('corpus đối chiếu new URL(): mọi chuỗi có URL.password ≠ "" đều bị bắt và che — đứng riêng lẫn nằm giữa câu', () => {
+    let parsed = 0;
+    let withPassword = 0;
+    const misses: string[] = [];
+    for (const s of urlCorpus()) {
+      let password: string;
+      try {
+        password = new URL(s).password;
+      } catch {
+        continue; // không phải URL hợp lệ với parser ⇒ ngoài phạm vi so sánh
+      }
+      parsed++;
+      if (password === '') continue;
+      withPassword++;
+      for (const t of [s, `log ${s} end`]) {
+        const red = redactText(t);
+        if (detectCredential(t) === null || red === t || (t.includes(P) && red.includes(P))) {
+          misses.push(`${JSON.stringify(t)} ⇒ ${JSON.stringify(red)} (password ${JSON.stringify(password)})`);
+        }
+      }
+    }
+    console.info(`URL corpus: parse được ${parsed}, có password ${withPassword}, lọt ${misses.length}`);
+    expect(misses.slice(0, 20)).toEqual([]);
+    expect(withPassword).toBeGreaterThan(5000);
+  });
+});
+
+describe('khoảng trắng Unicode = đúng `\\s` của regex (review MEDIUM parser-differential)', () => {
+  const unicode = JS_SPACES.filter((ch) => ch.charCodeAt(0) > 0x7f);
+  it('tập `\\s` lấy từ engine có đủ NBSP, U+2000–U+200A, U+3000, U+FEFF', () => {
+    for (const c of [0xa0, 0x2000, 0x2005, 0x200a, 0x3000, 0xfeff]) expect(JS_SPACES).toContain(String.fromCharCode(c));
+  });
+  it('mọi ký tự `\\s` làm dấu phân cách quanh dấu gán: bắt + che đúng giá trị', () => {
+    const v = 'abcDEF123456';
+    for (const sp of JS_SPACES) {
+      for (const line of [
+        `refresh_token:${sp}"${v}"`,
+        `refresh_token${sp}=${sp}${v}`,
+        `client_secret${sp}=${sp}${v}`,
+        `{"api_key"${sp}:${sp}"${v}"}`,
+        `access_token${sp}:${sp}${v} next`,
+        `Authorization:${sp}${v}`,
+        `DB_PASSWORD${sp}=${sp}${v}`,
+      ]) {
+        const tag = `${line.replace(sp, `<U+${sp.charCodeAt(0).toString(16)}>`)}`;
+        expect(detectCredential(line), tag).not.toBeNull();
+        expect(redactText(line), tag).not.toContain(v);
+      }
+    }
+  });
+  it('chuẩn hoá gập khoảng trắng Unicode thành space: `Bearer<NBSP>`, `Authorization: Bearer<U+3000>` vẫn bắt', () => {
+    const v = 'abcDEF123456xyzQ7';
+    for (const sp of unicode) {
+      for (const line of [`Authorization: Bearer${sp}${v}`, `curl -H "Bearer${sp}${v}"`]) {
+        expect(detectCredential(line), line).not.toBeNull();
+        expect(redactText(line), line).not.toContain(v);
+      }
+    }
+  });
+  it('fail-closed: regex đã khớp mà bước xác nhận bằng code không chắc ⇒ vẫn báo, che cả đoạn (trước đây lọt)', () => {
+    // `Authorization: <10 chữ> <từ ngắn>`: regex lấy 10 chữ làm giá trị, code tưởng là từ chỉ lược đồ ("Basic ") rồi thấy
+    // giá trị ngắn ⇒ bản cũ `continue` (lọt)
+    for (const line of ['Authorization: abcdefghij klm', 'authorization=Zyxwvuts q']) {
+      expect(detectCredential(line), line).toBe('credential_assignment');
+      expect(redactText(line), line).not.toMatch(/abcdefghij|Zyxwvuts/);
+    }
+  });
+});
+
+describe('tên credential mọi kiểu viết + base64_secret_run (contracts 0a2bfff, một nguồn với contracts)', () => {
+  /** Các kiểu viết của một tên snake / kebab: camel, Pascal, kebab, UPPER, gạch kép, lẫn `_-`. */
+  const spellings = (name: string): string[] => {
+    const parts = name.split(/[_-]/);
+    const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+    return [
+      name,
+      parts.map((w, i) => (i === 0 ? w : cap(w))).join(''),
+      parts.map(cap).join(''),
+      parts.join('-'),
+      parts.join('_').toUpperCase(),
+      parts.join('__'),
+      parts.join('-_-'),
+    ];
+  };
+  const value = ['abcd', '1234', 'XYZ'].join('');
+  it('gán trong văn bản: mọi kiểu viết của mọi tên contracts (kể cả api_secret / api_token) ⇒ bắt + che giá trị', () => {
+    expect(CREDENTIAL_KEY_NAMES).toEqual(expect.arrayContaining(['api_secret', 'api_token']));
+    for (const name of CREDENTIAL_KEY_NAMES) {
+      for (const n of spellings(name)) {
+        for (const line of [`${n}=${value}`, `x${n}: "${value}"`, `{"${n}":"${value}"}`]) {
+          expect(detectCredential(line), line).not.toBeNull();
+          expect(redactText(line), line).not.toContain(value);
+        }
+      }
+    }
+  });
+  it('refresh_token mọi kiểu viết + phép gán ⇒ refresh_token_field (bất kể giá trị)', () => {
+    for (const n of spellings('refresh_token')) {
+      expect(detectCredential(`${n}: ""`), n).toBe('refresh_token_field');
+      expect(detectCredential(`"${n}"=x`), n).toBe('refresh_token_field');
+    }
+  });
+  it('khoá object: chuẩn hoá bằng normalizeCredentialName của contracts — mọi kiểu viết ⇒ chặn + che', () => {
+    for (const name of [...CREDENTIAL_KEY_NAMES, 'password', 'set-cookie']) {
+      for (const n of spellings(name)) {
+        expect(isSensitiveKey(n), n).toBe(true);
+        expect(screenPayload({ data: { [n]: 'x' } }), n).toMatchObject({ code: 'credential_like_payload' });
+        expect(JSON.stringify(redactValue({ [n]: value })), n).not.toContain(value);
+      }
+    }
+    for (const k of ['token_count', 'keyboard', 'api', 'refresh', 'secretary'])
+      expect(isSensitiveKey(k), k).toBe(false);
+  });
+  it('base64_secret_run: mọi secret base64 40 ký tự có + / mà contracts bắt thì bộ chung bắt; che cả đoạn', () => {
+    const contractsB64 = CREDENTIAL_DETECTORS.find((d) => d.id === 'base64_secret_run') as {
+      test: (s: string) => boolean;
+    };
+    let theirs = 0;
+    let ours = 0;
+    const misses: string[] = [];
+    for (const v of base64Secrets(2000)) {
+      const line = `k ${v} `;
+      const hitOurs = detectCredential(line) !== null;
+      if (contractsB64.test(line)) {
+        theirs++;
+        if (!hitOurs) misses.push(v);
+      }
+      if (hitOurs) ours++;
+    }
+    expect(misses).toEqual([]);
+    expect(ours / 2000).toBeGreaterThanOrEqual(0.99);
+    expect(theirs).toBeGreaterThan(1900);
+    expect(detectCredential(SAMPLES.base64_secret_run as string)).toBe('base64_secret_run');
+    expect(redactText(`secret ${SAMPLES.base64_secret_run} end`)).toBe('secret [REDACTED:base64_secret_run] end');
+  });
+  it('base64_secret_run ca âm: base64 ngắn (< 40), hex / UUID, đường tệp + URL GitHub / raw của repo này', () => {
+    // base64 36 ký tự có + / (như contracts `b64(36)`): đoạn < 40 ⇒ không bắt
+    const short = Array.from({ length: 36 }, (_, i) =>
+      i === 7 ? '/' : i === 19 ? '+' : B64_ALPHABET[(i * 37 + 5) % 64],
+    ).join('');
+    expect(detectCredential(`v=${short}`)).toBeNull();
+    const root = fileURLToPath(new URL('../../../', import.meta.url));
+    const files = execFileSync('git', ['-C', root, 'ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+    const sha = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b';
+    const samples = files.flatMap((f) => [
+      f,
+      `/home/user/gen-agents/${f}`,
+      `https://github.com/example-org/gen-agents/blob/${sha}/${f}`,
+      `https://raw.githubusercontent.com/example-org/gen-agents/${sha}/${f}?plain=1#L10-L20`,
+    ]);
+    expect(samples.length).toBeGreaterThan(200);
+    expect(samples.filter((x) => detectCredential(x) !== null)).toEqual([]);
   });
 });

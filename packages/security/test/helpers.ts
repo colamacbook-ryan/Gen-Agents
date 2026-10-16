@@ -89,4 +89,92 @@ export const SAMPLES: Record<string, string> = {
   url_userinfo: j('https://deploy:', 'Hunter2-Pass', '@git.example.com/repo.git'),
   canary: CANARY,
   high_entropy_run: body(40, 'Zq8XwLmN3vBtRk7HpYc2'),
+  base64_secret_run: j(body(20, 'Zq8XwLmN3vBtRk7HpYc2'), '/', body(20, 'Ab3Cd4Ef5Gh6Jk7Mn8Pq'), '+', 'x9/Q='),
 };
+
+/** Mọi ký tự BMP mà `\s` của regex JS coi là khoảng trắng (lấy từ chính engine regex, không liệt kê tay). */
+export const JS_SPACES: readonly string[] = Array.from({ length: 0x10000 }, (_, c) => String.fromCharCode(c)).filter(
+  (ch) => /\s/.test(ch),
+);
+
+/** PRNG mulberry32 — tất định. */
+export function prng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Mật khẩu đánh dấu trong corpus URL (không xuất hiện ở host / đuôi ⇒ còn trong chuỗi đã che nghĩa là lộ). */
+export const URL_PASSWORD = j('Pw7', 'Zq');
+
+/**
+ * Corpus đối chiếu `new URL()` (WHATWG): scheme (đặc biệt, hoa thường lẫn lộn, chèn TAB / LF / CR, không đặc biệt, không
+ * hợp lệ, dính chữ phía trước) × chuỗi gạch sau ':' × userinfo × host × đuôi, cộng `random` chuỗi ngẫu nhiên từ bảng ký tự
+ * URL. Không có khoảng trắng thô ngoài TAB / LF / CR — lệch có chủ đích của thuật toán chung: khoảng trắng cắt authority.
+ */
+export function urlCorpus(random = 20_000, seed = 20261016): string[] {
+  const P = URL_PASSWORD;
+  const out: string[] = [];
+  const schemes = [
+    'http',
+    'https',
+    'ws',
+    'wss',
+    'ftp',
+    'file',
+    'HTTPS',
+    'HtTp',
+    'wS',
+    'FTP',
+    'ht\ttps',
+    'h\nttp',
+    'w\rss',
+    'foo',
+    'git+ssh',
+    'x.ftp',
+    '1.https',
+    'redis',
+    'mailto',
+    'urn',
+    'news',
+    'xhttps',
+  ];
+  const seps = ['', '/', '//', '///', '////', '\\', '\\\\', '/\\', '\\/', '\t//', '/\t/', '//\n', '\r\\'];
+  const users = [`u:${P}`, `:${P}`, `user.name-x:${P}`, `u@x:${P}`, `u:${P}@y`, `u%40x:${P}`, `u:a:${P}`, `u:${P}"<>`];
+  users.push(`u\t:${P}`, 'u', 'u:', '');
+  const hosts = ['h', 'h.example.com:8080', '[::1]'];
+  const tails = ['', '/p?q#f', '?x', '#y', '\\path'];
+  for (const sc of schemes)
+    for (const sep of seps)
+      for (const u of users)
+        for (const h of hosts) for (const t of tails) out.push(`${sc}:${sep}${u}${u ? '@' : ''}${h}${t}`);
+  const rnd = prng(seed);
+  const pickR = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)] as T;
+  const alpha = [...'htpswfile:/\\@ux.?#P7%[]"<', '\t', '\n', '\r'];
+  const starts = ['https:', 'http://', 'ws:', 'wss:\\', 'foo://', 'FtP:', 'file://', 'x.https:', ''];
+  for (let k = 0; k < random; k++) {
+    let s = pickR(starts);
+    const len = 3 + Math.floor(rnd() * 25);
+    for (let i = 0; i < len; i++) s += pickR(alpha);
+    out.push(s);
+  }
+  return out;
+}
+
+/** Bảng base64 chuẩn (có `+` `/`) cho mẫu secret base64 dựng lúc chạy. */
+export const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+/** `count` secret base64 GIẢ dài `len`, tất định, mỗi cái có ít nhất một `+` hoặc `/`. */
+export function base64Secrets(count: number, len = 40, seed = 7): string[] {
+  const rnd = prng(seed);
+  const out: string[] = [];
+  while (out.length < count) {
+    const v = Array.from({ length: len }, () => B64_ALPHABET[Math.floor(rnd() * 64)]).join('');
+    if (/[+/]/.test(v)) out.push(v);
+  }
+  return out;
+}

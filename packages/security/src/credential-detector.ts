@@ -44,7 +44,23 @@ const isDigit = (c: number) => c >= 48 && c <= 57;
 const isUpper = (c: number) => c >= 65 && c <= 90;
 const isLower = (c: number) => c >= 97 && c <= 122;
 const isAlnum = (c: number) => isDigit(c) || isUpper(c) || isLower(c);
-const isSpace = (c: number) => c === 32 || c === 9 || c === 10 || c === 13 || c === 11 || c === 12;
+/**
+ * Đúng tập `\s` của regex JS (WhiteSpace + LineTerminator, gồm NBSP, U+1680, U+2000–U+200A, U+2028/2029, U+202F, U+205F,
+ * U+3000, U+FEFF). Bước xác nhận bằng code PHẢI dùng cùng tập với regex — lệch ⇒ regex khớp mà code không xác nhận được
+ * ⇒ lọt (security review MEDIUM parser-differential, `refresh_token: <NBSP>"…"`).
+ */
+const isSpace = (c: number) =>
+  (c >= 9 && c <= 13) ||
+  c === 32 ||
+  c === 0xa0 ||
+  c === 0x1680 ||
+  (c >= 0x2000 && c <= 0x200a) ||
+  c === 0x2028 ||
+  c === 0x2029 ||
+  c === 0x202f ||
+  c === 0x205f ||
+  c === 0x3000 ||
+  c === 0xfeff;
 const isB64Char = (c: number) => isAlnum(c) || c === 43 || c === 47 || c === 95 || c === 45;
 
 class View {
@@ -185,7 +201,11 @@ const knownPrefixes: Detector = {
           m[0].length === p.length + rule.min && m[0].startsWith(p) && (!rule.boundary || v.boundaryBefore(at)),
       );
       if (!hit) {
-        re.lastIndex = at + 1;
+        // regex đã khớp mà bước xác định luật không chắc ⇒ vẫn báo (fail-closed), id của tiền tố đầu tiên trùng
+        const id = PREFIX_FLAT.find(({ p }) => m[0].startsWith(p))?.rule.id ?? 'generic_sk_key';
+        const stop = at + m[0].length + v.run(at + m[0].length);
+        if (emit(at, stop, id)) return true;
+        re.lastIndex = stop;
         continue;
       }
       const end = at + hit.p.length + v.run(at + hit.p.length);
@@ -311,38 +331,35 @@ const pemPrivateKey: Detector = {
 };
 
 // ---------------------------------------------------------------- cặp khoá–giá trị, Bearer, userinfo URL
-/** Tên khoá credential trong VĂN BẢN. Chỉ literal + tuỳ chọn có trần ⇒ không backtrack. */
 /**
- * MỘT nguồn luật: tên khoá = `CREDENTIAL_KEY_NAMES` của contracts (mỗi `_` / `-` cho phép `_`, `-` hoặc không gì — bắt cả
- * `refreshToken`, `refresh-token`) + phần thêm RIÊNG của security (`SECURITY_EXTRA_FIELD_SRC`). Thêm tên ở contracts ⇒ bộ
- * này tự phủ (test đối chiếu lấy chính danh sách contracts làm corpus).
+ * MỘT nguồn luật cho tên credential trong VĂN BẢN (contracts 0a2bfff, Gen 2026-10-16): tên = `CREDENTIAL_KEY_NAMES` của
+ * contracts, so KHÔNG phụ thuộc kiểu viết như `normalizeCredentialName` (bỏ `_` / `-`, không phân biệt hoa thường) ⇒ giữa
+ * các phần của tên cho `[_-]*` (literal kề `[_-]*` khác lớp ⇒ không backtrack), khớp ở MỌI vị trí như tham chiếu
+ * `credential_assignment` (`refreshToken`, `Refresh-Token`, `REFRESH__TOKEN`, `xapi_key` đều khớp). Thêm tên ở contracts ⇒
+ * bộ này tự phủ (test đối chiếu lấy chính danh sách contracts làm corpus).
  */
-const SECURITY_EXTRA_FIELD_SRC = ['passw(?:or)?d', 'set[_-]?cookie', 'cookie', 'bearer', 'auth[_-]?code'];
-const FIELD_NAME_SRC = [
-  ...CREDENTIAL_KEY_NAMES.map((n) => n.split(/[_-]/).map(escapeRe).join('[_-]?')),
-  ...SECURITY_EXTRA_FIELD_SRC,
-].join('|');
+const REFERENCE_FIELD_SRC = [...new Set(CREDENTIAL_KEY_NAMES)]
+  .map((n) => n.split(/[_-]/).map(escapeRe).join('[_-]*'))
+  .join('|');
+/** Phần thêm RIÊNG của security (ngoài contracts): tên chung chung ⇒ cần ranh giới trước (tránh chặn câu văn). */
+const SECURITY_EXTRA_FIELD_SRC = ['passw(?:or)?d', 'set[_-]*cookie', 'cookie', 'bearer', 'auth[_-]*code'].join('|');
 /** Lọc trước có / không: mọi tên khoá (contracts + phần thêm + authorization) đều chứa một trong các mảnh này. */
 const FIELD_HINT_RE = /token|secret|key|passw|authorization|cookie|bearer|code/i;
 const VALUE_MIN = 8;
-/**
- * Tên khoá của detector tham chiếu `credential_assignment` (contracts `CREDENTIAL_KEY_NAMES`, Gen 2026-10-16):
- * `(<tên>)["']?\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{8}` /i. Các tên này khớp ở MỌI vị trí (kể cả giữa từ) như tham chiếu;
- * tên mở rộng khác (password, biến thể camel / gạch nối…) cần ranh giới trước.
- */
-const REFERENCE_FIELD_NAMES: ReadonlySet<string> = new Set(CREDENTIAL_KEY_NAMES);
 /** (\" | " | ')? + \s* + [:=] + \s* + (\" | " | ')? — hai \s* tách nhau bởi literal, không lồng. */
 const SEP_SRC = String.raw`\\?["']?\s*[:=]\s*\\?["']?`;
 /** ≥ 8 ký tự giá trị (đúng lớp ký tự của VALUE_RE). */
 const VALUE8_SRC = String.raw`[^\s"'${'`'}\\,;&<>{}()[\]]{8}`;
-/** Nhánh 1: tên khoá + giá trị. Nhánh 2: Authorization (+ từ lược đồ "Basic " / "Bearer " tuỳ chọn) + giá trị. */
-const REFERENCE_FIELD_SRC = [...REFERENCE_FIELD_NAMES].map(escapeRe).join('|');
 /** Ranh giới trước tên mở rộng nằm trong regex (lookbehind MỘT ký tự, không quantifier) ⇒ ứng viên hụt ranh giới không tốn vòng JS. */
 const NOT_ALNUM_BEFORE = '(?<![0-9A-Za-z])';
-const FIELD_RE_SRC = `(${REFERENCE_FIELD_SRC})${SEP_SRC}${VALUE8_SRC}|${NOT_ALNUM_BEFORE}(${FIELD_NAME_SRC})${SEP_SRC}${VALUE8_SRC}|${NOT_ALNUM_BEFORE}(authorization)${SEP_SRC}(?:[A-Za-z]{1,10} )?${VALUE8_SRC}`;
+/**
+ * Nhánh 1: tên credential của contracts (mọi vị trí) + giá trị ≥ 8. Nhánh 2: tên thêm của security (cần ranh giới).
+ * Nhánh 3: Authorization (+ từ lược đồ "Basic " / "Bearer " tuỳ chọn) + giá trị.
+ */
+const FIELD_RE_SRC = `(${REFERENCE_FIELD_SRC})${SEP_SRC}${VALUE8_SRC}|${NOT_ALNUM_BEFORE}(${SECURITY_EXTRA_FIELD_SRC})${SEP_SRC}${VALUE8_SRC}|${NOT_ALNUM_BEFORE}(authorization)${SEP_SRC}(?:[A-Za-z]{1,10}\\s)?${VALUE8_SRC}`;
 /** Giá trị: ký tự không phải khoảng trắng / nháy / phân cách cấu trúc (trần 4096). */
 const VALUE_RE = /[^\s"'`\\,;&<>{}()[\]]{0,4096}/y;
-const SCHEME_RE = /[A-Za-z]{1,10} /y;
+const SCHEME_RE = /[A-Za-z]{1,10}\s/y;
 
 /**
  * `<tên khoá credential>["']?\s*[:=]<giá trị>`. Riêng `refresh_token` (bộ tham chiếu) chặn kể cả khi không có giá trị và
@@ -356,11 +373,12 @@ const credentialField: Detector = {
   find(v, emit) {
     const s = v.s;
     // (1) refresh_token theo đúng bộ tham chiếu: tên + (\" | " | ')? + \s* + [:=] — không cần giá trị, không cần ranh giới
-    const ref = /refresh_token\\?["']?\s*[:=]/gi;
+    const ref = /refresh[_-]*token\\?["']?\s*[:=]/gi;
     for (let m = ref.exec(s); m; m = ref.exec(s)) {
       const vs = valueStart(s, m.index + m[0].length, false);
       const e = stickyEnd(VALUE_RE, s, vs);
-      if (e > vs ? emit(vs, e, 'refresh_token_field') : emit(m.index, m.index + 13, 'refresh_token_field')) return true;
+      if (e > vs ? emit(vs, e, 'refresh_token_field') : emit(m.index, m.index + m[0].length, 'refresh_token_field'))
+        return true;
       ref.lastIndex = Math.max(ref.lastIndex, e);
     }
     // (2) tên khoá credential + giá trị ≥ 8 ký tự NGAY TRONG regex (\s* tách bởi literal, không lồng) ⇒ JS chỉ chạy trên
@@ -370,12 +388,15 @@ const credentialField: Detector = {
     for (let m = re.exec(s); m; m = re.exec(s)) {
       const at = m.index;
       const nameText = (m[1] ?? m[2] ?? m[3]) as string;
+      // regex đã xác nhận tên + dấu gán + ≥ 8 ký tự giá trị. Bước code chỉ để lấy ĐÚNG đoạn giá trị cần che; nếu code
+      // không xác nhận lại được (lệch tập ký tự…) ⇒ vẫn báo, che cả đoạn khớp (fail-closed, review MEDIUM)
       const nameEnd = sepAfter(s, at + nameText.length);
-      if (nameEnd < 0) continue;
-      const vs = valueStart(s, nameEnd, m[3] !== undefined);
-      const e = stickyEnd(VALUE_RE, s, vs);
-      if (e - vs < VALUE_MIN) {
-        re.lastIndex = at + 1;
+      const vs = nameEnd < 0 ? -1 : valueStart(s, nameEnd, m[3] !== undefined);
+      const e = vs < 0 ? -1 : stickyEnd(VALUE_RE, s, vs);
+      if (vs < 0 || e - vs < VALUE_MIN) {
+        const stop = stickyEnd(VALUE_RE, s, at + m[0].length);
+        if (emit(at, stop, this.id)) return true;
+        re.lastIndex = stop;
         continue;
       }
       if (emit(vs, e, this.id)) return true;
@@ -442,13 +463,14 @@ const bearerToken: Detector = {
   pre: (v) => /bearer/i.test(v.s),
   find(v, emit) {
     const s = v.s;
-    const re = /bearer[ \t]{1,16}[0-9A-Za-z_.~+/=-]{16}/gi;
+    // khoảng cách = `\s` (⊇ `[ \t]` của contracts): NBSP / U+3000 / U+FEFF… sau "Bearer" cũng là dấu cách (review MEDIUM)
+    const re = /bearer\s{1,16}[0-9A-Za-z_.~+/=-]{16}/gi;
     for (let m = re.exec(s); m; m = re.exec(s)) {
       if (!v.boundaryBefore(m.index)) {
         re.lastIndex = m.index + 1;
         continue;
       }
-      const i = m.index + 6 + (/^[ \t]+/.exec(m[0].slice(6))?.[0].length ?? 0);
+      const i = m.index + 6 + (/^\s+/.exec(m[0].slice(6))?.[0].length ?? 0);
       const e = stickyEnd(BEARER_TOKEN_RE, s, i);
       if (emit(i, e, this.id)) return true;
       re.lastIndex = e;
@@ -457,28 +479,120 @@ const bearerToken: Detector = {
   },
 };
 
-/** Phần userinfo của URL: tới ký tự phân cách đầu tiên. */
-const USERINFO_RE = /[^\s/?#@"'<>]*/y;
+const isTabNl = (c: number) => c === 9 || c === 10 || c === 13;
+/** TAB / LF / CR chen được ở mọi chỗ (parser URL bỏ chúng). Đứng giữa hai literal khác lớp ⇒ không mơ hồ, không backtrack. */
+const URL_TNL = '[\\t\\n\\r]*';
+/**
+ * Ứng viên A: tên scheme + ':' ở BẤT KỲ đâu (không cần ranh giới trái: `1.https:`, `x.ftp:` đều tính), không phân biệt
+ * hoa thường. `https` / `wss` đứng trước `http` / `ws` (nhánh riêng, không `s?` kề `[\t\n\r]*`).
+ */
+const URL_A_SRC = ['https', 'http', 'wss', 'ws', 'ftp', 'file']
+  .map((name) => `${[...name].join(URL_TNL)}${URL_TNL}:`)
+  .join('|');
+/** Ứng viên B: mọi `://`. */
+const URL_B_SRC = `:${URL_TNL}/${URL_TNL}/`;
+/** Ký tự hết authority — A: `/ \ ? #` hoặc khoảng trắng (`\s` trừ TAB / LF / CR, kể cả NBSP); B: như A nhưng `\` không cắt. */
+const URL_STOP_A_RE = /[/\\?#]|[^\S\t\n\r]/g;
+const URL_STOP_B_RE = /[/?#]|[^\S\t\n\r]/g;
 
-/** `scheme://user:password@host` — chặn / che phần password. */
+/** Bảng ký tự dừng ASCII (1 = dừng) cho vòng lùi; ngoài ASCII dùng `isSpace` (= `\s`). */
+const asciiStopTable = (backslash: boolean): Uint8Array => {
+  const t = new Uint8Array(128);
+  for (const c of [47, 63, 35, 11, 12, 32]) t[c] = 1;
+  if (backslash) t[92] = 1;
+  return t;
+};
+const URL_STOP_A_TABLE = asciiStopTable(true);
+const URL_STOP_B_TABLE = asciiStopTable(false);
+
+/**
+ * Bộ kiểm authority cho MỘT loại ứng viên. Điểm đầu authority p tăng ngặt giữa các ứng viên cùng loại ⇒ q ('@' đầu tiên
+ * ≥ p), điểm hết authority, '@' cuối trước điểm hết đều chỉ tiến:
+ *   - không còn '@' ≥ p ⇒ `null` (không ứng viên nào sau đó có thể khớp);
+ *   - điểm hết = điểm dừng đầu tiên ≥ p (regex gốc, nhớ lại khi p chưa vượt qua);
+ *   - authority hết TRƯỚC q ⇒ lùi MỘT lần từ q tìm điểm dừng cuối trước q ⇒ ứng viên sau cùng q có p ≤ điểm đó bị loại
+ *     trong O(1) (chuỗi kiểu `x://x://…@` không tốn một lần regex mỗi ứng viên). Mỗi đoạn lùi nằm giữa điểm dừng đã biết và
+ *     q, các đoạn không chồng nhau ⇒ tuyến tính.
+ * Trả '@' cuối trong authority, hoặc -1 nếu authority không có '@'.
+ */
+function authorityScanner(s: string, stopRe: RegExp, table: Uint8Array) {
+  let q = s.indexOf('@');
+  let endAt = -1;
+  let stopQ = -1;
+  let stopBeforeQ = -1;
+  let atLast = -1;
+  let atNext = q;
+  return (p: number): number | null => {
+    while (q >= 0 && q < p) q = s.indexOf('@', q + 1);
+    if (q < 0) return null;
+    if (p > endAt) {
+      if (stopQ === q && stopBeforeQ >= p) return -1;
+      stopRe.lastIndex = p;
+      endAt = stopRe.test(s) ? stopRe.lastIndex - 1 : s.length;
+      if (endAt < q && stopQ !== q) {
+        let k = q - 1;
+        for (; k > endAt; k--) {
+          const c = s.charCodeAt(k);
+          if (c < 128 ? table[c] === 1 : isSpace(c)) break;
+        }
+        stopQ = q;
+        stopBeforeQ = k;
+      }
+    }
+    if (q >= endAt) return -1;
+    while (atNext >= 0 && atNext < endAt) {
+      atLast = atNext;
+      atNext = s.indexOf('@', atNext + 1);
+    }
+    return atLast;
+  };
+}
+
+/**
+ * Mật khẩu trong URL — xấp xỉ TRÊN của parser URL (fail-closed; thuật toán chung với contracts, Gen 2026-10-16, sau ba
+ * vòng security review parser-differential):
+ *   1. TAB / LF / CR coi như không có (parser URL bỏ chúng ở mọi chỗ);
+ *   2. ứng viên A: `http: https: ws: wss: ftp: file:` ở BẤT KỲ đâu, bỏ qua `[/\\]*` (kể cả 0 dấu); authority hết ở
+ *      `/ \ ? #` hoặc khoảng trắng;
+ *   3. ứng viên B: mọi `://`; authority hết ở `/ ? #` hoặc khoảng trắng;
+ *   4. authority có '@', đoạn trước '@' CUỐI có ':' ⇒ báo; che từ sau ':' ĐẦU TIÊN tới '@' cuối (mật khẩu rỗng ⇒ vẫn báo,
+ *      đoạn che rỗng nên không che gì).
+ * Lệch có chủ đích với parser: khoảng trắng thô cắt authority (parser percent-encode khoảng trắng trong userinfo) — quét văn
+ * bản mà không dừng ở khoảng trắng thì câu thường ("ws: lúc 10:30 gửi a@b") bị chặn nhầm.
+ * Tuyến tính: ứng viên tìm bằng regex gốc (`test` + `lastIndex`, không cấp phát); mỗi ứng viên O(1) ngoài các con trỏ chỉ
+ * tiến; ':' đầu tiên ≥ p nằm trước ':' của ứng viên kế tiếp (đoạn bỏ qua chỉ gồm `/ \` TAB LF CR).
+ */
 const urlUserinfo: Detector = {
   id: 'url_userinfo',
   strong: true,
-  pre: (v) => v.s.includes('://') && v.s.includes('@'),
+  pre: (v) => v.s.includes('@') && v.s.includes(':'),
   find(v, emit) {
     const s = v.s;
-    let from = 0;
-    for (;;) {
-      const at = s.indexOf('://', from);
-      if (at < 0) return false;
-      const i = stickyEnd(USERINFO_RE, s, at + 3);
-      if (s.charCodeAt(i) === 64) {
-        // userinfo = s[at+3 .. i); có ':' ⇒ phần sau ':' là mật khẩu (kể cả tên đăng nhập rỗng: `https://:pw@host`)
-        const colon = s.indexOf(':', at + 3);
-        if (colon >= at + 3 && colon < i - 1 && emit(colon + 1, i, this.id)) return true;
+    const n = s.length;
+    const run = (re: RegExp, skipSlashes: boolean, scan: (p: number) => number | null): boolean => {
+      let lastEmitted = -1;
+      while (re.test(s)) {
+        let p = re.lastIndex;
+        while (skipSlashes && p < n) {
+          const c = s.charCodeAt(p);
+          if (c === 47 || c === 92 || isTabNl(c)) p++;
+          else break;
+        }
+        const lastAt = scan(p);
+        if (lastAt === null) return false;
+        // cùng '@' cuối với đoạn vừa báo ⇒ đoạn mới nằm trong đoạn cũ (bắt đầu muộn hơn, cùng điểm cuối) — bỏ
+        if (lastAt < p || lastAt === lastEmitted) continue;
+        const colon = s.indexOf(':', p);
+        if (colon < 0 || colon >= lastAt) continue;
+        lastEmitted = lastAt;
+        if (emit(colon + 1, lastAt, 'url_userinfo')) return true;
       }
-      from = Math.max(at + 3, i);
-    }
+      return false;
+    };
+    return (
+      run(new RegExp(URL_A_SRC, 'gi'), true, authorityScanner(s, URL_STOP_A_RE, URL_STOP_A_TABLE)) ||
+      run(new RegExp(URL_B_SRC, 'g'), false, authorityScanner(s, URL_STOP_B_RE, URL_STOP_B_TABLE))
+    );
   },
 };
 
@@ -516,7 +630,62 @@ const highEntropy: Detector = {
   },
 };
 
-/** Thứ tự: mẫu cụ thể trước (id có nghĩa cho audit), luật entropy cuối. */
+/** Đoạn tối đại trên lớp base64 [A-Za-z0-9+/=_-] ≥ 40 (lookbehind một ký tự ⇒ chỉ thử ở đầu đoạn, tuyến tính) — = contracts. */
+const BASE64_RUN_SRC = '(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/=_-]{40,}';
+const SEG_DIGIT_RE = /\d/;
+const SEG_LOWER_RE = /[a-z]/;
+const SEG_UPPER_RE = /[A-Z]/;
+const SEG_NON_HEX_RE = /[G-Zg-z]/;
+
+/** Đủ hoa + thường + số, có chữ ngoài hex, và ≥ 1/4 cặp chữ / số liền kề đổi lớp (hoa ↔ thường ↔ số) — = contracts. */
+function isBase64LikeSegment(seg: string): boolean {
+  if (!SEG_DIGIT_RE.test(seg) || !SEG_LOWER_RE.test(seg) || !SEG_UPPER_RE.test(seg) || !SEG_NON_HEX_RE.test(seg)) {
+    return false;
+  }
+  let pairs = 0;
+  let changes = 0;
+  let prev = -1; // 0 = hoa, 1 = thường, 2 = số, -1 = ký tự khác
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg.charCodeAt(i);
+    const cls = isUpper(c) ? 0 : isLower(c) ? 1 : isDigit(c) ? 2 : -1;
+    if (cls >= 0 && prev >= 0) {
+      pairs++;
+      if (cls !== prev) changes++;
+    }
+    prev = cls;
+  }
+  return pairs > 0 && changes * 4 >= pairs;
+}
+
+/**
+ * Secret base64 chuẩn có `+` / `/` (contracts `base64_secret_run`, review tay M0): đoạn [A-Za-z0-9+/=_-] ≥ 40 có `+` hoặc
+ * `/`, có một đoạn con giữa hai `/` dài ≥ 10 thoả `isBase64LikeSegment`. Đoạn con duyệt bằng indexOf trên chính đoạn (không cấp
+ * phát mảng như split, không quét ra ngoài đoạn) — chỉ cắt chuỗi con khi dài ≥ 10. Che: cả đoạn base64.
+ */
+const base64SecretRun: Detector = {
+  id: 'base64_secret_run',
+  strong: false,
+  pre: (v) => v.s.includes('/') || v.s.includes('+'),
+  find(v, emit) {
+    const s = v.s;
+    const re = new RegExp(BASE64_RUN_SRC, 'g');
+    for (let m = re.exec(s); m; m = re.exec(s)) {
+      const r = m[0];
+      if (!r.includes('/') && !r.includes('+')) continue;
+      let hit = false;
+      for (let a = 0; a <= r.length && !hit; ) {
+        let b = r.indexOf('/', a);
+        if (b < 0) b = r.length;
+        if (b - a >= 10 && isBase64LikeSegment(r.slice(a, b))) hit = true;
+        a = b + 1;
+      }
+      if (hit && emit(m.index, m.index + r.length, this.id)) return true;
+    }
+    return false;
+  },
+};
+
+/** Thứ tự: mẫu cụ thể trước (id có nghĩa cho audit), luật entropy / base64 cuối. */
 export const DETECTORS: readonly Detector[] = [
   jwt,
   knownPrefixes,
@@ -529,6 +698,7 @@ export const DETECTORS: readonly Detector[] = [
   urlUserinfo,
   canary,
   highEntropy,
+  base64SecretRun,
 ];
 
 /** Mọi id mẫu có thể trả về (id của luật tiền tố + các bộ khác; `refresh_token_field` do bộ gán credential phát). */
@@ -579,7 +749,7 @@ function runDetectors(text: string, emit: Emit, strongOnly = false): boolean {
  * qua lớp 2 thành `refresh_token`. Mỗi lớp là MỘT lượt replace (regex chỉ có quantifier có trần) ⇒ tuyến tính.
  */
 const ESC_RE =
-  /%u[0-9A-Fa-f]{4}|%[0-9A-Fa-f]{2}|\\u[0-9A-Fa-f]{4}|\\x[0-9A-Fa-f]{2}|\\[\\nrt/"']|&#[xX][0-9A-Fa-f]{1,6};|&#[0-9]{1,7};|[\u200b-\u200d\u2060\ufeff\u00ad]|[\uff01-\uff5e]/g;
+  /%u[0-9A-Fa-f]{4}|%[0-9A-Fa-f]{2}|\\u[0-9A-Fa-f]{4}|\\x[0-9A-Fa-f]{2}|\\[\\nrt/"']|&#[xX][0-9A-Fa-f]{1,6};|&#[0-9]{1,7};|[\u200b-\u200d\u2060\ufeff\u00ad]|[\uff01-\uff5e]|[\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/g;
 /** Số lớp giải tối đa (JSON / percent lồng tới 3 lớp). Mỗi lớp chỉ chạy khi lớp trước còn thay đổi chuỗi. */
 export const MAX_DECODE_LAYERS = 3;
 
@@ -601,11 +771,27 @@ function decodeEscape(e: string): string {
     return decodeEntity(e, hex ? e.slice(3, -1) : undefined, hex ? undefined : e.slice(2, -1));
   }
   if (c0 >= 0xff01 && c0 <= 0xff5e) return String.fromCharCode(c0 - 0xfee0);
+  if (isSpace(c0) && c0 !== 0xfeff) return ' '; // khoảng trắng Unicode ⇒ ' '
   return ''; // ký tự độ rộng 0
 }
 
 /** Có gì để giải không (một lượt regex gốc, không cấp phát). */
-const NEEDS_NORM_RE = /[%\\&\u200b-\u200d\u2060\ufeff\u00ad\uff01-\uff5e]/;
+const NEEDS_NORM_RE =
+  /[%\\&\u200b-\u200d\u2060\ufeff\u00ad\uff01-\uff5e\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/;
+/**
+ * Khoảng trắng Unicode (trừ U+FEFF — bị BỎ như ký tự độ rộng 0 để token bị chèn U+FEFF vẫn liền lại; vai trò dấu cách của
+ * nó đã được `isSpace` = `\s` phủ) ⇒ gập thành ' ' (review MEDIUM: NBSP / U+2000–U+200A / U+3000 làm dấu phân cách).
+ */
+const UNICODE_SPACE_CHARS: readonly string[] = [
+  0xa0,
+  0x1680,
+  ...Array.from({ length: 11 }, (_, i) => 0x2000 + i),
+  0x2028,
+  0x2029,
+  0x202f,
+  0x205f,
+  0x3000,
+].map((c) => String.fromCharCode(c));
 const FULLWIDTH_RE = /[\uff01-\uff5e]/g;
 const ENTITY_RE = /&#[xX]([0-9A-Fa-f]{1,6});|&#([0-9]{1,7});/g;
 /**
@@ -647,6 +833,7 @@ function quickNormalize(s: string): string | null {
     for (const [from, to] of QUICK_LITERAL_STEPS) if (x.includes(from)) x = x.split(from).join(to);
     if (x.includes('%')) x = unescape(x);
     if (x.includes(BACKSLASH_PLACEHOLDER)) x = x.split(BACKSLASH_PLACEHOLDER).join('\\');
+    x = foldUnicodeSpaces(x); // khoảng trắng Unicode do lớp này giải ra (vd `&#160;`, `\u3000`) ⇒ ' '
     if (x.length <= CALLBACK_DECODE_MAX_CHARS) {
       if (x.includes('&#')) x = x.replace(ENTITY_RE, decodeEntity);
       x = x.replace(FULLWIDTH_RE, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
@@ -896,7 +1083,31 @@ export type TextScanResult =
   | { status: 'match'; patternId: string; spans: CredentialSpan[] }
   | { status: 'too_large'; length: number };
 
-function collect(s: string, firstOnly: boolean): CredentialSpan[] {
+/** Khoảng trắng Unicode cần gập (lớp ký tự dựng lúc chạy từ UNICODE_SPACE_CHARS, không có ký tự lạ trong mã nguồn). */
+const UNICODE_SPACE_G_RE = new RegExp(`[${UNICODE_SPACE_CHARS.join('')}]`, 'g');
+
+/**
+ * Gập khoảng trắng Unicode (NBSP, U+1680, U+2000–U+200A, U+2028/9, U+202F, U+205F, U+3000) thành ' ' TRƯỚC mọi lượt quét
+ * (review MEDIUM parser-differential, bước b). Thay 1:1 (mọi ký tự trên là một đơn vị UTF-16) ⇒ vị trí trong chuỗi đã gập
+ * = vị trí trong chuỗi gốc, đoạn che dùng thẳng cho chuỗi gốc. Mọi detector dùng tập `\s` nên kết quả không đổi về ngữ nghĩa,
+ * chỉ bỏ được lượt quét thứ hai (chuỗi hai byte đầy U+3000 tốn gấp đôi). U+FEFF không gập ở đây (bị BỎ ở bước chuẩn hoá).
+ */
+function foldUnicodeSpaces(s: string): string {
+  // mỗi vòng: tìm ký tự khoảng trắng Unicode kế tiếp, gập MỌI lần xuất hiện của đúng ký tự đó (split/join gốc); trước vị
+  // trí tìm thấy không còn ký tự nào cần gập ⇒ quét tiếp từ đó. Số vòng ≤ số loại ký tự có mặt (≤ 17) ⇒ tuyến tính.
+  const re = UNICODE_SPACE_G_RE;
+  re.lastIndex = 0;
+  let x = s;
+  for (let m = re.exec(x); m !== null; m = re.exec(x)) {
+    const at = m.index;
+    x = x.split(m[0]).join(' ');
+    re.lastIndex = at + 1;
+  }
+  return x;
+}
+
+function collect(raw: string, firstOnly: boolean): CredentialSpan[] {
+  const s = foldUnicodeSpaces(raw);
   const spans: CredentialSpan[] = [];
   const emit: Emit = (start, end, patternId) => {
     spans.push({ start, end, patternId });
