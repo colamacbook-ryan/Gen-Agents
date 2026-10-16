@@ -19,6 +19,7 @@ describe('lint-rules', () => {
         'no-console-log',
         'dockerode-only-in-supervisor',
         'no-io-in-transaction',
+        'no-redos-regex',
         'no-duplicate-component-names',
         'import-boundaries',
       ]),

@@ -243,37 +243,162 @@ export function strictSchemaViolations(
   return out;
 }
 
-// ---------------------------------------------------------------- mẫu credential (tối thiểu, BUILD-PLAN §B.4)
+// ---------------------------------------------------------------- giới hạn kích thước (chặn TRƯỚC khi quét)
+/**
+ * Trần cứng cho payload thô của MỘT lời gọi tool. Vượt trần ⇒ `denied` mã `payload_too_large`, KHÔNG quét (STD-11 1.10).
+ * Chuỗi lớn nhất schema cho phép là 4096 ký tự (send_telegram.text); trường json (newValue, items, value) cần chỗ cho
+ * một khối instruction / skill ⇒ trần mỗi chuỗi 16 384 ký tự, cả payload 65 536 ký tự (khoá + giá trị), sâu 32, 10 000 nút.
+ */
+export const TOOL_PAYLOAD_LIMITS = {
+  maxStringChars: 16_384,
+  maxTotalChars: 65_536,
+  maxDepth: 32,
+  maxNodes: 10_000,
+} as const;
+
+/** Đo payload mà không đi quá trần: dừng ngay khi vượt (không duyệt hết mảng 1 triệu phần tử). null = trong trần. */
+export function payloadLimitExceeded(value: unknown): string | null {
+  let nodes = 0;
+  let chars = 0;
+  const stack: Array<{ v: unknown; d: number }> = [{ v: value, d: 0 }];
+  while (stack.length > 0) {
+    const { v, d } = stack.pop() as { v: unknown; d: number };
+    if (++nodes > TOOL_PAYLOAD_LIMITS.maxNodes) return 'quá nhiều nút';
+    if (d > TOOL_PAYLOAD_LIMITS.maxDepth) return 'lồng quá sâu';
+    if (typeof v === 'string') {
+      if (v.length > TOOL_PAYLOAD_LIMITS.maxStringChars) return 'chuỗi quá dài';
+      chars += v.length;
+    } else if (Array.isArray(v)) {
+      if (v.length > TOOL_PAYLOAD_LIMITS.maxNodes) return 'mảng quá dài';
+      for (const x of v) stack.push({ v: x, d: d + 1 });
+    } else if (v !== null && typeof v === 'object') {
+      const keys = Object.keys(v);
+      if (keys.length > TOOL_PAYLOAD_LIMITS.maxNodes) return 'quá nhiều khoá';
+      for (const k of keys) {
+        if (k.length > TOOL_PAYLOAD_LIMITS.maxStringChars) return 'khoá quá dài';
+        chars += k.length;
+        stack.push({ v: (v as Record<string, unknown>)[k], d: d + 1 });
+      }
+    } else if (v !== null && typeof v !== 'number' && typeof v !== 'boolean') {
+      return `kiểu không phải JSON: ${typeof v}`;
+    }
+    if (chars > TOOL_PAYLOAD_LIMITS.maxTotalChars) return 'payload quá lớn';
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- bộ phát hiện credential (tối thiểu, BUILD-PLAN §B.4)
+// Chạy TUYẾN TÍNH: tách chuỗi thành các "đoạn token" tối đại bằng một regex một lớp ký tự (không lồng, không lookahead),
+// rồi kiểm từng mẫu bằng code (indexOf + đếm). Không regex nào ở đây có quantifier lồng hoặc lookahead chứa * / +.
+
+/** Ký tự token [0-9A-Za-z_-] — so mã ký tự, không regex. */
+function isTokenCode(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 45;
+}
+
+// runEnd[i] = vị trí kết thúc của đoạn token tối đại chứa i (hoặc i nếu s[i] không phải ký tự token). Tính MỘT lần mỗi chuỗi
+// (đi ngược, O(n)) và dùng chung cho mọi bộ phát hiện ⇒ các lần xét tiền tố chồng nhau ("sk-sk-sk-…", "eyJeyJ…") không quét lại.
+let cachedString: string | null = null;
+let cachedRunEnd: Int32Array = new Int32Array(0);
+function runEndOf(s: string): Int32Array {
+  if (s === cachedString) return cachedRunEnd;
+  const end = new Int32Array(s.length + 1);
+  end[s.length] = s.length;
+  for (let i = s.length - 1; i >= 0; i--) {
+    end[i] = isTokenCode(s.charCodeAt(i)) ? (end[i + 1] as number) : i;
+  }
+  cachedString = s;
+  cachedRunEnd = end;
+  return end;
+}
+
+/** Số ký tự token liền nhau bắt đầu tại `from` — O(1) nhờ runEnd. */
+function tokenRunLength(s: string, from: number): number {
+  if (from >= s.length) return 0;
+  return (runEndOf(s)[from] as number) - from;
+}
+
+/** Có xuất hiện `prefix` mà ngay sau đó là ≥ `min` ký tự token không? indexOf + O(1) mỗi lần ⇒ tuyến tính. */
+function prefixThenRun(s: string, prefix: string, min: number, needWordStart = false): boolean {
+  let from = 0;
+  for (;;) {
+    const at = s.indexOf(prefix, from);
+    if (at < 0) return false;
+    if (
+      (!needWordStart || at === 0 || !isTokenCode(s.charCodeAt(at - 1))) &&
+      tokenRunLength(s, at + prefix.length) >= min
+    ) {
+      return true;
+    }
+    from = at + 1;
+  }
+}
+
+/** JWT: eyJ… . … . … — ba đoạn token ≥ 8 nối bằng dấu chấm. */
+function hasJwt(s: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = s.indexOf('eyJ', from);
+    if (at < 0) return false;
+    const a = tokenRunLength(s, at);
+    if (a >= 8 && s[at + a] === '.') {
+      const b = tokenRunLength(s, at + a + 1);
+      if (b >= 8 && s[at + a + 1 + b] === '.' && tokenRunLength(s, at + a + 2 + b) >= 8) return true;
+    }
+    // mọi 'eyJ' sau đó trong CÙNG đoạn token có cùng điểm kết thúc ⇒ cùng kết quả (đoạn ngắn hơn) ⇒ nhảy qua cả đoạn
+    from = at + Math.max(1, a);
+  }
+}
+
+/** Đoạn token liền ≥ 32 ký tự có cả chữ số lẫn chữ cái (hex 40, base64url thường…). Một lượt quét. */
+function hasLongTokenRun(s: string): boolean {
+  let run = 0;
+  let digit = false;
+  let alpha = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (isTokenCode(c)) {
+      run++;
+      if (c >= 48 && c <= 57) digit = true;
+      else if (c !== 95 && c !== 45) alpha = true;
+      if (run >= 32 && digit && alpha) return true;
+    } else {
+      run = 0;
+      digit = false;
+      alpha = false;
+    }
+  }
+  return false;
+}
+
 /** Bộ phát hiện ở packages/security phải phủ ÍT NHẤT các mẫu này (+ biến thể). Canary do CLI giả ghi: `GA-CANARY-<uuid>`. */
-export const CREDENTIAL_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
-  { id: 'jwt', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/ },
-  { id: 'google_oauth_access_token', re: /ya29\.[0-9A-Za-z_-]{10,}/ },
-  { id: 'google_refresh_token', re: /1\/\/0[0-9A-Za-z_-]{10,}/ },
-  { id: 'google_api_key', re: /AIza[0-9A-Za-z_-]{30,}/ },
-  { id: 'vendor_api_key_sk_ant', re: /sk-ant-[0-9A-Za-z_-]{10,}/ },
-  { id: 'pem_private_key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  { id: 'refresh_token_field', re: /["']?refresh_token["']?\s*[:=]/i },
-  { id: 'canary', re: /GA-CANARY-[0-9a-f-]{8,}/i },
+export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string) => boolean }> = [
+  { id: 'jwt', test: hasJwt },
+  { id: 'google_oauth_access_token', test: (s) => prefixThenRun(s, 'ya29.', 10) },
+  { id: 'google_refresh_token', test: (s) => prefixThenRun(s, '1//0', 10) },
+  { id: 'google_api_key', test: (s) => prefixThenRun(s, 'AIza', 30) },
+  { id: 'vendor_api_key_sk_ant', test: (s) => prefixThenRun(s, 'sk-ant-', 10) },
+  // regex có quantifier GIỚI HẠN ({0,40}) ⇒ tuyến tính
+  { id: 'pem_private_key', test: (s) => /-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----/.test(s) },
+  { id: 'refresh_token_field', test: (s) => /["']?refresh_token["']?\s{0,8}[:=]/i.test(s) },
+  { id: 'canary', test: (s) => /GA-CANARY-[0-9a-f-]{8}/i.test(s) },
   /** Khoá kiểu `sk-…` của các hãng (không riêng một hãng). */
-  { id: 'generic_sk_key', re: /\bsk-[0-9A-Za-z_-]{20,}/ },
-  /**
-   * Chuỗi liền ≥ 32 ký tự base64url / hex có cả chữ lẫn số: token chữ thường, hex 40 của token, base64url.
-   * ULID (26) và display_id không chạm ngưỡng; UUID có gạch nối (36) BỊ bắt — chấp nhận (không phải ID của hệ).
-   */
-  {
-    id: 'long_token_run',
-    re: /(?=[0-9A-Za-z_-]{32,})(?=[0-9A-Za-z_-]*\d)(?=[0-9A-Za-z_-]*[A-Za-z])[0-9A-Za-z_-]{32,}/,
-  },
+  { id: 'generic_sk_key', test: (s) => prefixThenRun(s, 'sk-', 20, true) },
+  /** ULID (26) và display_id không chạm ngưỡng; UUID có gạch nối (36) BỊ bắt — chấp nhận (không phải ID của hệ). */
+  { id: 'long_token_run', test: hasLongTokenRun },
 ];
 
 /** Tên khoá JSON mang credential: payload có khoá này (bất kể giá trị) ⇒ chặn. */
 export const CREDENTIAL_KEY_RE = /^(?:refresh_token|access_token|id_token|client_secret|private_key)$/i;
 
-/** Duyệt mọi chuỗi (giá trị và khoá) trong payload; trả mẫu khớp đầu tiên, không trả đoạn khớp (gateway băm). */
+/**
+ * Duyệt mọi chuỗi (giá trị và khoá) trong payload; trả mẫu khớp đầu tiên, không trả đoạn khớp (gateway băm).
+ * Người gọi PHẢI chặn kích thước trước (`payloadLimitExceeded`) — screenToolPayload làm đúng thứ tự đó.
+ */
 export function findCredentialLike(value: unknown, depth = 0): { patternId: string } | null {
-  if (depth > 64) return { patternId: 'too_deep' };
+  if (depth > TOOL_PAYLOAD_LIMITS.maxDepth) return { patternId: 'too_deep' };
   if (typeof value === 'string') {
-    for (const p of CREDENTIAL_PATTERNS) if (p.re.test(value)) return { patternId: p.id };
+    for (const d of CREDENTIAL_DETECTORS) if (d.test(value)) return { patternId: d.id };
     return null;
   }
   if (Array.isArray(value)) {
@@ -296,13 +421,18 @@ export function findCredentialLike(value: unknown, depth = 0): { patternId: stri
 export type ScreenResult =
   | { status: 'ok'; tool: McpToolName; args: unknown }
   | { status: 'denied'; code: 'credential_like_payload'; patternId: string }
+  | { status: 'denied'; code: 'payload_too_large'; reason: string }
   | { status: 'invalid'; reason: string };
 
 /**
- * Cổng tham chiếu cho mọi lời gọi tool: (1) quét credential trên payload THÔ của MỌI tool (trước khi parse, để không trường
- * nào — kể cả trường lạ — bị bỏ qua); (2) parse đúng schema. Tool lạ ⇒ quét rồi `invalid`.
+ * Cổng tham chiếu cho mọi lời gọi tool, đúng thứ tự:
+ *   (1) chặn kích thước payload THÔ (và tên tool) — vượt trần ⇒ denied, không quét;
+ *   (2) quét credential trên payload thô của MỌI tool (trước khi parse, để không trường nào — kể cả trường lạ — bị bỏ qua);
+ *   (3) parse đúng schema. Tool lạ ⇒ quét rồi `invalid`.
  */
 export function screenToolPayload(tool: string, rawArgs: unknown): ScreenResult {
+  const tooBig = tool.length > 64 ? 'tên tool quá dài' : payloadLimitExceeded(rawArgs);
+  if (tooBig) return { status: 'denied', code: 'payload_too_large', reason: tooBig };
   // luôn quét — không có tool nào, không có cờ nào bỏ qua được bước này
   const hit = findCredentialLike(tool) ?? findCredentialLike(rawArgs);
   if (hit) return { status: 'denied', code: 'credential_like_payload', patternId: hit.patternId };
@@ -316,6 +446,8 @@ export function screenToolPayload(tool: string, rawArgs: unknown): ScreenResult 
 export const TOOL_DENIAL_CODES = [
   /** Payload giống credential (JWT, ya29., sk-ant-, 1//0, AIza, PEM, "refresh_token") hoặc canary. */
   'credential_like_payload',
+  /** Payload thô vượt TOOL_PAYLOAD_LIMITS — từ chối trước khi quét. */
+  'payload_too_large',
   'not_granted',
   'goal_check_failed',
   'recovery_mode',

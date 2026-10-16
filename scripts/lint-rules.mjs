@@ -134,6 +134,72 @@ function balancedParen(text, open) {
   return text.slice(open);
 }
 
+// ---------------------------------------------------------------- regex có nguy cơ ReDoS (STD-11 1.10)
+/** Thân các regex trong mã (đã bỏ chú thích): regex literal + `RegExp('…')` với chuỗi thường (template literal bỏ qua). */
+export function regexBodies(code) {
+  const out = [];
+  const lit = /(^|[=(:,!&|?{};[>]|\breturn|\btypeof)\s*\/((?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+)\/[dgimsuyv]*/gm;
+  for (const m of code.matchAll(lit)) out.push({ body: m[2], index: m.index + m[1].length });
+  const ctor = /\bRegExp\(\s*(['"])((?:\\.|[^\\\n'"])*)\1/g;
+  for (const m of code.matchAll(ctor)) out.push({ body: m[2].replace(/\\\\/g, '\\'), index: m.index });
+  return out;
+}
+
+/**
+ * Phân tích thân regex (không đầy đủ, đủ cho lint): trả lý do nếu có lookaround chứa quantifier không giới hạn (*, +, {n,})
+ * hoặc nhóm có quantifier không giới hạn bên trong lại bị lượng hoá không giới hạn (vd (a+)+, (\w+\s?)*).
+ */
+export function redosRisk(body) {
+  const stack = [{ unbounded: false, look: false }];
+  let inClass = false;
+  const unboundedAt = (i) => {
+    const c = body[i];
+    if (c === '*' || c === '+') return 1;
+    if (c === '{') {
+      const m = /^\{(\d+),\}/.exec(body.slice(i, i + 12));
+      if (m) return m[0].length;
+    }
+    return 0;
+  };
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '\\') {
+      i++;
+      continue;
+    }
+    if (inClass) {
+      if (c === ']') inClass = false;
+      continue;
+    }
+    if (c === '[') {
+      inClass = true;
+      continue;
+    }
+    if (c === '(') {
+      const look = /^\(\?<?[=!]/.test(body.slice(i, i + 4));
+      stack.push({ unbounded: false, look });
+      continue;
+    }
+    if (c === ')') {
+      const g = stack.pop() ?? { unbounded: false, look: false };
+      if (g.look && g.unbounded) return 'lookaround chứa quantifier không giới hạn';
+      const q = unboundedAt(i + 1);
+      if (q && g.unbounded) return 'quantifier lồng (nhóm có * / + bị lượng hoá không giới hạn)';
+      const parent = stack[stack.length - 1];
+      if (parent && (g.unbounded || q)) parent.unbounded = true;
+      if (q) i += q;
+      continue;
+    }
+    const q = unboundedAt(i);
+    if (q) {
+      const top = stack[stack.length - 1];
+      if (top) top.unbounded = true;
+      i += q - 1;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- ranh giới module (BUILD-PLAN §D.2)
 // Ô ghi [ĐỀ XUẤT — L0] là đơn vị §D.2 chưa khai — Gen duyệt.
 const BOUNDARIES = {
@@ -324,6 +390,20 @@ export const RULES = [
             body,
           );
         if (bad) out.push({ line: lineOf(code, m.index), msg: `"${bad[0].trim()}" trong transaction` });
+      }
+      return out;
+    },
+  },
+  {
+    id: 'no-redos-regex',
+    why: 'regex không được có lookaround chứa * / + hoặc quantifier lồng — nguy cơ ReDoS (STD-11 1.10, L-20261016-30)',
+    applies: (rel) => CODE_EXT.test(rel) && /^(apps|packages)\//.test(rel) && !isTest(rel),
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      const out = [];
+      for (const r of regexBodies(code)) {
+        const why = redosRisk(r.body);
+        if (why) out.push({ line: lineOf(code, r.index), msg: `${why}: /${r.body.slice(0, 60)}/` });
       }
       return out;
     },

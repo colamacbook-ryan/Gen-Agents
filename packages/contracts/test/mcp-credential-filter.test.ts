@@ -7,13 +7,15 @@ import {
   ANCHOR_GRID_TABLES,
   ANCHOR_SCREENS,
   Anchor,
-  CREDENTIAL_PATTERNS,
+  CREDENTIAL_DETECTORS,
   findCredentialLike,
   freeFormFields,
   MCP_TOOLS,
+  payloadLimitExceeded,
   STRICT_SCHEMA_TOOLS,
   screenToolPayload,
   strictSchemaViolations,
+  TOOL_PAYLOAD_LIMITS,
   ToolArgs,
 } from '../src/index.ts';
 
@@ -79,6 +81,17 @@ describe('mọi tool đều bị quét — không có ngoại lệ', () => {
         certainty: null,
       }).status,
     ).toBe('ok');
+  });
+});
+
+describe('canary đủ dạng (STD-11 1.10)', () => {
+  it('canary chữ hoa / chữ thường / hex hoa ⇒ denied qua mọi kiểu trường', () => {
+    for (const c of [CANARY, CANARY.toLowerCase(), `GA-CANARY-${'3F2B9C1E8D4A4F6B'}`]) {
+      expect(screenToolPayload('send_telegram', { chatRef: 'c', text: c }).status, c).toBe('denied');
+      expect(screenToolPayload('propose_change', { title: 't', items: [{ [c]: 1 }] }).status, `khoá ${c}`).toBe(
+        'denied',
+      );
+    }
   });
 });
 
@@ -187,9 +200,83 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       generic_sk_key: LOWERCASE_TOKENS.skLower,
       long_token_run: LOWERCASE_TOKENS.hex40,
     };
-    for (const p of CREDENTIAL_PATTERNS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
+    for (const p of CREDENTIAL_DETECTORS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
     expect(findCredentialLike({ Refresh_Token: 'bất kỳ' })).toEqual({ patternId: 'credential_field_name' });
     expect(findCredentialLike({ note: 'nói về refresh token nói chung, mã TK-0462, RL-0001' })).toBeNull();
     expect(findCredentialLike('01JABCDEFGHJKMNPQRSTVWXYZ0')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------- STD-11 1.10: chặn kích thước trước khi quét + quét tuyến tính
+const MB = 1 << 20;
+function fastest(fn: () => unknown): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < 3; i++) {
+    const t0 = performance.now();
+    fn();
+    best = Math.min(best, performance.now() - t0);
+  }
+  return best;
+}
+
+describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MB, mỗi lượt < 50 ms', () => {
+  const adversarial: Record<string, string> = {
+    'toàn a': 'a'.repeat(MB),
+    'toàn 0': '0'.repeat(MB),
+    'xen kẽ a0': 'a0'.repeat(MB / 2),
+    'sk- lặp': 'sk-'.repeat(Math.floor(MB / 3)),
+    'eyJ lặp': 'eyJ'.repeat(Math.floor(MB / 3)),
+    'eyJ…. lặp (gần JWT)': `${'eyJaaaaaaaaa.'.repeat(Math.floor(MB / 13))}`,
+    'ya29. lặp': 'ya29.'.repeat(Math.floor(MB / 5)),
+    '1//0 lặp': '1//0'.repeat(Math.floor(MB / 4)),
+    'AIza lặp': 'AIza'.repeat(Math.floor(MB / 4)),
+    'BEGIN + 1 MB chữ hoa': `-----BEGIN ${'A'.repeat(MB)}`,
+    'refresh_token + 1 MB khoảng trắng': `refresh_token${' '.repeat(MB)}`,
+    'GA-CANARY- lặp': 'GA-CANARY-'.repeat(Math.floor(MB / 10)),
+    'gạch nối': '-'.repeat(MB),
+  };
+  for (const [name, str] of Object.entries(adversarial)) {
+    it(name, () => {
+      const ms = fastest(() => findCredentialLike(str));
+      expect(ms, `${name}: ${ms.toFixed(1)} ms`).toBeLessThan(50);
+    });
+  }
+});
+
+describe('chặn kích thước TRƯỚC khi quét', () => {
+  const cap = TOOL_PAYLOAD_LIMITS.maxStringChars;
+  it('chuỗi 1 MB ⇒ denied payload_too_large, nhanh, không quét', () => {
+    let r: ReturnType<typeof screenToolPayload> | undefined;
+    const ms = fastest(() => {
+      r = screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: 'a0'.repeat(MB / 2) });
+    });
+    expect(r).toMatchObject({ status: 'denied', code: 'payload_too_large' });
+    expect(ms).toBeLessThan(50);
+  });
+  it('chuỗi đúng sát trần: được quét (sạch ⇒ ok, token ⇒ denied); vượt trần 1 ký tự ⇒ payload_too_large', () => {
+    expect(screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: 'a'.repeat(cap) }).status).toBe('ok');
+    expect(
+      screenToolPayload('propose_edit', {
+        anchor: ANCHOR,
+        newValue: `${'a'.repeat(cap - 40)}${LOWERCASE_TOKENS.hex40}`,
+      }),
+    ).toMatchObject({
+      status: 'denied',
+      code: 'credential_like_payload',
+    });
+    expect(screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: 'a'.repeat(cap + 1) })).toMatchObject({
+      status: 'denied',
+      code: 'payload_too_large',
+    });
+  });
+  it('trần tổng / độ sâu / số nút / khoá dài / tên tool dài', () => {
+    expect(payloadLimitExceeded({ items: Array.from({ length: 5 }, () => 'x'.repeat(cap)) })).toBe('payload quá lớn');
+    let deep: unknown = 'x';
+    for (let i = 0; i < 40; i++) deep = [deep];
+    expect(payloadLimitExceeded(deep)).toBe('lồng quá sâu');
+    expect(payloadLimitExceeded(Array.from({ length: 20_000 }, (_, i) => i))).toBe('mảng quá dài');
+    expect(payloadLimitExceeded({ ['k'.repeat(cap + 1)]: 1 })).toBe('khoá quá dài');
+    expect(screenToolPayload('t'.repeat(65), {})).toMatchObject({ status: 'denied', code: 'payload_too_large' });
+    expect(payloadLimitExceeded({ anchor: ANCHOR, note: 'ok', n: 1 })).toBeNull();
   });
 });
