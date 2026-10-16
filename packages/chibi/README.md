@@ -38,6 +38,14 @@ Mỗi `identity.must[]` / `extra[]` là một `Check` (dữ liệu): `{part, att
 
 Khoá lấy từ `@ga/contracts` (`AVATAR_STATES`, thứ tự ưu tiên của `v_role_avatar_state`). **Engine không chứa nhãn hay mô tả** (CNS-165): giao diện lấy chữ từ i18n theo `stateI18nKeys(state)` → `avatar.state.<khoá>.name` (tên hiển thị, PS §4.7) và `avatar.state.<khoá>.when` (mô tả; `failover` nói "loại CLI dự phòng", không nói "tài khoản" — INT-05). Fixture kiểm: `test/fixtures/avatar-states.vi.json` (chép PS §4.7); nguồn thật là `packages/i18n`.
 
+## CSP chặt (`style-src 'self'`, không `'unsafe-inline'`)
+
+`mount()` chạy được dưới `Content-Security-Policy: default-src 'self'; style-src 'self'`:
+
+- CSS của engine là constructable stylesheet (`new CSSStyleSheet()` + `replaceSync`, gắn bằng `adoptedStyleSheets`) vào `document` hoặc chính shadow root chứa avatar. Đường này không bị `style-src` chặn.
+- Markup từ `svg()` đi qua `strictMarkup()` (`src/strict.ts`) trước khi chèn: `style="stroke-width:Npx"` → thuộc tính trình bày `stroke-width`; `calc(var(--chb-sw,3.4) * k)` → `data-chb-k` + luật `[data-chb-k]` trong stylesheet (k thuộc tập đóng `K_VALUES`); `overflow` / `opacity` → thuộc tính SVG; biến `--chb-*` → `data-chb-sty` rồi `hydrateStyles()` áp bằng `el.style.setProperty` (CSSOM, không bị CSP chặn). Kiểu `style` nào khác thì **ném lỗi**, không bỏ lặng. Lớp dựng lại khi `setState` cũng đi đường này.
+- Test Chromium thật (`test/browser/csp.test.ts`) với header trên: 0 `securitypolicyviolation`, 0 lỗi console, style thực sự được áp (nét theo hệ số, biến tuỳ ý, keyframes chạy), shadow root, đổi trạng thái / mức chuyển động; ảnh khớp đường nội tuyến cũ (điểm ảnh lệch > 24/255 = 0). Đo ngoài test: 540 khung (10 × 18 × 3 mốc) chụp dưới CSP chặt so với bản ngay trước khi đổi: 534 giống từng điểm ảnh, 6 khung lệch ≤ 6/255 trên ≤ 27 điểm ảnh, 0 điểm ảnh vượt ngưỡng 24/255, 0 vi phạm CSP. Ca âm: chuỗi `svg()` cũ và việc chèn lại `style="…"` đều bị CSP báo `style-src-attr` ⇒ bộ bắt còn sống. `test/strict.test.ts` quét `src/` cấm `setAttribute('style'`, `.cssText =` và thẻ `<style>` ngoài nhánh dự phòng.
+
 ## Chuyển động
 
 - Chỉ animate `transform` / `opacity` / `rotate` / `scale` / `stroke-dashoffset`; không còn `@property` hay animate biến tuỳ ý. Tay animate `rotate` + `scale` trực tiếp (`src/arm-anim.ts`); đạo cụ cầm tay, cọ, tay áo nước quay ngược bằng keyframes riêng sinh từ cùng dữ liệu.
@@ -54,6 +62,8 @@ node packages/chibi/scripts/bench.ts --secs=10 --rounds=3   # fps
 ```
 
 Test trình duyệt dùng `playwright-core` + Chromium có sẵn ở `PLAYWRIGHT_BROWSERS_PATH` (không tải trình duyệt), máy chủ tĩnh tự dựng bỏ kiểu `.ts` bằng Node (không bundler). Không có Chromium thì nhóm này **SKIP hiển thị rõ**; `CHIBI_REQUIRE_BROWSER=1` biến thiếu Chromium thành lỗi (CI của lane component đặt biến này); `CHIBI_BROWSER=skip` tắt hẳn.
+
+**CI** (`.github/workflows/ci.yml`): job test đặt `CHIBI_REQUIRE_BROWSER=1` và cài Chromium bằng `playwright-core install --with-deps chromium` (chỉ trong CI, không chạy ở máy dev). Thiếu Chromium thì test ĐỎ, không skip. `CHIBI_CSP_FULL=1` chạy so ảnh CSP đủ 540 khung (mặc định 180 khung, mốc `frac` của từng trạng thái).
 
 ## Đối chiếu với spike v3
 
@@ -89,5 +99,6 @@ Headless raster bằng CPU (không GPU): số tuyệt đối chỉ để so sán
 - Nhân vật khoá tay (Triệu Vân, `lockR`) cầm hồ lô / máy game ở chỗ tay đang giữ em bé; hồ lô không lên tới miệng.
 - Tua / cán đạo cụ (phần "đuôi") vẫn có thể chạm vùng cằm khi chúng chúc xuống từ bàn tay ở ngang cằm; phần chính (lông quạt, lưỡi kiếm, mặt quạt) không cắt vùng mắt–mũi ở các trạng thái chắp tay / nghĩ / xoa tay.
 - `transform-origin: 0 0` của SVG tính theo gốc `viewBox`: với avatar tròn có `crop` lệch gốc, tâm quay của tay / thân lệch vài đơn vị so với bản không cắt (kế thừa từ spike, chưa sửa).
-- CSP: engine chèn một thẻ `<style id="chb-css">` và markup dùng thuộc tính `style="…"` nội tuyến ⇒ cần `style-src 'unsafe-inline'` (BUILD-PLAN §D.5: CSP cho phép style tiêm). Không có script nội tuyến, không URL ngoài, không `<image>`.
+- CSP: chỉ đường `mount()` chạy dưới CSP chặt. Chuỗi `svg()` (dùng cho test so khớp / render phía máy chủ) vẫn mang `style="…"` nội tuyến nên cần `style-src-attr 'unsafe-inline'`: đừng chèn chuỗi đó vào trang có CSP chặt, hãy dùng `mount()`. Nhánh dự phòng cho trình duyệt không có constructable stylesheet dùng thẻ `<style id="chb-css">` và cần `style-src` cho phép; trình duyệt hiện đại không đi nhánh này.
+- zod 4 dò `new Function('')` khi dựng schema; dưới CSP không có `'unsafe-eval'` lần dò này bị báo `script-src` dù lỗi được bắt. Ứng dụng chủ phải gọi `z.config({ jitless: true })` TRƯỚC khi nạp `@ga/contracts` / `@ga/chibi` (xem `test/browser/harness-zod.js`). Việc này thuộc về ứng dụng chủ, không phải riêng gói chibi.
 - Chỉ kiểm trên Chromium (Playwright 1.56). Chưa kiểm Firefox / Safari: tay dùng thuộc tính `rotate` / `scale` riêng lẻ trên phần tử SVG, cần xác minh ở hai trình duyệt đó.

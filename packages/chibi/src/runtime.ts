@@ -10,6 +10,7 @@ import { type Character, getChar } from './registry.ts';
 import { type Resolved, resolve } from './resolve.ts';
 import { AVATAR_STATES, type AvatarState } from './state-keys.ts';
 import type { Face, IdleVariant, Phase } from './states.ts';
+import { hydrateStyles, strictMarkup } from './strict.ts';
 
 /** tuỳ chọn khi đổi trạng thái */
 export interface StateOptions {
@@ -89,16 +90,57 @@ function schedBudget(): void {
   if (!budgetT) budgetT = setTimeout(rebudget, 60);
 }
 
-/** chèn stylesheet (đúng một lần, idempotent) + bật theo dõi DOM. No-op ngoài trình duyệt. */
-export function injectCSS(): void {
-  if (typeof document === 'undefined' || cssDone) return;
-  cssDone = true;
-  if (!document.getElementById('chb-css')) {
-    const st = document.createElement('style');
+// ---------------------------------------------------------------- stylesheet: constructable, KHÔNG cần style-src 'unsafe-inline'
+let sheet: CSSStyleSheet | null = null;
+const adopted = new WeakSet<object>();
+type StyleRoot = Document | ShadowRoot;
+
+/** CSSStyleSheet dựng bằng CSSOM (replaceSync): không bị style-src chặn. null nếu trình duyệt không hỗ trợ constructable stylesheet. */
+function engineSheet(): CSSStyleSheet | null {
+  if (sheet) return sheet;
+  if (typeof CSSStyleSheet === 'undefined' || !('replaceSync' in CSSStyleSheet.prototype)) return null;
+  const s = new CSSStyleSheet();
+  s.replaceSync(buildCss());
+  sheet = s;
+  return s;
+}
+
+/**
+ * Gắn stylesheet của engine vào document hoặc shadow root chứa avatar (idempotent). Đường chính: adoptedStyleSheets (CSP chặt).
+ * Dự phòng cho trình duyệt cũ (không có constructable stylesheet): thẻ <style id="chb-css"> — đường này CẦN style-src cho phép.
+ */
+export function adoptCSS(root: StyleRoot): void {
+  if (adopted.has(root)) return;
+  adopted.add(root);
+  const s = engineSheet();
+  if (s && 'adoptedStyleSheets' in root) {
+    if (!root.adoptedStyleSheets.includes(s)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, s];
+    return;
+  }
+  if (root instanceof Document && !root.getElementById('chb-css')) {
+    const st = root.createElement('style');
     st.id = 'chb-css';
     st.textContent = buildCss();
-    (document.head || document.documentElement).appendChild(st);
+    (root.head || root.documentElement).appendChild(st);
+  } else if (!(root instanceof Document)) {
+    const st = document.createElement('style');
+    st.textContent = buildCss();
+    root.appendChild(st);
   }
+}
+
+/** document hoặc shadow root chứa phần tử (phần tử chưa gắn vào cây ⇒ document) */
+export const styleRootOf = (el: Node): StyleRoot => {
+  const r = el.getRootNode();
+  return r instanceof ShadowRoot || r instanceof Document ? r : document;
+};
+
+/** gắn stylesheet vào document + bật theo dõi DOM (idempotent). No-op ngoài trình duyệt. */
+export function injectCSS(): void {
+  if (typeof document === 'undefined') return;
+  adoptCSS(document);
+  if (cssDone) return;
+  cssDone = true;
   mqr = window.matchMedia('(prefers-reduced-motion: reduce)');
   mqr.addEventListener('change', () => {
     for (const n of reg) applyState(n, attr(n, 's'));
@@ -320,16 +362,28 @@ interface Layers {
   hx: string;
   pad: string;
 }
+/** avatar dựng bằng mount() (đường CSP chặt): markup lớp phải qua strictMarkup + hydrateStyles */
+const strictNodes = new WeakSet<Svg>();
+export const markStrict = (node: Svg): void => {
+  strictNodes.add(node);
+};
 const layerCache = new WeakMap<Character, Map<string, Layers>>();
 /** chuỗi lớp mặt / emote đã gắn tiền tố, nhớ theo (nhân vật, trạng thái, biến thể, cỡ); cache gắn với đối tượng nhân vật nên tự hết khi unregister */
-function layersFor(id: string, state: AvatarState, variant: string | null, small: boolean, R: Resolved): Layers {
+function layersFor(
+  id: string,
+  state: AvatarState,
+  variant: string | null,
+  small: boolean,
+  R: Resolved,
+  strict: boolean,
+): Layers {
   const C = getChar(id);
   let per = layerCache.get(C);
   if (!per) {
     per = new Map();
     layerCache.set(C, per);
   }
-  const k = `${state}|${variant ?? ''}|${small ? 1 : 0}`;
+  const k = `${state}|${variant ?? ''}|${small ? 1 : 0}|${strict ? 1 : 0}`;
   const hit = per.get(k);
   if (hit) return hit;
   const need = needOf(R);
@@ -343,29 +397,32 @@ function layersFor(id: string, state: AvatarState, variant: string | null, small
     hx: small ? '' : nsMarkup(holdMarkup(R.hold).hx),
     pad: small ? '' : nsMarkup(holdMarkup(R.hold).pad),
   };
+  if (strict) for (const key of Object.keys(L) as (keyof Layers)[]) L[key] = strictMarkup(L[key]);
   per.set(k, L);
   return L;
 }
 
 const htmlOf = new WeakMap<Element, string>();
-function setHtml(el: Element | null, html: string): void {
+function setHtml(el: Element | null, html: string, strict: boolean): void {
   if (el && htmlOf.get(el) !== html) {
     htmlOf.set(el, html);
     el.innerHTML = html;
+    if (strict) hydrateStyles(el);
   }
 }
 function rebuildLayers(node: Svg, R: Resolved, variant: string | null): void {
   const small = attr(node, 'sm') === '1';
-  const L = layersFor(attr(node, 'c'), R.state, variant, small, R);
-  setHtml(node.querySelector('.chb-eyel'), L.eyes);
-  setHtml(node.querySelector('.chb-mouthl'), L.mouths);
+  const strict = strictNodes.has(node);
+  const L = layersFor(attr(node, 'c'), R.state, variant, small, R, strict);
+  setHtml(node.querySelector('.chb-eyel'), L.eyes, strict);
+  setHtml(node.querySelector('.chb-mouthl'), L.mouths, strict);
   if (!small) {
-    setHtml(node.querySelector('.chb-emo'), L.emo);
-    setHtml(node.querySelector('.chb-emb'), L.emb);
-    setHtml(node.querySelector('.chb-hx'), L.hx);
-    setHtml(node.querySelector('.chb-gpad'), L.pad);
+    setHtml(node.querySelector('.chb-emo'), L.emo, strict);
+    setHtml(node.querySelector('.chb-emb'), L.emb, strict);
+    setHtml(node.querySelector('.chb-hx'), L.hx, strict);
+    setHtml(node.querySelector('.chb-gpad'), L.pad, strict);
   }
-  setHtml(node.querySelector('svg.chb-hero'), L.hero);
+  setHtml(node.querySelector('svg.chb-hero'), L.hero, strict);
 }
 
 // ---------------------------------------------------------------- đổi trạng thái (gom theo lô, một microtask)
@@ -497,13 +554,13 @@ export function freeze(node: Svg, frac = 0, emMs = 900): void {
 /** các @keyframes của stylesheet engine (tên → cssText), cho công cụ tự kiểm */
 export function keyframeNames(): Record<string, string> {
   const out: Record<string, string> = {};
-  const sheet = (document.getElementById('chb-css') as HTMLStyleElement | null)?.sheet;
+  const sh = engineSheet() ?? (document.getElementById('chb-css') as HTMLStyleElement | null)?.sheet;
   const walk = (rules: CSSRuleList): void => {
     for (const r of Array.from(rules)) {
       if (r instanceof CSSKeyframesRule) out[r.name] = r.cssText;
       else if ('cssRules' in r) walk((r as CSSGroupingRule).cssRules);
     }
   };
-  if (sheet) walk(sheet.cssRules);
+  if (sh) walk(sh.cssRules);
   return out;
 }

@@ -3,32 +3,12 @@
 <head>
 <meta charset="utf-8">
 <title>chibi harness</title>
-<script type="importmap">{"imports":{"zod":"/zod/index.js","@ga/contracts":"/contracts/index.ts"}}</script>
-<style>html,body{margin:0;background:#2b2b33}#s{width:300px;height:320px;display:flex;align-items:center;justify-content:center}</style>
+<!-- toàn bộ script / style là tệp ngoài: trang chạy được dưới CSP "default-src 'self'; style-src 'self'" (thêm ?csp=strict vào URL) -->
+<script src="/test/browser/harness-listener.js"></script>
+<link rel="stylesheet" href="/test/browser/harness.css">
 </head>
 <body>
 <div id="s"></div>
-<script type="module">
-import * as C from '/src/index.ts';
-import { ST } from '/src/states.ts';
-
-const base = '/skins/tam-quoc-chibi/1.0.0/';
-const manifest = await (await fetch(`${base}manifest.json`)).json();
-const chars = {};
-for (const c of manifest.characters) chars[c.file] = await (await fetch(`${base}${c.file}`)).json();
-C.loadSkinPack(manifest, (f) => chars[f]);
-const el = document.getElementById('s');
-window.Chibi = C.Chibi;
-window.__chars = chars;
-window.__api = {
-  ready: true,
-  cast: C.cast().map((c) => ({ id: c.id, code: c.id })),
-  states: C.AVATAR_STATES,
-  variants: C.IDLE_VARIANTS,
-  frac: (s) => ST[s].frac,
-  mount: (id, s, v) => { el.innerHTML = ''; return C.mount(el, id, s, { size: 160, fixedPhase: true, variant: v || undefined }).svg; },
-  freeze: (frac) => C.freeze(document.querySelector('svg.chb'), frac, 900),
-};
-</script>
+<script type="module" src="/test/browser/harness-main.js"></script>
 </body>
 </html>

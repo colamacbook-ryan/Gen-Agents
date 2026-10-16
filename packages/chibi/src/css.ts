@@ -5,6 +5,7 @@ import { armKeyframes, expandArm, STOW } from './arm-anim.ts';
 import { f } from './color.ts';
 import { EMOTES } from './emotes.ts';
 import { EYE_LAYERS, MOUTH_LAYERS } from './states.ts';
+import { K_VALUES } from './strict.ts';
 
 export const CSS_BASE = `
 .chb{ display:block; overflow:visible }
@@ -680,5 +681,7 @@ export function buildCss(): string {
   const css = nsCss(
     `${CSS_BASE}${faceRules()}${CSS_REDUCE}${CSS_STATIC}@media (prefers-reduced-motion: no-preference){${genKeyframes()}\n${armKeyframes()}}${stepify(expandArm(CSS_MOTION))}`,
   );
-  return css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{2,}/g, '\n');
+  // độ dày nét theo hệ số k: đường CSP chặt thay style="stroke-width:calc(var(--sw) * k)" bằng data-chb-k (strict.ts)
+  const kRules = K_VALUES.map((k) => `[data-chb-k="${k}"]{ stroke-width:calc(var(--chb-sw,3.4) * ${k}) }`).join('\n');
+  return `${css}\n${kRules}`.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{2,}/g, '\n');
 }

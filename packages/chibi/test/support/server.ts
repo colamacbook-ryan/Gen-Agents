@@ -20,9 +20,19 @@ const ROOTS: Record<string, string> = {
 const MIME: Record<string, string> = {
   '.ts': 'text/javascript; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
 };
+
+/** CSP chặt dùng trong test */
+export const STRICT_CSP = "default-src 'self'; style-src 'self'";
+
+/** thay bare specifier bằng đường dẫn tuyệt đối trên máy chủ này (không cần import map, tức không cần script nội tuyến) */
+const rewriteBare = (code: string): string =>
+  code
+    .replace(/from (['"])zod\1/g, "from '/zod/index.js'")
+    .replace(/from (['"])@ga\/contracts\1/g, "from '/contracts/index.ts'");
 
 export interface TestServer {
   url: string;
@@ -46,10 +56,14 @@ export async function startServer(): Promise<TestServer> {
       }
       let body: string | Buffer = await readFile(file);
       const ext = extname(file);
-      if (ext === '.ts') body = stripTypeScriptTypes(body.toString('utf8'), { mode: 'strip' });
-      res
-        .writeHead(200, { 'content-type': MIME[ext] ?? 'application/octet-stream', 'cache-control': 'no-store' })
-        .end(body);
+      if (ext === '.ts') body = rewriteBare(stripTypeScriptTypes(body.toString('utf8'), { mode: 'strip' }));
+      const headers: Record<string, string> = {
+        'content-type': MIME[ext] ?? 'application/octet-stream',
+        'cache-control': 'no-store',
+      };
+      // ?csp=strict: trang tài liệu chạy dưới CSP chặt (không 'unsafe-inline' cho style, không script nội tuyến)
+      if (ext === '.html' && u.searchParams.get('csp') === 'strict') headers['content-security-policy'] = STRICT_CSP;
+      res.writeHead(200, headers).end(body);
     } catch (e) {
       res.writeHead(404).end(String((e as Error).message));
     }

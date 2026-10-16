@@ -2,8 +2,20 @@
 
 import type { MotionLevel } from './motion.ts';
 import { type SvgOptions, svg } from './render.ts';
-import { applyState, injectCSS, type StateOptions, setMotion, startAuto, track, untrack } from './runtime.ts';
+import {
+  adoptCSS,
+  applyState,
+  injectCSS,
+  markStrict,
+  type StateOptions,
+  setMotion,
+  startAuto,
+  styleRootOf,
+  track,
+  untrack,
+} from './runtime.ts';
 import type { AvatarState } from './state-keys.ts';
+import { hydrateStyles, strictMarkup } from './strict.ts';
 
 export interface ChibiHandle {
   svg: SVGSVGElement;
@@ -15,10 +27,14 @@ export interface ChibiHandle {
 
 export function mount(el: Element, id: string, state: AvatarState | string = 'normal', opts?: SvgOptions): ChibiHandle {
   injectCSS();
-  // markup do engine tự dựng từ tham số đã qua schema (enum đóng, màu #RRGGBB, nhãn đã thoát): không có chuỗi từ ngoài chưa thoát
-  el.innerHTML = svg(id, state, opts);
+  adoptCSS(styleRootOf(el)); // avatar trong shadow root cũng có stylesheet (adoptedStyleSheets, không cần <style>)
+  // ĐƯỜNG CSP CHẶT: markup do engine tự dựng từ tham số đã qua schema (enum đóng, màu #RRGGBB, nhãn đã thoát); mọi style="…" nội tuyến được
+  // đổi sang thuộc tính trình bày / data-chb-k / data-chb-sty (strict.ts) rồi áp biến tuỳ ý qua CSSOM — không cần style-src 'unsafe-inline'.
+  el.innerHTML = strictMarkup(svg(id, state, opts));
   const node = el.querySelector<SVGSVGElement>('svg.chb');
   if (!node) throw new Error('Chibi: không dựng được SVG');
+  hydrateStyles(node);
+  markStrict(node);
   track(node);
   startAuto();
   return {

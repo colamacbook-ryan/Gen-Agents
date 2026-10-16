@@ -362,7 +362,7 @@ describe('hiệu năng bộ kiểm với dữ liệu từ ngoài (STD-11: giới
     const ms2 = timeMs(() => {
       expect(validate(p).ok).toBe(false);
     });
-    expect(ms1).toBeLessThan(200);
+    expect(ms1).toBeLessThan(500); // chặn "không treo" (quét 5 MB bằng regex mất hàng giây); 200 ms bị đỏ giả lúc máy vừa khởi động
     expect(ms2).toBeLessThan(2000);
     const ms3 = timeMs(() => {
       expect(parse(`{"a":"${'x'.repeat(10_000_000)}"}`).ok).toBe(false); // chặn theo kích thước trước khi parse
