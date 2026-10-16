@@ -10,7 +10,8 @@
   },
   "scripts": {
     "test": "node ../../scripts/vitest-run.mjs",
-    "start": "node src/bin.ts"
+    "start": "node src/bin.ts",
+    "test:it:runtime": "vitest run --config ../../testing/it/runtime/vitest.config.ts"
   },
   "dependencies": {
     "@ga/contracts": "workspace:*",

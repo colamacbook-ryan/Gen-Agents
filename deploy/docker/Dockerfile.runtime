@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1
+# gen-agents-runtime — image của container Role / hệ thống (BUILD-PLAN §A.1 Đóng gói, §B.2).
+# Node 22 + ga-runner + ga-engine-install + @ga/contracts + @ga/engines (adapter đóng sẵn: runner tự dựng argv / env).
+# KHÔNG chứa CLI của hãng (tải lúc cài vào volume ga-engines — §A.2-5) và KHÔNG chứa nguồn cài giả / CLI giả (chỉ image test).
+# Không cài gói apt: tini = `HostConfig.Init` của Docker (docker-init là tini) — supervisor luôn bật Init.
+# Bối cảnh build = gốc repo; tệp vào bối cảnh do Dockerfile.runtime.dockerignore chọn (loại engine-install/fake-source.ts).
+#   docker build -f deploy/docker/Dockerfile.runtime -t gen-agents-runtime:local .
+ARG NODE_IMAGE=node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+FROM ${NODE_IMAGE}
+
+# uid 10001 (khớp RUNTIME_USER của supervisor); thư mục mồi để supervisor gieo quyền sở hữu volume mới bằng copy-up.
+RUN groupadd -g 10001 ga \
+ && useradd -u 10001 -g 10001 -M -d /nonexistent -s /usr/sbin/nologin ga \
+ && mkdir -p /opt/ga/app/node_modules/@ga /opt/engines /auth /run/ga /opt/ga/seed-auth /opt/ga/seed-engines \
+ && chown 10001:10001 /opt/ga/seed-auth /opt/ga/seed-engines /opt/engines \
+ && chmod 0700 /opt/ga/seed-auth \
+ && chmod 0755 /opt/ga/seed-engines /opt/engines
+
+# Mã chạy bằng type stripping của Node 22 (không bước build); tệp .ts nằm NGOÀI node_modules (bắt buộc với type stripping),
+# node_modules/@ga/* là symlink tới packages/.
+COPY packages/contracts/package.json /opt/ga/app/packages/contracts/package.json
+COPY packages/contracts/src /opt/ga/app/packages/contracts/src
+COPY packages/engines/package.json /opt/ga/app/packages/engines/package.json
+COPY packages/engines/src /opt/ga/app/packages/engines/src
+COPY apps/runner/package.json /opt/ga/app/apps/runner/package.json
+COPY apps/runner/src /opt/ga/app/apps/runner/src
+# zod = phụ thuộc chạy duy nhất (của @ga/contracts), lấy đúng bản lockfile đã cài trong workspace.
+ARG ZOD_DIR=node_modules/.pnpm/zod@4.6.7/node_modules/zod
+COPY ${ZOD_DIR} /opt/ga/app/node_modules/zod
+RUN ln -s ../../packages/contracts /opt/ga/app/node_modules/@ga/contracts \
+ && ln -s ../../packages/engines /opt/ga/app/node_modules/@ga/engines \
+ && printf '#!/bin/sh\nexec /usr/local/bin/node /opt/ga/app/apps/runner/src/main.ts "$@"\n' > /usr/local/bin/ga-runner \
+ && printf '#!/bin/sh\nexec /usr/local/bin/node /opt/ga/app/apps/runner/src/engine-install-main.ts "$@"\n' > /usr/local/bin/ga-engine-install \
+ && chmod 0755 /usr/local/bin/ga-runner /usr/local/bin/ga-engine-install \
+ && test ! -e /opt/ga/app/apps/runner/src/engine-install/fake-source.ts
+
+ENV PATH=/usr/local/bin:/usr/bin:/bin NODE_ENV=production
+USER 10001:10001
+WORKDIR /tmp
+CMD ["sleep", "infinity"]

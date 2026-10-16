@@ -1,0 +1,64 @@
+# IT runtime (L-RT, BUILD-PLAN §E.2 DoD) — dựng quanh supervisor chạy TRONG tiến trình test (driver docker thật):
+#   socket-proxy  (Docker API giới hạn, như sản phẩm) — supervisor gọi qua đây
+#   egress        (apps/egress, hook test allowPrivate) — lối ra duy nhất của mạng roles
+#   stub-app      (đóng vai ga-app: gateway :7410 trên roles, :7401 + điều khiển :7499 CHỈ trên mạng hostlink)
+#   fake-source   (testing/fakes engine-source: "trình cài chính chủ" giả, sau egress)
+# Mạng roles = internal (không ra Internet). Container Role / hệ thống do supervisor tạo, gắn vào ga-rt_roles.
+# Chạy: COMPOSE_PROJECT_NAME=ga-rt docker compose -f testing/it/runtime/compose.it.yml up -d  (harness tự làm)
+name: ga-rt
+services:
+  socket-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: '1'
+      EXEC: '1'
+      IMAGES: '1'
+      NETWORKS: '1'
+      VOLUMES: '1'
+      POST: '1'
+      INFO: '1'
+      VERSION: '1'
+      # máy không có IPv6 (cloud sandbox): haproxy không bind được [::]:2375
+      DISABLE_IPV6: '1'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [hostlink]
+  egress:
+    image: node:22-bookworm-slim
+    command: ['node', '/app/apps/egress/src/bin.ts']
+    working_dir: /app/apps/egress
+    environment:
+      GA_EGRESS_LISTEN: 0.0.0.0:3128
+      GA_EGRESS_RULES_FILE: /rules/egress-rules.json
+      GA_EGRESS_TEST_ALLOW_PRIVATE: '1'
+    volumes:
+      - ../../../apps/egress/package.json:/app/apps/egress/package.json:ro
+      - ../../../apps/egress/src:/app/apps/egress/src:ro
+      - ./stubs/egress-rules.json:/rules/egress-rules.json:ro
+    networks:
+      roles: { aliases: [ga-egress] }
+      outside: {}
+  stub-app:
+    image: node:22-bookworm-slim
+    command: ['node', '/stubs/stub-app.ts']
+    environment:
+      STUB_HOSTLINK_NET: hostlink
+    volumes:
+      - ./stubs:/stubs:ro
+    networks:
+      roles: { aliases: [ga-app] }
+      hostlink: {}
+  fake-source:
+    image: node:22-bookworm-slim
+    command: ['node', '/stubs/engine-source-main.ts']
+    volumes:
+      - ./stubs:/stubs:ro
+      - ../../fakes:/fakes:ro
+    networks:
+      outside: { aliases: [fake-source.ga.test] }
+      hostlink: {}
+networks:
+  roles:
+    internal: true
+  hostlink: {}
+  outside: {}

@@ -1,0 +1,11 @@
+# Bối cảnh build của Dockerfile.runtime: mặc định loại hết, chỉ mở đúng thứ image cần.
+*
+!packages/contracts/package.json
+!packages/contracts/src/**
+!packages/engines/package.json
+!packages/engines/src/**
+!apps/runner/package.json
+!apps/runner/src/**
+!node_modules/.pnpm/zod@4.6.7/node_modules/zod/**
+# nguồn cài giả CHỈ ở image test
+apps/runner/src/engine-install/fake-source.ts
