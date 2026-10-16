@@ -9,8 +9,9 @@ import { cliPath, type RunnerRoots } from './paths.ts';
 
 // Thư mục tmpfs của một lần chạy CLI (lượt hoặc probe): /run/ga/<tên>/{ticket, <tệp plan>, home/, tmp/}.
 // allowlist biết ⇒ HOME = tmpfs (trạng thái native bị xoá sau lượt), credential nối từng tệp từ /auth/<en>.
-// allowlist 'unknown' ⇒ không biết tệp nào là credential ⇒ HOME = /auth/<en> (cách duy nhất CLI chạy được), không xoá gì,
-// nativeMemory = 'unknown' để app báo owner (DATABASE D18). [Quyết định M1 của L-RT — Gen duyệt]
+// allowlist 'unknown' (GEN-04, Gen quyết) ⇒ KHÔNG nối credential nào (fail-closed): HOME = tmpfs trống, CLI chạy như chưa
+// đăng nhập; auth-gc không xoá gì; báo nativeMemory = 'unknown' (DATABASE D18). Riêng PTY đăng nhập (`login`) với allowlist
+// 'unknown': HOME = /auth/<en> — cách DUY NHẤT để credential chính chủ được ghi vào volume (đề xuất L-RT, Gen duyệt).
 
 export interface Session {
   dir: string;
@@ -43,6 +44,7 @@ export function prepareSession(
   account: string,
   allowlist: AuthAllowlist,
   files: readonly SessionFile[],
+  opts: { unknownAllowlistHome?: 'tmpfs' | 'auth' } = {},
 ): Session {
   validateAllowlist(allowlist);
   const authDir = authDirOf(roots, account);
@@ -51,7 +53,8 @@ export function prepareSession(
   const home = mkdirInside(dir, 'home');
   const tmp = mkdirInside(dir, 'tmp');
   if (allowlist === 'unknown') {
-    return { dir, home, tmp, authDir, cliHome: authDir, links: [], allowlist, account };
+    const cliHome = opts.unknownAllowlistHome === 'auth' ? authDir : home;
+    return { dir, home, tmp, authDir, cliHome, links: [], allowlist, account };
   }
   const links = linkAllowlist(home, authDir, allowlist);
   return { dir, home, tmp, authDir, cliHome: home, links, allowlist, account };

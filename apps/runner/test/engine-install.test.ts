@@ -1,6 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -8,9 +17,16 @@ import type { EngineInstallStatus } from '@ga/contracts';
 import { EngineInstallStatus as StatusSchema } from '@ga/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeRecipe } from '../src/engine-install/fake-source.ts';
-import { installEngine, pickPlatform, readInstallStatus } from '../src/engine-install/install.ts';
+import {
+  currentVersion,
+  installEngine,
+  pickPlatform,
+  readInstallStatus,
+  rollbackEngine,
+} from '../src/engine-install/install.ts';
 import type { InstallRecipe } from '../src/engine-install/recipe.ts';
 import type { RunnerRoots } from '../src/paths.ts';
+import { resolveCliBin } from '../src/spawn.ts';
 import { type Sandbox, sandbox } from './helpers.ts';
 
 // Máy chủ "hãng" giả + proxy giả (đóng vai ga-egress: absolute-form cho http, CONNECT, từ chối = 403 + x-ga-egress: blocked).
@@ -310,4 +326,50 @@ describe('nguồn fake (chỉ image test)', () => {
   it.each(['', 'file:///etc', 'http://x/path?q', 'http://a b'])('từ chối URL nguồn: %j', (u) => {
     expect(() => fakeRecipe('demo', 'democli', { GA_FAKE_ENGINE_SOURCE_URL: u })).toThrow();
   });
+});
+
+describe('current → <version> nguyên tử, rollback, current trỏ ra ngoài bị từ chối', () => {
+  async function installVersion(v: string) {
+    routes.set('/manifests/linux-x64.json', {
+      status: 200,
+      body: JSON.stringify({ version: v, url: `/dl/${v}`, sha512: sha512(BINARY) }),
+    });
+    routes.set(`/dl/${v}`, { status: 200, body: BINARY });
+    return (await run(perPlatform(), { slug: 'demo' })).result;
+  }
+  it('đổi bản: 1.0.0 → 1.1.0; rollback ⇒ current về 1.0.0, đổi vai previous', async () => {
+    await installVersion('1.0.0');
+    await installVersion('1.1.0');
+    expect(currentVersion(roots, 'demo')).toBe('1.1.0');
+    expect(resolveCliBin(roots, 'demo', 'fakecli')).toContain(join('demo', '1.1.0', 'fakecli'));
+    expect(rollbackEngine(roots, 'demo', new Date('2026-10-16T12:00:00.000Z'))).toMatchObject({
+      state: 'installed',
+      version: '1.0.0',
+    });
+    expect(currentVersion(roots, 'demo')).toBe('1.0.0');
+    expect(resolveCliBin(roots, 'demo', 'fakecli')).toContain(join('demo', '1.0.0', 'fakecli'));
+    expect(readInstallStatus(roots, 'demo', new Date())).toMatchObject({ state: 'installed', version: '1.0.0' });
+    // rollback lần nữa ⇒ quay lại 1.1.0
+    rollbackEngine(roots, 'demo', new Date());
+    expect(currentVersion(roots, 'demo')).toBe('1.1.0');
+  });
+  it('không có bản trước ⇒ rollback từ chối, không đổi gì', async () => {
+    await installVersion('2.0.0');
+    expect(() => rollbackEngine(roots, 'demo', new Date())).toThrow();
+    expect(currentVersion(roots, 'demo')).toBe('2.0.0');
+  });
+  it.each([
+    ['tới loại CLI khác', '../fake/1.0.0'],
+    ['tới đường tuyệt đối ngoài volume', '/usr/bin'],
+  ])(
+    'current trỏ %s ⇒ spawn từ chối (realpath ngoài /opt/engines/<slug>/), status = not_installed',
+    async (_n, target) => {
+      await installVersion('3.0.0');
+      rmSync(join(roots.engines, 'demo', 'current'));
+      symlinkSync(target, join(roots.engines, 'demo', 'current'));
+      writeFileSync(join(roots.engines, 'fake', '1.0.0', 'fakecli'), '#!/bin/true\n', { mode: 0o755 });
+      expect(() => resolveCliBin(roots, 'demo', 'fakecli')).toThrow();
+      expect(readInstallStatus(roots, 'demo', new Date())).toEqual({ state: 'not_installed' });
+    },
+  );
 });

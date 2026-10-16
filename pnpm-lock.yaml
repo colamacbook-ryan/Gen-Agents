@@ -28,10 +28,13 @@ importers:
         version: link:../../packages/contracts
 
   apps/runner:
-    devDependencies:
+    dependencies:
       '@ga/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ga/engines':
+        specifier: workspace:*
+        version: link:../../packages/engines
 
   apps/supervisor:
     dependencies:

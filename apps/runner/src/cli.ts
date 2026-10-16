@@ -2,6 +2,7 @@ import { RUNNER_COMMANDS, type RunnerCommand } from '@ga/contracts';
 import { type AdapterRegistry, loadRegistry } from './adapters.ts';
 import { cmdAuthGc, cmdProbe, cmdTurn, type RunnerContext } from './commands.ts';
 import { cmdLogin } from './login.ts';
+import { parseBridgeArgs, runMcpBridge } from './mcp-bridge.ts';
 import { FIXED_ROOTS, RunnerError, type RunnerRoots } from './paths.ts';
 import { EXIT_RUNNER_ERROR, emitError } from './report.ts';
 
@@ -14,6 +15,10 @@ export async function main(
 ): Promise<number> {
   const [cmd, ...rest] = argv;
   try {
+    // cầu MCP do CLI (trong container) chạy theo cấu hình adapter — không phải lệnh supervisor exec (ngoài EXEC_ARGV)
+    if (cmd === 'mcp-bridge') {
+      return await runMcpBridge(parseBridgeArgs(rest), process, deps.roots ?? FIXED_ROOTS);
+    }
     if (rest.length > 0) throw new RunnerError('usage', 'ga-runner không nhận đối số ngoài tên lệnh');
     if (!(RUNNER_COMMANDS as readonly string[]).includes(cmd ?? ''))
       throw new RunnerError('usage', 'lệnh không hỗ trợ');

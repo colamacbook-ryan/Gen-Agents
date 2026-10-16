@@ -4,11 +4,12 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "ga-runner (turn, probe, pty, auth-gc) + ga-engine-install — chạy TRONG container runtime, chỉ dùng thư viện chuẩn Node (BUILD-PLAN §B.5, §B.6, §A.2-5).",
+  "description": "ga-runner (turn, login-check, probe, auth-gc, login, mcp-bridge) + ga-engine-install — chạy TRONG container runtime; adapter @ga/engines đóng sẵn trong image (BUILD-PLAN §B.5, §B.6, §A.2-5).",
   "scripts": {
     "test": "node ../../scripts/vitest-run.mjs"
   },
-  "devDependencies": {
-    "@ga/contracts": "workspace:*"
+  "dependencies": {
+    "@ga/contracts": "workspace:*",
+    "@ga/engines": "workspace:*"
   }
 }

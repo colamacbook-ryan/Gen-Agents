@@ -36,7 +36,7 @@ export async function cmdLogin(ctx: RunnerContext, opts: { killGraceMs?: number 
     if (v.length > 0) throw new RunnerError('argv_rejected', `argv đăng nhập bị từ chối: ${v.slice(0, 3).join('; ')}`);
     const runId = newRunId();
     dir = createSessionDir(roots, `login-${runId}`);
-    session = prepareSession(roots, dir, b.engineAccount, adapter.authAllowlist, []);
+    session = prepareSession(roots, dir, b.engineAccount, adapter.authAllowlist, [], { unknownAllowlistHome: 'auth' });
     const binPath = resolveCliBin(roots, b.engineSlug, argv[0] as string);
     const env = buildCliEnv(roots, b.engineSlug, session.cliHome, session.tmp, io.env, {}, adapter.flagTable);
     env.TERM = 'xterm-256color';

@@ -187,6 +187,8 @@ interface StatusFile {
   reason?: FailureReason;
   detail?: string;
   startedAt?: string;
+  /** Bản trước đó (để rollback = trỏ current về bản này). */
+  previous?: string | null;
 }
 
 function statusPath(roots: RunnerRoots, slug: string): string {
@@ -286,16 +288,18 @@ export async function installEngine(
     chmodSync(staged, 0o755);
     renameSync(staged, join(versionDir, bin));
 
-    // current → <version>: symlink tương đối, thay nguyên tử
-    const link = join(roots.engines, req.slug, 'current');
-    const tmpLink = join(roots.engines, req.slug, `.current-${process.pid}`);
-    tmps.push(tmpLink);
-    rmSync(tmpLink, { force: true });
-    symlinkSync(art.version, tmpLink);
-    renameSync(tmpLink, link);
+    // current → <version>: symlink tương đối, thay nguyên tử; nhớ bản cũ để rollback
+    const prev = currentVersion(roots, req.slug);
+    pointCurrent(roots, req.slug, art.version);
 
     const installedAt = deps.now().toISOString();
-    writeStatus(roots, req.slug, { state: 'installed', version: art.version, installedAt, bin });
+    writeStatus(roots, req.slug, {
+      state: 'installed',
+      version: art.version,
+      installedAt,
+      bin,
+      previous: prev !== null && prev !== art.version ? prev : null,
+    });
     const done: EngineInstallStatus = { state: 'installed', version: art.version, installedAt };
     deps.emit(done);
     return done;
@@ -317,6 +321,55 @@ export async function installEngine(
     for (const t of tmps) rmSync(t, { force: true });
     if (lock) rmSync(lock, { force: true });
   }
+}
+
+/** Bản đang trỏ bởi current (null nếu chưa có / không phải symlink tên phiên bản hợp lệ). */
+export function currentVersion(roots: RunnerRoots, slug: string): string | null {
+  const link = join(roots.engines, slug, 'current');
+  const st = lstatOrNull(link);
+  if (!st?.isSymbolicLink()) return null;
+  const t = readlinkSync(link);
+  return VERSION_RE.test(t) ? t : null;
+}
+
+/** Đổi current → <version> NGUYÊN TỬ (symlink tạm + rename). */
+export function pointCurrent(roots: RunnerRoots, slug: string, version: string): void {
+  if (!isEngineSlug(slug) || !VERSION_RE.test(version))
+    throw new RunnerError('bad_version', 'slug / phiên bản sai dạng');
+  const tmpLink = join(roots.engines, slug, `.current-${process.pid}-${Date.now().toString(36)}`);
+  rmSync(tmpLink, { force: true });
+  symlinkSync(version, tmpLink);
+  try {
+    renameSync(tmpLink, join(roots.engines, slug, 'current'));
+  } catch (e) {
+    rmSync(tmpLink, { force: true });
+    throw e;
+  }
+}
+
+/**
+ * Rollback: trỏ current về bản trước (status.previous) nếu thư mục bản đó còn binary; đổi vai previous ⇄ version.
+ * Không có bản trước hợp lệ ⇒ lỗi (không đổi gì).
+ */
+export function rollbackEngine(roots: RunnerRoots, slug: string, now: Date): EngineInstallStatus {
+  if (!isEngineSlug(slug)) throw new RunnerError('bad_slug', 'slug không hợp lệ');
+  let s: StatusFile;
+  try {
+    s = JSON.parse(readFileSync(statusPath(roots, slug), 'utf8')) as StatusFile;
+  } catch {
+    throw new RunnerError('no_previous', 'chưa có bản cài');
+  }
+  const prev = s.previous;
+  if (s.state !== 'installed' || typeof prev !== 'string' || !VERSION_RE.test(prev) || typeof s.bin !== 'string') {
+    throw new RunnerError('no_previous', 'không có bản trước để rollback');
+  }
+  const bin = join(roots.engines, slug, prev, s.bin);
+  const st = lstatOrNull(bin);
+  if (!st?.isFile()) throw new RunnerError('no_previous', 'bản trước không còn binary');
+  pointCurrent(roots, slug, prev);
+  const installedAt = now.toISOString();
+  writeStatus(roots, slug, { state: 'installed', version: prev, installedAt, bin: s.bin, previous: s.version ?? null });
+  return { state: 'installed', version: prev, installedAt };
 }
 
 /** `ga-engine-install status <slug>`: đọc status.json + kiểm binary còn đúng chỗ. Thiếu ⇒ not_installed (fail-closed). */

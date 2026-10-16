@@ -114,6 +114,8 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
     const envLine = JSON.parse(readFileSync(dump, 'utf8')) as { names: string[]; values: string[]; ticketMode: string };
     rmSync(dump);
     expect(envLine.ticketMode).toBe('400');
+    // GEN-03: cwd của CLI = thư mục lượt
+    expect((envLine as unknown as { cwd: string }).cwd).toBe(join(sb.roots.run, TURN_ID));
     // PWD do /bin/sh của launcher thử nghiệm tự đặt (không phải runner)
     expect(envLine.names.filter((n) => n !== 'PWD')).toEqual([
       'HOME',
@@ -400,5 +402,30 @@ describe('giao thức stdout — CLI không giả được report (review MEDIUM
     if (!p.ok) return;
     expect(p.lines.filter((l) => l.includes('"$ga":"report"'))).toHaveLength(2);
     expect(p.report).toMatchObject({ command: 'turn', authGc: { removed: 1 } }); // của runner, không phải bản giả (removed 0)
+  });
+});
+
+describe("GEN-04 — allowlist credential 'unknown' ⇒ không nối credential (fail-closed), báo unknown", () => {
+  it('lượt: HOME = tmpfs trống (không thấy credential), /auth không bị dọn, report nativeMemory unknown', async () => {
+    bundleBody = turnBundle();
+    const reg = registryOf([fakeAdapter({ authAllowlist: 'unknown' } as Partial<RunnerAdapter>)]);
+    const { c, stdout } = ctx({ registry: reg });
+    expect(await cmdTurn(c)).toBe(0);
+    const dump = JSON.parse(readFileSync(join(sb.roots.run, 'env-dump.json'), 'utf8')) as {
+      values: string[];
+      credBefore: unknown;
+    };
+    rmSync(join(sb.roots.run, 'env-dump.json'));
+    expect(dump.credBefore).toBeNull();
+    expect(dump.values.some((v) => v.startsWith(sb.roots.auth))).toBe(false);
+    expect(lastReport(stdout).authGc).toEqual({ removed: 0, nativeMemory: 'unknown' });
+    expect(readFileSync(join(sb.authDir, 'cred.json'), 'utf8')).toBe('v1');
+    expect(existsSync(join(sb.authDir, '.junk'))).toBe(true);
+  });
+  it('login-check: báo nativeMemory unknown', async () => {
+    const reg = registryOf([fakeAdapter({ authAllowlist: 'unknown' } as Partial<RunnerAdapter>)]);
+    const { c, stdout } = ctx({ stdin: probeBundle('login_check'), env: { GA_PROBE_ID: PROBE_ID }, registry: reg });
+    expect(await cmdProbe(c, 'login-check')).toBe(0);
+    expect(lastReport(stdout).authGc).toEqual({ removed: 0, nativeMemory: 'unknown' });
   });
 });
