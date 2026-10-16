@@ -33,10 +33,15 @@ import {
   PROBE_KINDS,
   ProbeBundle,
   type ProbePlan,
+  parseRunnerStdout,
   promptDir,
+  RUNNER_CLI_LINE_MAX_CHARS,
   RUNNER_OPS,
+  RUNNER_STDOUT_LINE_MAX_CHARS,
   RunnerReport,
   runnerBundleSchemas,
+  runnerReportLine,
+  runnerStdoutLine,
   TermTicketClaims,
   TURN_EXEC,
   TurnBundle,
@@ -612,6 +617,77 @@ describe('hợp đồng: không schema bundle / yêu cầu runner nào có argv 
       ),
     ).toEqual(['$[] (mảng chuỗi)', '$[] (mảng chuỗi)']);
     expect(() => commandLikeFields(z.date())).toThrow(/walker chưa hỗ trợ/);
+  });
+});
+
+describe('stdout của ga-runner: bọc mọi dòng, đúng một report ở cuối (output-injection)', () => {
+  const report = {
+    $ga: 'report',
+    command: 'turn',
+    turnId: ULID,
+    exit: { exitCode: 0, signal: null, timedOut: false, durationMs: 1200 },
+    authGc: { removed: 1, nativeMemory: 'off' },
+  } as const;
+  const REPORT = runnerReportLine(report);
+  const L = runnerStdoutLine;
+
+  it('luồng hợp lệ: các dòng CLI (đã bọc) + report cuối', () => {
+    const r = parseRunnerStdout([L('{"type":"delta","text":"xin chào"}'), L(''), REPORT]);
+    expect(r).toEqual({ ok: true, lines: ['{"type":"delta","text":"xin chào"}', ''], report });
+  });
+
+  it('dòng CLI chứa {"$ga":"report",…} vẫn chỉ là line — không thành report', () => {
+    const forged = L(REPORT);
+    expect(parseRunnerStdout([forged, REPORT])).toMatchObject({ ok: true, lines: [REPORT] });
+    // runner chết trước khi in report thật: report giả trong `l` KHÔNG được tin
+    expect(parseRunnerStdout([L('x'), forged])).toMatchObject({
+      ok: false,
+      code: 'runner_protocol_error',
+      reason: 'thiếu report',
+    });
+  });
+
+  it('thiếu report / hai report / report giữa luồng ⇒ runner_protocol_error', () => {
+    expect(parseRunnerStdout([])).toMatchObject({ ok: false, reason: 'thiếu report' });
+    expect(parseRunnerStdout([L('a'), L('b')])).toMatchObject({ ok: false, reason: 'thiếu report' });
+    expect(parseRunnerStdout([REPORT, REPORT])).toMatchObject({ ok: false, reason: 'nhiều hơn một report', lineNo: 2 });
+    expect(parseRunnerStdout([L('a'), REPORT, L('b')])).toMatchObject({ ok: false, lineNo: 3 });
+  });
+
+  it('dòng thô không bọc / JSON không chuẩn (khoá trùng, khoảng trắng) / trường lạ / dòng rỗng ⇒ lỗi giao thức', () => {
+    const bad = [
+      'hello từ CLI',
+      '{"type":"delta","text":"x"}',
+      '{"$ga":"line","l":"a","l":"b"}',
+      '{"$ga": "line", "l": "x"}',
+      '{"l":"x","$ga":"line","extra":1}',
+      '{"$ga":"line","l":1}',
+      '{"$ga":"log","l":"x"}',
+      '["$ga","line"]',
+      'null',
+      '',
+    ];
+    for (const raw of bad) {
+      const r = parseRunnerStdout([raw, REPORT]);
+      expect(r.ok, raw).toBe(false);
+      if (!r.ok) {
+        expect(r.code).toBe('runner_protocol_error');
+        expect(r.lineNo, raw).toBe(1);
+      }
+    }
+    // report có khoá trùng (bản sau ghi đè bản trước khi JSON.parse) ⇒ từ chối
+    const dupReport = REPORT.replace('"exitCode":0', '"exitCode":1,"exitCode":0');
+    expect(parseRunnerStdout([dupReport])).toMatchObject({ ok: false, lineNo: 1 });
+  });
+
+  it('dòng quá cỡ bị chặn TRƯỚC khi parse; runner không bọc được dòng CLI vượt trần', () => {
+    const huge = 'x'.repeat(RUNNER_STDOUT_LINE_MAX_CHARS + 1);
+    expect(parseRunnerStdout([huge, REPORT])).toMatchObject({ ok: false, reason: 'dòng quá cỡ', lineNo: 1 });
+    expect(() => runnerStdoutLine('y'.repeat(RUNNER_CLI_LINE_MAX_CHARS + 1))).toThrow();
+    // dòng CLI tối đa toàn ký tự phải escape vẫn nằm trong trần dòng stdout
+    expect(runnerStdoutLine('\u0001'.repeat(RUNNER_CLI_LINE_MAX_CHARS)).length).toBeLessThanOrEqual(
+      RUNNER_STDOUT_LINE_MAX_CHARS,
+    );
   });
 });
 
