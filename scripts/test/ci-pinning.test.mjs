@@ -1,11 +1,29 @@
 // Chuỗi cung ứng CI (review tay M0, LOW): rào tự động để không tái phạm —
 //   action ghim SHA commit 40 hex · checkout không lưu token · không nội suy ${{ }} vào `run:` · image ghim @sha256.
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+const SKIP = new Set(['node_modules', 'dist', '.git', 'lint-fixtures', 'license-fixtures']);
+
+/** Tệp (đường tương đối) dưới các thư mục gốc, lọc theo hàm; thư mục không tồn tại thì bỏ qua. */
+function walk(roots, keep) {
+  const out = [];
+  const rec = (rel) => {
+    const abs = join(ROOT, rel);
+    if (!existsSync(abs)) return;
+    for (const name of readdirSync(abs)) {
+      if (SKIP.has(name)) continue;
+      const r = `${rel}/${name}`;
+      if (statSync(join(ROOT, r)).isDirectory()) rec(r);
+      else if (keep(r)) out.push(r);
+    }
+  };
+  for (const r of roots) rec(r);
+  return out;
+}
 const WORKFLOWS = join(ROOT, '.github', 'workflows');
 const workflows = readdirSync(WORKFLOWS)
   .filter((f) => /\.ya?ml$/.test(f))
@@ -51,23 +69,46 @@ describe('CI ghim chuỗi cung ứng', () => {
     expect(bad).toEqual([]);
   });
 
-  it('image trong compose / script ghim @sha256', () => {
-    const files = [
-      ...readdirSync(join(ROOT, 'deploy', 'compose')).map((f) => join('deploy', 'compose', f)),
-      ...readdirSync(join(ROOT, 'scripts'))
-        .filter((f) => f.endsWith('.sh'))
-        .map((f) => join('scripts', f)),
-    ];
+  it('image ghim @sha256: compose / YAML trong deploy/** + testing/** (IT), Dockerfile FROM, IMAGE= trong scripts/*.sh', () => {
     const bad = [];
     let seen = 0;
-    for (const rel of files) {
+    // image build tại chỗ (từ Dockerfile đã ghim base) được phép: <tên>:local
+    const pinned = (ref) => /@sha256:[0-9a-f]{64}$/.test(ref) || /^[a-z0-9][a-z0-9._/-]*:local$/.test(ref);
+    for (const rel of walk(['deploy', 'testing'], (f) => /\.ya?ml$/.test(f))) {
       const text = readFileSync(join(ROOT, rel), 'utf8');
-      for (const m of text.matchAll(/^\s*(?:image:\s*|IMAGE=")([^\s"#]+)/gm)) {
+      for (const m of text.matchAll(/^\s*image:\s*["']?([^\s"'#]+)/gm)) {
         seen++;
-        if (!/@sha256:[0-9a-f]{64}$/.test(m[1])) bad.push(`${rel}: ${m[1]}`);
+        if (!pinned(m[1])) bad.push(`${rel}: ${m[1]}`);
+      }
+    }
+    for (const rel of walk(
+      ['deploy', 'testing'],
+      (f) => /(^|\/)Dockerfile[^/]*$/.test(f) && !f.endsWith('.dockerignore'),
+    )) {
+      const text = readFileSync(join(ROOT, rel), 'utf8');
+      const args = Object.fromEntries([...text.matchAll(/^ARG\s+(\w+)=(\S+)/gm)].map((m) => [m[1], m[2]]));
+      for (const m of text.matchAll(/^FROM\s+(?:--platform=\S+\s+)?(\S+)/gm)) {
+        seen++;
+        const ref = m[1].replace(/^\$\{(\w+)\}$/, (_, n) => args[n] ?? '');
+        if (!pinned(ref)) bad.push(`${rel}: FROM ${m[1]} (= ${ref || 'không có mặc định'})`);
+      }
+    }
+    for (const rel of walk(['scripts'], (f) => f.endsWith('.sh'))) {
+      const text = readFileSync(join(ROOT, rel), 'utf8');
+      for (const m of text.matchAll(/^\s*IMAGE=["']?([^\s"']+)/gm)) {
+        seen++;
+        if (!pinned(m[1])) bad.push(`${rel}: ${m[1]}`);
       }
     }
     expect(seen).toBeGreaterThan(0);
     expect(bad).toEqual([]);
+  });
+
+  it('rào image không rỗng: bắt được image chưa ghim (đối chứng âm trên chuỗi mẫu)', () => {
+    const sample =
+      'services:\n  p:\n    image: ghcr.io/tecnativa/docker-socket-proxy:latest\n  n:\n    image: node:22-bookworm-slim\n';
+    const refs = [...sample.matchAll(/^\s*image:\s*["']?([^\s"'#]+)/gm)].map((m) => m[1]);
+    expect(refs).toEqual(['ghcr.io/tecnativa/docker-socket-proxy:latest', 'node:22-bookworm-slim']);
+    expect(refs.every((r) => /@sha256:[0-9a-f]{64}$/.test(r))).toBe(false);
   });
 });

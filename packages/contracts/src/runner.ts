@@ -213,7 +213,58 @@ export type AuthGcResult = z.infer<typeof AuthGcResult>;
  * Báo cáo cuối của ga-runner: DÒNG CUỐI của stdout (dạng `$ga: 'report'`). Mọi dòng khác là `$ga: 'line'` bọc dòng CLI —
  * xem giao thức stdout bên dưới (parseRunnerStdout).
  */
+/**
+ * Mã lỗi của chính ga-runner / ga-engine-install (lỗi TRƯỚC hoặc NGOÀI CLI) — enum đóng (L-RT đề xuất, Gen duyệt).
+ * Không mang nội dung credential / vé / output CLI.
+ */
+export const RUNNER_ERROR_CODES = [
+  'usage',
+  'internal',
+  'argv_rejected',
+  'forbidden_env',
+  'unsafe_path',
+  'auth_dir_missing',
+  'bad_account',
+  'bad_adapter',
+  'bad_allowlist',
+  'bad_bundle',
+  'bad_cli',
+  'bad_engine',
+  'unknown_engine',
+  'bad_slug',
+  'bad_gateway_url',
+  'bad_plan',
+  'plan_conflicts_auth',
+  'http_plan_unsupported',
+  'bad_pty_id',
+  'bad_ticket',
+  'bad_ticket_file',
+  'bad_turn_id',
+  'bundle_expired',
+  'bundle_rejected',
+  'cli_not_installed',
+  'spawn_failed',
+  'stdin_error',
+  'stdin_timeout',
+  'stdin_too_large',
+  'timeout',
+  'network',
+  'bad_url',
+  'bad_version',
+  'no_previous',
+  'response_too_large',
+  'too_many_entries',
+] as const;
+export type RunnerErrorCode = (typeof RUNNER_ERROR_CODES)[number];
+
 export const RunnerReport = z.discriminatedUnion('command', [
+  /** Runner hỏng trước / ngoài CLI: report `error` (vẫn đúng một report, là dòng cuối). */
+  z.strictObject({
+    $ga: z.literal('report'),
+    command: z.literal('error'),
+    code: z.enum(RUNNER_ERROR_CODES),
+    message: z.string().max(500),
+  }),
   z.strictObject({
     $ga: z.literal('report'),
     command: z.literal('turn'),
