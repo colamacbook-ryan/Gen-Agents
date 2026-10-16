@@ -5,8 +5,6 @@ export { AdapterError } from './adapters/errors-common.ts';
 export { adapterFor, BUILTIN_ADAPTERS } from './adapters/index.ts';
 export {
   ANY_ITEM,
-  CAPABILITY_KINDS,
-  type CapabilityKind,
   capKey,
   detectedFlags,
   parseCapabilityKey,
@@ -49,7 +47,6 @@ export { MAX_LINE_BYTES, maskAccountHint } from './text.ts';
 export {
   ArgvBuilder,
   assertToolRestriction,
-  DEFAULT_TURN_TIMEOUT_MS,
   engineBinaryPath,
   GATEWAY_MCP_SERVER,
   MAX_PROMPT_ARG_BYTES,
@@ -64,11 +61,9 @@ export type {
   EngineAdapterExt,
   ErrorRuleInfo,
   Evidence,
-  InstallPlatform,
-  InstallRecipe,
+  InstallSource,
   OutputSignals,
   ToolRestriction,
   TurnLineParser,
   TurnPhase,
-  TurnPlanInputExt,
 } from './types.ts';

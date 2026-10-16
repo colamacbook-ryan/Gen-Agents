@@ -1,28 +1,14 @@
-import type { CapabilityEntry, ExecResult, ProbeOutcome } from '@ga/contracts';
+import {
+  CAPABILITY_KINDS,
+  type CapabilityEntry,
+  type CapabilityKind,
+  type ExecResult,
+  type ProbeOutcome,
+} from '@ga/contracts';
 import { head, MAX_PROBE_TEXT_CHARS, splitLines } from './text.ts';
 
-// Capability registry (STD-10 §3): khoá của CapabilityEntry = `<kind>:<item_key>` để L-GW ghi vào bảng `capabilities`
-// (kind ∈ CHECK của DB, item_key NOT NULL). Không quét được ⇒ valueState 'unknown' + lý do, không điền mặc định.
-
-/** = CHECK `capabilities.kind` (DATABASE v2.3.x). Test đối chiếu với baseline SQL. Đề xuất đưa vào contracts. */
-export const CAPABILITY_KINDS = [
-  'version',
-  'flag',
-  'subcommand',
-  'model',
-  'effort',
-  'mode',
-  'output_format',
-  'quota_window',
-  'login_method',
-  'instruction_file',
-  'hook',
-  'mcp',
-  'tool',
-  'feature',
-  'native_memory',
-] as const;
-export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
+// Capability registry (STD-10 §3): khoá của CapabilityEntry = `<kind>:<item_key>` (CAPABILITY_KINDS của contracts = CHECK
+// `capabilities.kind` của DB; item_key NOT NULL). Không quét được ⇒ valueState 'unknown' + lý do, không điền mặc định.
 
 /** item_key cho giá trị "cả nhóm" chưa xác định (vd mọi model khi chưa đăng nhập). */
 export const ANY_ITEM = '*';

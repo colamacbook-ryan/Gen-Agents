@@ -13,6 +13,7 @@ import {
   type ProbePlanInput,
   type TurnPlan,
   type TurnPlanFile,
+  type TurnPlanInput,
 } from '@ga/contracts';
 import {
   ANY_ITEM,
@@ -36,7 +37,7 @@ import {
   mcpBridgeCommand,
   planKit,
 } from '../../turn-common.ts';
-import type { EngineAdapterExt, InstallRecipe, ToolRestriction, TurnPlanInputExt } from '../../types.ts';
+import type { EngineAdapterExt, InstallSource, ToolRestriction } from '../../types.ts';
 import { AdapterError } from '../errors-common.ts';
 import { classifyDetailed, ERROR_RULES } from './errors.ts';
 import { createParser, parseLineAll } from './parser.ts';
@@ -58,14 +59,8 @@ const INSTRUCTION_FILE = 'GEMINI.md';
 const MCP_CONFIG_FILE = 'mcp_servers.json';
 
 /** Nguồn cài chính chủ — GET kiểm 2026-10-16: install.sh → manifest theo nền tảng {version, url, sha512}, gói tar.gz. */
-const INSTALL: InstallRecipe = {
+const INSTALL_SOURCE: InstallSource = {
   binaryName: BIN,
-  platforms: [
-    { arch: 'x64', libc: 'glibc', key: 'linux_amd64' },
-    { arch: 'arm64', libc: 'glibc', key: 'linux_arm64' },
-    { arch: 'x64', libc: 'musl', key: 'linux_amd64_musl' },
-    { arch: 'arm64', libc: 'musl', key: 'linux_arm64_musl' },
-  ],
   manifest: {
     kind: 'per-platform',
     urlTemplate: 'https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/{platform}.json',
@@ -316,21 +311,23 @@ function parseCapabilitiesFor(outcomes: readonly ProbeOutcome[], input: Capabili
 }
 
 // ---------------------------------------------------------------- lượt (§B.5)
-function turnPlan(input: TurnPlanInputExt): TurnPlan {
+function turnPlan(input: TurnPlanInput): TurnPlan {
+  // detectedFlags CHỈ làm cổng (contracts), không bao giờ vào argv.
   assertToolRestriction(TOOL_RESTRICTION, input.detectedFlags);
   const c = checkTurnInput(input);
   const bridge = mcpBridgeCommand(input);
-  const files: TurnPlanFile[] = [
+  const files: TurnPlanFile[] = [...apiKeySettingsFile(c.homeRel, input.authMethod === 'api_key')];
+  // Phiên đo 'overhead_bare' (CNS-178): không cấu hình MCP; giới hạn công cụ vẫn giữ (không tool nào được gọi).
+  if (input.measure !== 'overhead_bare') {
     // Cấu hình MCP trỏ gateway qua cầu stdio của ga-runner (không chứa vé). Vị trí + dạng: AGY-MCP-01 (chưa kiểm).
-    {
+    files.unshift({
       path: `${c.homeRel}/${CONFIG_DIR}/${MCP_CONFIG_FILE}`,
       content: JSON.stringify({
         [GATEWAY_MCP_SERVER]: { type: 'stdio', command: bridge.command, args: bridge.args, env: {} },
       }),
       mode: 0o400,
-    },
-    ...apiKeySettingsFile(c.homeRel, input.authMethod === 'api_key'),
-  ];
+    });
+  }
   // Khối hệ thống vào GEMINI.md trong cwd (= tmpfs của lượt, ga-runner đặt cwd) — §B.5; ≤ 24 KB (checkTurnInput chặn).
   if (c.systemPrompt !== null) files.push({ path: INSTRUCTION_FILE, content: c.systemPrompt, mode: 0o400 });
   // stream-json theo schema thống nhất với CLI giả (AGY-STREAM-01 = AG-STREAM-1, chưa kiểm); parser vẫn đọc dạng json.
@@ -375,8 +372,15 @@ export const antigravityAdapter: EngineAdapterExt = {
     selfUpdate: 'enabled',
     // Manifest ở Cloud Run; gói tải (url trong manifest, 2026-10-16) ở storage.googleapis.com.
     egressDomains: ['antigravity-cli-auto-updater-974169037036.us-central1.run.app', 'storage.googleapis.com'],
+    // Khoá nền tảng = tên manifest `manifests/<key>.json` (install.sh chính chủ, GET kiểm 2026-10-16).
+    platforms: [
+      { arch: 'x64', libc: 'glibc', key: 'linux_amd64' },
+      { arch: 'arm64', libc: 'glibc', key: 'linux_arm64' },
+      { arch: 'x64', libc: 'musl', key: 'linux_amd64_musl' },
+      { arch: 'arm64', libc: 'musl', key: 'linux_arm64_musl' },
+    ],
   },
-  install: INSTALL,
+  installSource: INSTALL_SOURCE,
   binaryPath: KIT.binaryPath,
   flagTable: FLAG_TABLE,
   envTable: ENV_TABLE,
@@ -393,8 +397,7 @@ export const antigravityAdapter: EngineAdapterExt = {
   capabilityScan,
   parseCapabilities: (outcomes) => parseCapabilitiesFor(outcomes, { authMode: 'unknown' }),
   parseCapabilitiesFor,
-  parseStreamLine: (line) => parseLineAll(line)[0] ?? null,
-  parseStreamLineAll: parseLineAll,
+  parseStreamLine: parseLineAll,
   createLineParser: createParser,
   classify: (exit, stdout, stderr) => classifyDetailed(exit, stdout, stderr).classification,
   classifyDetailed,

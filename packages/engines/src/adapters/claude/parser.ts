@@ -1,5 +1,5 @@
-import type { TokenUsage, TurnStreamEvent } from '@ga/contracts';
-import { count, type JsonObject, MAX_LINE_BYTES, obj, parseJsonObject, str } from '../../text.ts';
+import { QUOTA_WINDOWS, type QuotaWindow, type TokenUsage, type TurnStreamEvent } from '@ga/contracts';
+import { count, epochSecondsToDb, type JsonObject, MAX_LINE_BYTES, obj, parseJsonObject, str } from '../../text.ts';
 import type { TurnLineParser, TurnPhase } from '../../types.ts';
 
 // Parser stream-json của Claude Code (`-p --output-format stream-json --verbose --include-partial-messages`).
@@ -103,17 +103,27 @@ function resultEvents(line: JsonObject): TurnStreamEvent[] {
   return out;
 }
 
+/**
+ * `rate_limit_event` ⇒ sự kiện quota có cấu trúc (contracts QuotaSignal). ĐÃ THẤY (Spike 1b): {status:'allowed', resetsAt:<giây>,
+ * rateLimitType:'five_hour', unifiedWindows:{five_hour:{utilization:0.24, resetsAt}}}. 'allowed_warning' / 'rejected' và
+ * utilization là PHÂN SỐ 0..1: chưa kiểm (CC-Q02, M6). Loại cửa sổ lạ ⇒ 'other' (không bịa ánh xạ).
+ */
 function rateLimit(line: JsonObject): TurnStreamEvent[] {
   const info = obj(line.rate_limit_info);
-  if (info === null || info.status !== 'rejected') return [];
-  const resets = info.resetsAt;
-  return [
-    {
-      type: 'error',
-      code: 'rate_limit_rejected',
-      message: typeof resets === 'number' && Number.isFinite(resets) ? `resetsAt=${resets}` : '',
-    },
-  ];
+  if (info === null) return [];
+  const raw = str(info.status);
+  const status =
+    raw === 'allowed' ? 'allowed' : raw === 'allowed_warning' ? 'warning' : raw === 'rejected' ? 'rejected' : null;
+  if (status === null) return [];
+  const type = str(info.rateLimitType);
+  const window: QuotaWindow =
+    type !== null && type !== 'other' && (QUOTA_WINDOWS as readonly string[]).includes(type)
+      ? (type as QuotaWindow)
+      : 'other';
+  const windows = obj(info.unifiedWindows);
+  const u = type !== null && windows !== null ? obj(windows[type])?.utilization : undefined;
+  const utilizationPct = typeof u === 'number' && u >= 0 && u <= 1 ? Math.round(u * 10_000) / 100 : null;
+  return [{ type: 'quota', quota: { window, status, resetAt: epochSecondsToDb(info.resetsAt), utilizationPct } }];
 }
 
 function parse(raw: string, names: Map<string, string> | null): TurnStreamEvent[] | null {

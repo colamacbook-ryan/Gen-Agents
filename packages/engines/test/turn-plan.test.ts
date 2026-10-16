@@ -15,7 +15,6 @@ import {
   assertPlanEnv,
   assertSecretEnvValue,
   assertToolRestriction,
-  DEFAULT_TURN_TIMEOUT_MS,
   type EngineAdapterExt,
   type EnvSpec,
   EnvTableError,
@@ -84,7 +83,7 @@ for (const adapter of ADAPTERS) {
       expect(plan.argv[0]).toBe(adapter.binaryPath);
       expect(plan.argv[0]?.startsWith(`/opt/engines/${adapter.slug}/`)).toBe(true);
       expect(Object.hasOwn(plan.env, 'HOME')).toBe(false);
-      expect(plan.timeoutMs).toBe(DEFAULT_TURN_TIMEOUT_MS);
+      expect(plan.timeoutMs).toBe(600_000);
     });
 
     it('mọi argv (lượt, kiểm đăng nhập, quét, đăng nhập PTY) qua engineArgvViolations + engineEnvViolations của contracts', () => {
@@ -192,6 +191,8 @@ for (const adapter of ADAPTERS) {
     });
 
     it('model / effort hợp lệ vào argv đúng dạng cờ của adapter', () => {
+      // Hậu tố hẹp `[…]` ở cuối được nhận (MODEL_ID_RE của contracts, vd biến thể ngữ cảnh `…[1m]`).
+      expect(cli(adapter.turnPlan(turnInput({ model: 'mx-2.5[1m]' }))).argv.join(' ')).toContain('mx-2.5[1m]');
       const plan = cli(adapter.turnPlan(turnInput({ model: 'mx-2.5:beta/v1', effort: 'xhigh' })));
       if (c.adapter.valueForm === 'eq') {
         expect(plan.argv).toContain('--model=mx-2.5:beta/v1');
@@ -219,7 +220,12 @@ for (const adapter of ADAPTERS) {
         'mx\0',
         '=mx',
         'mx=1',
-        'mx[1m]',
+        'mx[1M]',
+        'mx[]',
+        'mx[123456789]',
+        'mx[1m]x',
+        'mx[1m][2m]',
+        '[1m]',
         '"mx"',
       ];
       for (const model of badModels) {
@@ -295,6 +301,35 @@ for (const adapter of ADAPTERS) {
       const plan = cli(adapter.turnPlan(turnInput({ authMethod: 'api_key' })));
       for (const p of c.adapter.apiKeyFiles) expect(plan.files.map((f) => f.path)).toContain(p);
       if (adapter.apiKeyEnvName !== null) expect(Object.hasOwn(plan.env, adapter.apiKeyEnvName)).toBe(false);
+    });
+
+    it('phiên đo overhead_bare (CNS-178): không cấu hình MCP / cầu gateway; cờ giới hạn công cụ vẫn giữ', () => {
+      const bare = cli(adapter.turnPlan(turnInput({ measure: 'overhead_bare' })));
+      const normal = cli(adapter.turnPlan(turnInput({ measure: 'prompt_worst' })));
+      expect(bare.files.find((f) => f.path === c.adapter.mcpConfigFile)).toBeUndefined();
+      expect(JSON.stringify(bare)).not.toContain('mcp-bridge');
+      expect(normal.files.find((f) => f.path === c.adapter.mcpConfigFile)).toBeDefined();
+      for (const want of c.adapter.toolRestriction.argvContains) expect(bare.argv, want).toContain(want);
+      expect(engineArgvViolations(bare.argv, adapter.slug, adapter.flagTable)).toEqual([]);
+    });
+
+    it('nội dung prompt KHÔNG BAO GIỜ vào cờ mang cấu hình hay tệp cấu hình (chỉ chỗ dành cho prompt)', () => {
+      const P = 'PROMPT-MARK-7f3a {"mcpServers":{}} --settings=x';
+      const S = 'SYSTEM-MARK-9b1c {"modelProvider":"x"}';
+      const plan = cli(adapter.turnPlan(turnInput({ prompt: P, systemPrompt: S })));
+      const promptAt = plan.argv.flatMap((a, i) => (a.includes('PROMPT-MARK-7f3a') ? [i] : []));
+      expect(promptAt).toEqual([plan.argv.length - 1]);
+      for (const [i, a] of plan.argv.entries()) {
+        if (!a.includes('SYSTEM-MARK-9b1c')) continue;
+        expect(c.adapter.systemPrompt.in, a.slice(0, 40)).toBe('argv');
+        if (c.adapter.systemPrompt.in === 'argv')
+          expect(a.startsWith(`${c.adapter.systemPrompt.flag}=`), String(i)).toBe(true);
+      }
+      for (const f of plan.files) {
+        if (f.path === (c.adapter.systemPrompt.in === 'file' ? c.adapter.systemPrompt.path : '')) continue;
+        expect(f.content, f.path).not.toContain('PROMPT-MARK-7f3a');
+        expect(f.content, f.path).not.toContain('SYSTEM-MARK-9b1c');
+      }
     });
 
     it('timeout tuỳ chỉnh được tôn trọng', () => {

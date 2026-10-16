@@ -18,10 +18,10 @@ describe('hiệu năng parser / phân loại / probe trên đầu vào lớn và
   for (const adapter of ADAPTERS) {
     it(`${adapter.slug}: dòng stream 1 MB hợp lệ, dòng > trần, dòng bệnh lý`, () => {
       const delta = JSON.stringify({ type: 'delta', text: 'a'.repeat(MB - 64) });
-      const ms1 = timed(() => adapter.parseStreamLineAll(delta));
-      const ms2 = timed(() => expect(adapter.parseStreamLineAll(`{"x":"${'a'.repeat(2 * MB)}"}`)).toEqual([]));
-      const ms3 = timed(() => adapter.parseStreamLineAll(`{${'"a":{'.repeat(50_000)}`));
-      const ms4 = timed(() => adapter.parseStreamLineAll('['.repeat(MB)));
+      const ms1 = timed(() => adapter.parseStreamLine(delta));
+      const ms2 = timed(() => expect(adapter.parseStreamLine(`{"x":"${'a'.repeat(2 * MB)}"}`)).toEqual([]));
+      const ms3 = timed(() => adapter.parseStreamLine(`{${'"a":{'.repeat(50_000)}`));
+      const ms4 = timed(() => adapter.parseStreamLine('['.repeat(MB)));
       for (const ms of [ms1, ms2, ms3, ms4]) expect(ms).toBeLessThan(1500);
     });
     it(`${adapter.slug}: classify với stdout 8 MB + stderr 2 MB (chỉ đọc phần đuôi có trần)`, () => {

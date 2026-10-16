@@ -2,6 +2,7 @@ import {
   CapabilityEntry,
   type EngineAdapter,
   InstallSpec,
+  installPlatformFor,
   LoginCheckResult,
   type ProbePlan,
   TurnClassification,
@@ -62,8 +63,11 @@ for (const adapter of ADAPTERS) {
       expect(spec.checksum.from).toBe('manifest');
       expect(spec.selfUpdate).toBe(c.adapter.selfUpdate);
       expect(spec.egressDomains).toContain(new URL(spec.origin).host);
-      const r = adapter.install;
-      const archs = new Set(r.platforms.filter((p) => p.libc === 'glibc').map((p) => p.arch));
+      const r = adapter.installSource;
+      const archs = new Set(spec.platforms.filter((p) => p.libc === 'glibc').map((p) => p.arch));
+      expect(installPlatformFor(spec, 'x64', 'glibc')).not.toBeNull();
+      expect(installPlatformFor(spec, 'arm64', 'glibc')).not.toBeNull();
+      expect(installPlatformFor(spec, 'riscv64', 'glibc')).toBeNull();
       expect([...archs].sort()).toEqual(['arm64', 'x64']);
       const urls =
         r.manifest.kind === 'per-platform'
@@ -91,10 +95,9 @@ for (const adapter of ADAPTERS) {
       for (const s of c.stream) {
         it(s.name, () => {
           const line = s.lineFile !== undefined ? fixture(slug, s.lineFile).trim() : (s.line ?? '');
-          const events = adapter.parseStreamLineAll(line);
+          const events = adapter.parseStreamLine(line);
           expect(events).toEqual(s.expected);
           for (const e of events) TurnStreamEvent.parse(e);
-          expect(adapter.parseStreamLine(line)).toEqual(s.expected[0] ?? null);
         });
       }
       for (const sc of c.statefulCases) {
@@ -135,8 +138,8 @@ for (const adapter of ADAPTERS) {
         const small = first?.type === 'delta' ? first.text : '';
         const big = (d?.line ?? '').replace(JSON.stringify(small).slice(1, -1), 'a'.repeat(1024 * 1024));
         expect(big.length).toBeGreaterThan(1024 * 1024);
-        expect(adapter.parseStreamLineAll(big)).toEqual([]);
-        expect(adapter.parseStreamLineAll(d?.line ?? '')).toEqual(d?.expected);
+        expect(adapter.parseStreamLine(big)).toEqual([]);
+        expect(adapter.parseStreamLine(d?.line ?? '')).toEqual(d?.expected);
       });
       it('dòng quá trần bị bỏ không parse, có đếm (không nuốt lỗi im lặng)', () => {
         const parser = adapter.createLineParser();

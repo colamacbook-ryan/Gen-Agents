@@ -30,7 +30,7 @@ function freshDirs(): { dir: string; home: string } {
 }
 
 function fakeBin(adapter: EngineAdapterExt): string {
-  return join(FAKES, 'bin', adapter.install.binaryName);
+  return join(FAKES, 'bin', adapter.installSource.binaryName);
 }
 
 /** Cờ mà CLI giả hiện có (đọc --help của chính nó — như probe thật, STD-10). */
@@ -170,7 +170,7 @@ async function startGateway(): Promise<{
 }
 
 function seed(adapter: EngineAdapterExt, home: string): void {
-  const r = spawnSync(process.execPath, [join(FAKES, 'seed-auth.ts'), adapter.install.binaryName], {
+  const r = spawnSync(process.execPath, [join(FAKES, 'seed-auth.ts'), adapter.installSource.binaryName], {
     env: { PATH: process.env.PATH ?? '', HOME: home },
     encoding: 'utf8',
   });
@@ -195,6 +195,9 @@ function turnIn(dir: string, home: string, over: Record<string, unknown> = {}) {
     homeDir: home,
     ticketFile: join(dir, 'ticket'),
     authDir: join(dir, 'auth'),
+    measure: null,
+    timeoutMs: 600_000,
+    authMethod: 'subscription' as const,
     detectedFlags: ALL_DECLARED_FLAGS,
     ...over,
   };
