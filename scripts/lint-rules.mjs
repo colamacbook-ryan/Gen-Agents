@@ -215,7 +215,8 @@ const BOUNDARIES = {
   'apps/supervisor': ['packages/contracts', 'packages/security'],
   'apps/updater': ['packages/contracts', 'packages/security'],
   'apps/egress': ['packages/contracts', 'packages/security'], // [ĐỀ XUẤT — L0]
-  'apps/runner': ['packages/contracts', 'packages/security'], // [ĐỀ XUẤT — L0]
+  // Gen quyết 2026-10-16 (HIGH allowlist-semantic-escape): runner dựng argv từ adapter @ga/engines đóng sẵn trong image
+  'apps/runner': ['packages/contracts', 'packages/security', 'packages/engines'],
   'apps/web': ['packages/contracts', 'packages/ui', 'packages/chibi', 'packages/i18n'],
 };
 /** Chỉ import KIỂU (import type) — web lấy AppType của control-plane cho client `hc`. */
@@ -383,8 +384,10 @@ export const RULES = [
     check(rel, text) {
       const code = codeOf(rel, text);
       const out = [];
-      for (const m of findAll(code, /(?:\.transaction|\bwithMaintenance)\s*\(/)) {
+      for (const m of findAll(code, /\.(transaction|write|bootstrap|maintenance)\s*\(/)) {
         const body = balancedParen(code, m.index + m[0].length - 1);
+        // write / bootstrap / maintenance của AppConnection nhận callback; `.write(` không callback (stream…) thì bỏ qua
+        if (m[1] !== 'transaction' && !/=>|\bfunction\b/.test(body)) continue;
         const bad =
           /\bfetch\s*\(|child_process|\bspawn(?:Sync)?\s*\(|\bexecFile(?:Sync)?\s*\(|\bexecSync\s*\(|\bhttps?\.request\s*\(|\bawait\s/.exec(
             body,
@@ -396,7 +399,7 @@ export const RULES = [
   },
   {
     id: 'db-write-only-via-write',
-    why: 'mọi ghi DB của app đi qua conn.write(actorId, fn) — app_actor() gắn actor cho từng giao dịch (hợp đồng ⑥-05, DB v2.3.3)',
+    why: 'mọi ghi DB của app đi qua conn.write(actorId, fn) (khởi tạo: conn.bootstrap, bảo trì: conn.maintenance) — app_actor() gắn actor cho từng giao dịch (hợp đồng ⑥-05, DB v2.3.3, CNS-170)',
     applies: (rel) =>
       CODE_EXT.test(rel) &&
       /^(apps|packages)\//.test(rel) &&
@@ -406,7 +409,7 @@ export const RULES = [
       rel !== 'packages/db/src/connection.ts',
     check(rel, text) {
       const code = codeOf(rel, text);
-      const spans = findAll(code, /\.write\s*\(/).map((m) => {
+      const spans = findAll(code, /\.(?:write|bootstrap|maintenance)\s*\(/).map((m) => {
         const open = m.index + m[0].length - 1;
         return [open, open + balancedParen(code, open).length];
       });
@@ -420,8 +423,83 @@ export const RULES = [
       return pats.flatMap((re) =>
         findAll(code, re)
           .filter((m) => !inWrite(m.index))
-          .map((m) => ({ line: lineOf(code, m.index), msg: `ghi DB ngoài conn.write(): "${m[0]}"` })),
+          .map((m) => ({
+            line: lineOf(code, m.index),
+            msg: `ghi DB ngoài conn.write() / bootstrap() / maintenance(): "${m[0]}"`,
+          })),
       );
+    },
+  },
+  {
+    id: 'db-actor-columns-from-context',
+    why: 'created_by / updated_by / deleted_by lấy từ actor của giao dịch qua stampInsert / stampUpdate / stampSoftDelete của @ga/db, không viết tay / nhận từ tham số (CNS-176, STD-11 1.13)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      /^(apps|packages)\//.test(rel) &&
+      !isTest(rel) &&
+      !/^(apps\/web|packages\/ui|packages\/chibi|packages\/contracts)\//.test(rel) &&
+      !/^packages\/db\/(src\/(generated|runner|seed)\/|scripts\/)/.test(rel) &&
+      rel !== 'packages/db/src/stamp.ts' &&
+      rel !== 'packages/db/src/connection.ts',
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      const out = [];
+      const hit = (index, what) =>
+        out.push({ line: lineOf(code, index), msg: `${what} — dùng stampInsert / stampUpdate / stampSoftDelete` });
+      // khoá object (giá trị cho Kysely .values / .set, tham số repo, kiểu dòng viết tay)
+      for (const m of findAll(code, /(?:^|[{,(\s])['"]?((?:created|updated|deleted)_by)['"]?\s*\??:/m)) {
+        hit(m.index, `khoá ${m[1]}`);
+      }
+      // SQL: cột *_by trong danh sách cột INSERT
+      for (const m of findAll(code, /\bINSERT\s+INTO\s+["`\w.]+\s*\(([^)]{0,2000})\)/i)) {
+        const c = /\b(?:created|updated|deleted)_by\b/.exec(m[1]);
+        if (c) hit(m.index, `INSERT ghi ${c[0]}`);
+      }
+      // SQL: gán *_by trong mệnh đề SET (đến WHERE / hết chuỗi)
+      for (const m of findAll(code, /\bSET\s/gi)) {
+        const tail = code.slice(m.index, m.index + 2000);
+        const end = tail.search(/\bWHERE\b|['"`;]/i);
+        const clause = end === -1 ? tail : tail.slice(0, end);
+        const c = /\b(?:created|updated|deleted)_by\s*=/.exec(clause);
+        if (c) hit(m.index, `SET ${c[0]}`);
+      }
+      return out;
+    },
+  },
+  {
+    id: 'db-privileged-api-paths',
+    why: 'conn.bootstrap() / conn.maintenance() (actor system, app_maint()=1) chỉ gọi trong packages/db — nơi khác gọi hàm đã xuất của @ga/db (CNS-170)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      /^(apps|packages)\//.test(rel) &&
+      !isTest(rel) &&
+      !rel.startsWith('packages/db/') &&
+      !/^(apps\/web|packages\/ui|packages\/chibi)\//.test(rel),
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      return findAll(code, /\.(?:bootstrap|maintenance)\s*\(/).map((m) => ({
+        line: lineOf(code, m.index),
+        msg: `API đặc quyền của kết nối DB ngoài packages/db: "${m[0]}"`,
+      }));
+    },
+  },
+  {
+    id: 'engine-plans-only-in-runner',
+    why: 'turnPlan / loginCheck / capabilityScan / loginArgv chỉ được gọi trong apps/runner (và packages/engines, testkit): control plane gửi ý định, không dựng argv (HIGH allowlist-semantic-escape, Gen quyết 2026-10-16)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      /^(apps|packages)\//.test(rel) &&
+      !isTest(rel) &&
+      !rel.startsWith('apps/runner/') &&
+      !rel.startsWith('packages/engines/') &&
+      !rel.startsWith('packages/testkit/') &&
+      !rel.startsWith('packages/contracts/'),
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      return findAll(code, /\.(?:turnPlan|loginCheck|capabilityScan|loginArgv)\s*\(/).map((m) => ({
+        line: lineOf(code, m.index),
+        msg: `dựng plan / argv engine ngoài ga-runner: "${m[0]}"`,
+      }));
     },
   },
   {

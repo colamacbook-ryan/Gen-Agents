@@ -1,5 +1,15 @@
 import { z } from 'zod';
-import { EngineInstallStatus, EnvMap } from './engine.ts';
+import { AUTH_METHODS, ENGINES_ROOT, EngineInstallStatus } from './engine.ts';
+import { ULID_RE } from './ids.ts';
+import {
+  AuthGcResult,
+  CapabilityScanBundle,
+  EngineSlugFormat,
+  LOGIN_EXEC,
+  LoginCheckBundle,
+  PROBE_EXEC,
+  type RunnerCommand,
+} from './runner.ts';
 
 // Hợp đồng ga-app ↔ ga-supervisor và trình duyệt ↔ relay PTY (BUILD-PLAN §B.2, §B.3, §B.6, §D.3).
 // Supervisor là nơi DUY NHẤT cầm Docker API (qua socket-proxy) và là TCB: chỉ thao tác container có nhãn genagents.kind=role|sys,
@@ -27,8 +37,31 @@ export const CONTAINER_TEMPLATES = ['role.v1', 'sys.v1'] as const;
 export const ContainerTemplate = z.enum(CONTAINER_TEMPLATES);
 export type ContainerTemplate = z.infer<typeof ContainerTemplate>;
 
-/** Chương trình exec được phép ngoài argv đăng nhập lấy từ vé đã ký (§B.3). */
+/**
+ * Chương trình exec được phép (§B.3): CHỈ `ga-runner <lệnh>` và `ga-engine-install <lệnh>`, ĐÚNG HAI phần tử — kể cả PTY
+ * đăng nhập (`ga-runner login`). Không bao giờ exec CLI của hãng trực tiếp; không đối số thêm (CNS-168; HIGH
+ * allowlist-semantic-escape, Gen quyết 2026-10-16). Dữ liệu cho runner đi bằng bundle có schema đóng qua stdin / env cố định.
+ */
 export const EXEC_ALLOWLIST = ['ga-runner', 'ga-engine-install'] as const;
+
+/** Bảng argv cố định theo lệnh — supervisor tra bảng này, KHÔNG nhận argv từ ga-app. */
+export const EXEC_ARGV = {
+  turn: ['ga-runner', 'turn'],
+  'login-check': ['ga-runner', 'login-check'],
+  probe: ['ga-runner', 'probe'],
+  'auth-gc': ['ga-runner', 'auth-gc'],
+  login: ['ga-runner', 'login'],
+  'engine-install': ['ga-engine-install', 'install'],
+  'engine-status': ['ga-engine-install', 'status'],
+} as const satisfies Record<RunnerCommand | 'engine-install' | 'engine-status', readonly [string, string]>;
+
+/** Cổng cuối của supervisor trước `docker exec`: argv phải TRÙNG KHÍT một dòng của EXEC_ARGV. */
+export function isAllowedExecArgv(argv: readonly string[]): boolean {
+  return (
+    argv.length === 2 &&
+    Object.values(EXEC_ARGV).some(([program, command]) => argv[0] === program && argv[1] === command)
+  );
+}
 
 export const Consumer = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('role'), roleId: z.string().length(26), roleDisplayId: z.string() }),
@@ -64,28 +97,47 @@ export const EnsureContainerResponse = z.strictObject({
   rolesNetworkIp: z.string().nullable(),
 });
 
-// ---------------------------------------------------------------- exec (lượt headless, cài CLI, auth-gc)
+// ---------------------------------------------------------------- exec headless (lượt, kiểm đăng nhập, quét khả năng)
+/** Vé lượt 256-bit dạng base64url (mcp.ts TURN_TICKET). */
+const TurnTicket = z.string().regex(/^[A-Za-z0-9_-]{43,256}$/);
+
 /**
- * stdin của exec: vé lượt đi qua STDIN rồi ga-runner ghi vào /run/ga/<lượt>/ticket (0400) — không qua env vì env của exec
- * đọc được qua Docker API (CNS-142). `none` = stdin đóng ngay.
+ * Việc cần chạy — ga-app chỉ chọn LỆNH trong enum + dữ liệu có schema đóng; không có argv, không có env tự do.
+ * Vé lượt đi qua STDIN rồi ga-runner ghi vào /run/ga/<lượt>/ticket (0400) — không qua env vì env của exec đọc được qua
+ * Docker API (CNS-142). Bundle kiểm đăng nhập / quét khả năng đi qua STDIN dạng JSON.
  */
-export const ExecStdin = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('none') }),
-  z.strictObject({ kind: z.literal('turn-ticket'), ticket: z.string().min(43) }),
+export const ExecRun = z.discriminatedUnion('command', [
+  z.strictObject({ command: z.literal('turn'), turnId: z.string().regex(ULID_RE), ticket: TurnTicket }),
+  z.strictObject({ command: z.literal('login-check'), bundle: LoginCheckBundle }),
+  z.strictObject({ command: z.literal('probe'), bundle: CapabilityScanBundle }),
 ]);
+export type ExecRun = z.infer<typeof ExecRun>;
 
 export const ExecRequest = z.strictObject({
   container: ContainerRef,
-  /** argv[0] phải thuộc EXEC_ALLOWLIST (supervisor ép). */
-  argv: z
-    .array(z.string().min(1))
-    .min(1)
-    .refine((a) => (EXEC_ALLOWLIST as readonly string[]).includes(a[0] ?? ''), 'argv[0] ngoài allowlist exec'),
-  env: EnvMap,
-  stdin: ExecStdin,
+  run: ExecRun,
   timeoutMs: z.number().int().positive().max(3_600_000),
 });
 export type ExecRequest = z.infer<typeof ExecRequest>;
+
+/**
+ * Env supervisor đặt cho exec — ĐÚNG các biến này, giá trị lấy từ id đã kiểm schema và cấu hình của chính supervisor
+ * (`gatewayUrl`), không bao giờ từ ga-app (chặn LD_PRELOAD / NODE_OPTIONS / PATH… do ga-app bị chiếm tiêm vào).
+ */
+export function execEnv(run: ExecRun, gatewayUrl: string): Record<string, string> {
+  switch (run.command) {
+    case 'turn':
+      return { [TURN_EXEC.envTurnId]: run.turnId, [TURN_EXEC.envGatewayUrl]: gatewayUrl };
+    case 'login-check':
+    case 'probe':
+      return { [PROBE_EXEC.envProbeId]: run.bundle.probeId };
+  }
+}
+
+/** Nội dung stdin của exec: vé (lượt) hoặc JSON của bundle (kiểm đăng nhập / quét khả năng). */
+export function execStdinPayload(run: ExecRun): string {
+  return run.command === 'turn' ? run.ticket : JSON.stringify(run.bundle);
+}
 
 /** Khung NDJSON trả về từ POST /rpc/v1/exec (luồng). stdout đã đi qua bộ lọc che bí mật ở ga-runner. */
 export const ExecFrame = z.discriminatedUnion('type', [
@@ -104,7 +156,7 @@ export type ExecFrame = z.infer<typeof ExecFrame>;
 
 /** Lượt headless: argv cố định, env chỉ có hai biến này (không vé, không token). */
 export const TURN_EXEC = {
-  argv: ['ga-runner', 'turn'] as const,
+  argv: EXEC_ARGV.turn,
   envTurnId: 'GA_TURN_ID',
   envGatewayUrl: 'GA_GATEWAY_URL',
   /** Thư mục tmpfs của lượt + tệp vé + HOME native (xoá khi lượt xong). */
@@ -113,32 +165,36 @@ export const TURN_EXEC = {
   homeDir: (turnId: string) => `/run/ga/${turnId}/home`,
   ticketFileMode: 0o400,
   authRoot: '/auth',
-  enginesRoot: '/opt/engines',
+  enginesRoot: ENGINES_ROOT,
 } as const;
 
 // ---------------------------------------------------------------- cài CLI (CNS-137)
+// Supervisor exec EXEC_ARGV['engine-install' | 'engine-status'], stdin = EngineInstallBundle (JSON); ga-engine-install kiểm
+// slug bằng enum registry của nó (runnerBundleSchemas) rồi mới dựng đường /opt/engines/<slug>/.
 export const InstallEngineRequest = z.strictObject({
   container: ContainerRef,
-  engineSlug: z.string().min(1),
+  engineSlug: EngineSlugFormat,
   /** `fake` chỉ có ở image test (testkit) — image phát hành từ chối. */
   source: z.enum(['official', 'fake']),
 });
-export const EngineInstallStatusRequest = z.strictObject({ container: ContainerRef, engineSlug: z.string().min(1) });
-export const EngineInstallStatusResponse = z.strictObject({ engineSlug: z.string(), status: EngineInstallStatus });
+export const EngineInstallStatusRequest = z.strictObject({ container: ContainerRef, engineSlug: EngineSlugFormat });
+export const EngineInstallStatusResponse = z.strictObject({
+  engineSlug: EngineSlugFormat,
+  status: EngineInstallStatus,
+});
 
 // ---------------------------------------------------------------- auth-gc (§B.5 bước 8)
+/**
+ * Supervisor exec EXEC_ARGV['auth-gc'], stdin = AuthGcBundle. KHÔNG có danh sách tệp: runner dùng authAllowlist của adapter
+ * (`'unknown'` ⇒ không xoá gì, native_memory = 'unknown', báo owner).
+ */
 export const AuthGcRequest = z.strictObject({
   container: ContainerRef,
+  engineSlug: EngineSlugFormat,
   /** Mã tài khoản EN- (thư mục /auth/<en>). */
-  engineAccount: z.string().regex(/^EN-\d{4,}$/),
-  /** 'unknown' ⇒ không xoá gì, native_memory = 'unknown', báo owner. */
-  allowlist: z.union([z.array(z.string().min(1)), z.literal('unknown')]),
+  engineAccount: z.string().regex(/^EN-\d{4,12}$/),
 });
-export const AuthGcResponse = z.strictObject({
-  /** Số mục đã xoá (chỉ đếm, không trả tên tệp / nội dung). */
-  removed: z.number().int().nonnegative(),
-  nativeMemory: z.enum(['off', 'unknown']),
-});
+export const AuthGcResponse = AuthGcResult;
 
 // ---------------------------------------------------------------- reconcile / status
 export const DesiredContainer = z.strictObject({
@@ -186,7 +242,9 @@ export type SupervisorMethod = (typeof SUPERVISOR_METHODS)[number];
  * Vòng đời PTY đăng nhập:
  * 1. ga-app ký vé (khoá GA_TERM_TICKET_KEY, TTL 60 s, nonce dùng một lần), vé không lưu ở đâu.
  * 2. Trình duyệt mở WebSocket tới /term với vé trong `Sec-WebSocket-Protocol` — KHÔNG trong URL / path / query.
- * 3. Supervisor kiểm vé, `docker exec` Tty:true đúng argv đăng nhập (không shell), chỉ chuyển byte, không log payload.
+ * 3. Supervisor kiểm vé, `docker exec` Tty:true đúng `ga-runner login` (EXEC_ARGV.login) với env loginExecEnv(claims);
+ *    ga-runner kiểm bundle bằng enum registry, dựng loginArgv từ adapter đóng sẵn, kiểm engineArgvViolations rồi exec
+ *    (không shell). Supervisor chỉ chuyển byte, không log payload.
  * 4. Supervisor ĐÓNG exec khi: kiểm đăng nhập đạt · owner bấm "Tôi đã xong" · WebSocket đóng · hết trần thời gian.
  */
 export const PTY = {
@@ -206,13 +264,17 @@ export const PTY_CLOSE_REASONS = ['login_ok', 'owner_done', 'ws_closed', 'max_du
 export const PtyCloseReason = z.enum(PTY_CLOSE_REASONS);
 export type PtyCloseReason = z.infer<typeof PtyCloseReason>;
 
-/** Nội dung vé (đã ký). argv đăng nhập do adapter dựng và nằm TRONG vé — supervisor không nhận argv từ trình duyệt. */
+/**
+ * Nội dung vé (đã ký). Vé mang Ý ĐỊNH đăng nhập (slug + cách đăng nhập), KHÔNG mang argv: ga-app bị chiếm ký được vé nhưng
+ * không chọn được chương trình / cờ (HIGH allowlist-semantic-escape, Gen quyết 2026-10-16).
+ */
 export const TermTicketClaims = z.strictObject({
-  v: z.literal(1),
+  v: z.literal(2),
   /** Mã tài khoản EN- */
-  acc: z.string().regex(/^EN-\d{4,}$/),
+  acc: z.string().regex(/^EN-\d{4,12}$/),
   container: ContainerRef.shape.name,
-  argvLogin: z.array(z.string().min(1)).min(1),
+  engineSlug: EngineSlugFormat,
+  authMethod: z.enum(AUTH_METHODS),
   /** Băm phiên GUI của owner (không phải token phiên). */
   guiSessionHash: z.string().regex(/^[0-9a-f]{64}$/),
   /** epoch giây */
@@ -220,6 +282,15 @@ export const TermTicketClaims = z.strictObject({
   nonce: z.string().min(16),
 });
 export type TermTicketClaims = z.infer<typeof TermTicketClaims>;
+
+/** Env của exec PTY `ga-runner login` — chỉ ba biến LOGIN_EXEC.env, giá trị từ claims đã kiểm (enum / pattern). */
+export function loginExecEnv(claims: TermTicketClaims): Record<string, string> {
+  return {
+    [LOGIN_EXEC.env.engineSlug]: claims.engineSlug,
+    [LOGIN_EXEC.env.engineAccount]: claims.acc,
+    [LOGIN_EXEC.env.authMethod]: claims.authMethod,
+  };
+}
 
 /** Khung điều khiển dạng text JSON trên WS (byte PTY đi bằng khung binary). */
 export const PtyClientMessage = z.discriminatedUnion('type', [

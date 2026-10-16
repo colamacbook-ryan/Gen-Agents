@@ -28,7 +28,7 @@ export function tempDir(prefix: string): { dir: string; cleanup: () => void } {
 
 export const SYS_WS = '00000000000000000000000000';
 export const SYS_ACTOR = '0000000000000000000000SYS1';
-export const TENANT_WS = '01JWS00000000000000000AFI0';
+export const TENANT_WS = '01JWS00000000000000000AFQ0';
 export const TENANT_ACTOR = '01JWS00000000000000000ACT0';
 
 /** Workspace hệ thống + một tenant + actor hệ thống mỗi bên (tối thiểu để ghi các bảng có created_by). */

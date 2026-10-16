@@ -6,14 +6,15 @@
 //     thiếu cài đặt cho một hàm trong danh sách ⇒ throw. Kết nối không đăng ký (sqlite3 CLI…) gọi tới trigger sẽ lỗi
 //     `no such function: app_maint` ⇒ không sửa/xoá được bảng được bảo vệ (fail-closed);
 //   - kết nối đọc mở `readonly` + `query_only` — không ghi được, và KHÔNG có app_actor();
-//   - MỌI ghi DB của app đi qua `conn.write(actorId, fn)`: transaction IMMEDIATE + gắn actor vào ngữ cảnh kết nối
+//   - MỌI ghi DB của app đi qua `conn.write(actorId, fn)` (khởi tạo workspace: `conn.bootstrap`, bảo trì: `conn.maintenance`
+//     — CNS-170): transaction IMMEDIATE + gắn actor vào ngữ cảnh kết nối
 //     (app_actor() = actorId) suốt transaction, xoá ở finally kể cả khi lỗi. DB v2.3.3 (báo trước): guard chung buộc
 //     created_by / updated_by / deleted_by = app_actor(); app_actor() NULL ⇒ ghi bị từ chối (trừ bảo trì). Lint
 //     `db-write-only-via-write` chặn câu lệnh ghi ngoài write(). Job hệ thống dùng actor system (systemActorId).
 // Code app CẤM `INSERT OR REPLACE` / `REPLACE INTO` / `UPDATE OR REPLACE` / Kysely `.orReplace()` (lint `no-or-replace`).
 // Cấm gọi mạng / LLM bên trong transaction (transaction của better-sqlite3 là đồng bộ; lint heuristic `no-io-in-transaction`).
 
-import { type ActorSystemKey, type Clock, toDbTimestamp, ULID_RE } from '@ga/contracts';
+import { type ActorSystemKey, type Clock, SYSTEM_WORKSPACE_ID, toDbTimestamp, ULID_RE } from '@ga/contracts';
 import Database from 'better-sqlite3';
 import { SYNC } from './generated/sync.ts';
 
@@ -52,12 +53,21 @@ export interface CompiledLike {
 }
 export type Statementish = string | CompiledLike | { compile(): CompiledLike };
 
-/** Ngữ cảnh của một giao dịch ghi: chạy câu lệnh đồng bộ trên chính transaction đang mở. */
-export interface WriteContext {
-  readonly actorId: string;
+/** Chạy câu lệnh đồng bộ trên chính transaction đang mở. */
+export interface StatementRunner {
   run(q: Statementish, params?: readonly unknown[]): Database.RunResult;
   get<R = unknown>(q: Statementish, params?: readonly unknown[]): R | undefined;
   all<R = unknown>(q: Statementish, params?: readonly unknown[]): R[];
+}
+
+/** Ngữ cảnh của một giao dịch ghi (write / bootstrap): actor luôn có. */
+export interface WriteContext extends StatementRunner {
+  readonly actorId: string;
+}
+
+/** Ngữ cảnh bảo trì: actor system, hoặc null khi DB chưa có actor nào (migrate DB rỗng). */
+export interface MaintenanceContext extends StatementRunner {
+  readonly actorId: string | null;
 }
 
 export interface AppConnection {
@@ -75,11 +85,23 @@ export interface AppConnection {
    */
   write<T>(actorId: string, fn: (w: WriteContext) => T): T;
   /**
-   * Bật ngữ cảnh bảo trì (app_maint() = 1) cho đúng một hàm đồng bộ, tắt ở finally (DATABASE §9.3).
-   * Mặc định tự mở transaction; `{ transaction: 'caller' }` khi người gọi đã BEGIN (runner rebuild).
-   * Mỗi lần dùng gọi `onMaintenance` (lane audit ghi lý do + số dòng — M1).
+   * Ghi KHỞI TẠO một workspace (seed tham chiếu, dựng workspace hệ thống / tenant) — CNS-170. app_actor() = actor system
+   * của CHÍNH workspace đó, id cấp trước (ULID); hàng `actors` của nó tạo TRONG giao dịch trước mọi hàng có *_by.
+   * Kiểm trước: workspace đã có actor system thì phải đúng id này. Kiểm sau (trước COMMIT): actor system đó phải tồn tại.
+   * Chỉ dùng trong packages/db (lint `db-privileged-api-paths`).
    */
-  withMaintenance<T>(reason: string, fn: () => T, opts?: { transaction: 'own' | 'caller' }): T;
+  bootstrap<T>(target: { workspaceId: string; systemActorId: string }, fn: (w: WriteContext) => T): T;
+  /**
+   * Bảo trì (DATABASE §9.3, §10.4, §10.9): app_maint() = 1 + actor system — migrate, purge, xoay KEK. Actor =
+   * `opts.actorId` (phải là actor kind 'system') hoặc mặc định actor system của workspace hệ thống; DB chưa có actor
+   * (migrate DB rỗng) ⇒ app_actor() NULL — hợp lệ vì bảo trì được miễn. Mặc định tự mở transaction IMMEDIATE;
+   * `transaction: 'caller'` khi người gọi đã BEGIN (runner rebuild). Gọi onMaintenance (lane audit ghi lý do + số dòng).
+   */
+  maintenance<T>(
+    reason: string,
+    fn: (w: MaintenanceContext) => T,
+    opts?: { actorId?: string; transaction?: 'own' | 'caller' },
+  ): T;
   close(): void;
 }
 
@@ -231,52 +253,128 @@ function wrap(db: SqliteDatabase, role: AppConnection['role'], opts: OpenOptions
     inMaintenance: () => state.maint,
     currentActor: () => state.actor,
     write<T>(actorId: string, fn: (w: WriteContext) => T): T {
-      if (role === 'reader') throw new ConnectionContractError('Kết nối đọc không ghi được');
-      if (typeof actorId !== 'string' || !ULID_RE.test(actorId)) {
-        throw new ConnectionContractError('write() cần actorId là ULID của một hàng actors');
-      }
-      if (state.actor !== null) throw new ConnectionContractError('write() không được lồng nhau');
-      const ctx = writeContext(db, actorId);
-      state.actor = actorId;
-      try {
-        return db
-          .transaction(() => {
-            const out = fn(ctx);
-            if (out instanceof Promise)
-              throw new ConnectionContractError(
-                'write() chỉ nhận hàm đồng bộ (transaction của better-sqlite3 là đồng bộ)',
-              );
-            return out;
-          })
-          .immediate();
-      } finally {
-        state.actor = null;
-      }
+      assertWritable(role, state);
+      assertActorId(actorId, 'write()');
+      return withActor(db, state, actorId, () => fn(statementContext(db, actorId)), 'write()');
     },
-    withMaintenance<T>(reason: string, fn: () => T, o: { transaction: 'own' | 'caller' } = { transaction: 'own' }): T {
-      if (role === 'reader') throw new ConnectionContractError('Kết nối đọc không có ngữ cảnh bảo trì');
-      if (reason.trim().length === 0) throw new ConnectionContractError('withMaintenance cần lý do (ghi audit)');
-      if (state.maint) throw new ConnectionContractError('withMaintenance không được lồng nhau');
+    bootstrap<T>(target: { workspaceId: string; systemActorId: string }, fn: (w: WriteContext) => T): T {
+      assertWritable(role, state);
+      assertActorId(target.systemActorId, 'bootstrap()');
+      if (typeof target.workspaceId !== 'string' || !ULID_RE.test(target.workspaceId)) {
+        throw new ConnectionContractError('bootstrap() cần workspaceId là ULID');
+      }
+      const existing = workspaceSystemActor(db, target.workspaceId);
+      if (existing !== null && existing !== target.systemActorId) {
+        throw new ConnectionContractError(
+          `workspace ${target.workspaceId} đã có actor system ${existing} — bootstrap phải dùng đúng id đó`,
+        );
+      }
+      return withActor(
+        db,
+        state,
+        target.systemActorId,
+        () => {
+          const out = fn(statementContext(db, target.systemActorId));
+          if (workspaceSystemActor(db, target.workspaceId) !== target.systemActorId) {
+            throw new ConnectionContractError(
+              'bootstrap() phải tạo / giữ hàng actors (kind system, system_key system) của workspace với đúng systemActorId',
+            );
+          }
+          return out;
+        },
+        'bootstrap()',
+      );
+    },
+    maintenance<T>(
+      reason: string,
+      fn: (w: MaintenanceContext) => T,
+      o: { actorId?: string; transaction?: 'own' | 'caller' } = {},
+    ): T {
+      assertWritable(role, state);
+      if (reason.trim().length === 0) throw new ConnectionContractError('maintenance cần lý do (ghi audit)');
+      let actor: string | null;
+      if (o.actorId !== undefined) {
+        assertActorId(o.actorId, 'maintenance()');
+        if (!isSystemActor(db, o.actorId))
+          throw new ConnectionContractError('maintenance() chỉ chạy bằng actor kind system');
+        actor = o.actorId;
+      } else {
+        actor = workspaceSystemActor(db, SYSTEM_WORKSPACE_ID);
+      }
       const run = (): T => {
         state.maint = true;
+        state.actor = actor;
         try {
           opts.onMaintenance?.({ reason });
-          const out = fn();
-          if (out instanceof Promise) throw new ConnectionContractError('withMaintenance chỉ nhận hàm đồng bộ');
+          const out = fn({ ...statementContext(db, actor ?? ''), actorId: actor });
+          if (out instanceof Promise) throw new ConnectionContractError('maintenance() chỉ nhận hàm đồng bộ');
           return out;
         } finally {
           state.maint = false;
+          state.actor = null;
         }
       };
       if (o.transaction === 'caller') {
         if (!db.inTransaction)
-          throw new ConnectionContractError("withMaintenance({transaction:'caller'}) cần transaction đang mở");
+          throw new ConnectionContractError("maintenance({transaction:'caller'}) cần transaction đang mở");
         return run();
       }
-      return db.transaction(run)();
+      return db.transaction(run).immediate();
     },
     close: () => db.close(),
   };
+}
+
+function assertWritable(role: AppConnection['role'], state: FnState): void {
+  if (role === 'reader') throw new ConnectionContractError('Kết nối đọc không ghi được');
+  if (state.actor !== null || state.maint) {
+    throw new ConnectionContractError('write / bootstrap / maintenance không được lồng nhau');
+  }
+}
+
+function assertActorId(actorId: string, api: string): void {
+  if (typeof actorId !== 'string' || !ULID_RE.test(actorId)) {
+    throw new ConnectionContractError(`${api} cần actorId là ULID của một hàng actors`);
+  }
+}
+
+/** Gắn actor cho đúng một transaction IMMEDIATE, xoá ở finally kể cả khi lỗi. */
+function withActor<T>(db: SqliteDatabase, state: FnState, actorId: string, body: () => T, api: string): T {
+  state.actor = actorId;
+  try {
+    return db
+      .transaction(() => {
+        const out = body();
+        if (out instanceof Promise) {
+          throw new ConnectionContractError(`${api} chỉ nhận hàm đồng bộ (transaction của better-sqlite3 là đồng bộ)`);
+        }
+        return out;
+      })
+      .immediate();
+  } finally {
+    state.actor = null;
+  }
+}
+
+function actorsTableExists(db: SqliteDatabase): boolean {
+  return db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'actors'").get() !== undefined;
+}
+
+function workspaceSystemActor(db: SqliteDatabase, workspaceId: string): string | null {
+  if (!actorsTableExists(db)) return null;
+  const row = db
+    .prepare(
+      "SELECT id FROM actors WHERE workspace_id = ? AND kind = 'system' AND system_key = 'system' AND purged_at IS NULL",
+    )
+    .get(workspaceId) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+function isSystemActor(db: SqliteDatabase, actorId: string): boolean {
+  if (!actorsTableExists(db)) return false;
+  return (
+    db.prepare("SELECT 1 FROM actors WHERE id = ? AND kind = 'system' AND purged_at IS NULL").get(actorId) !== undefined
+  );
 }
 
 function resolveStatement(q: Statementish, params: readonly unknown[] | undefined): CompiledLike {
@@ -286,7 +384,7 @@ function resolveStatement(q: Statementish, params: readonly unknown[] | undefine
   return { sql: c.sql, parameters: c.parameters };
 }
 
-function writeContext(db: SqliteDatabase, actorId: string): WriteContext {
+function statementContext(db: SqliteDatabase, actorId: string): WriteContext {
   return {
     actorId,
     run: (q, params) => {

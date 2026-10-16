@@ -226,7 +226,7 @@ function applyRebuild(conn: AppConnection, m: VersionedMigration, set: Migration
     // 3. BEGIN IMMEDIATE + app_maint() = 1
     db.exec('BEGIN IMMEDIATE');
     try {
-      conn.withMaintenance(
+      conn.maintenance(
         `migration ${m.file}: rebuild ${table}`,
         () => {
           // 4. bỏ mọi view + trigger (R__* dựng lại đủ ở bước 7; index của bảng đích đi theo DROP TABLE)
@@ -343,7 +343,7 @@ export function migrate(
     const t0 = performance.now();
     // migration = thao tác bảo trì của hệ thống (DATABASE §10.4 bước 2): app_maint() = 1, không có actor người dùng
     inTxn(conn, () =>
-      conn.withMaintenance(
+      conn.maintenance(
         `migration ${m.file}`,
         () => {
           dropAll(conn, 'view'); // view có thể làm ALTER … RENAME lỗi (DATABASE §10.1); dựng lại ngay sau tệp
