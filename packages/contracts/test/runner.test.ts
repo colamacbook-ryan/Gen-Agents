@@ -62,6 +62,7 @@ const turn = (over: Record<string, unknown> = {}) => ({
   params: { model: 'vendor-model-4.5', effort: 'high' },
   prompt: { user: { path: 'user.md', content: 'xin chào' }, system: { path: 'system.md', content: 'quy tắc' } },
   timeoutMs: 600_000,
+  measure: null,
   nativeMemoryPolicy: 'tmpfs-per-turn',
   expiresAt: TS,
   ...over,
@@ -182,6 +183,11 @@ describe('bundle = ý định có schema đóng', () => {
     }
     expect(TurnBundle.safeParse(turn({ params: { model: null, effort: null, flags: ['--x'] } })).success).toBe(false);
     expect(TurnBundle.safeParse(turn({ v: 1 })).success).toBe(false);
+    // phiên đo: enum đóng (CNS-178); thiếu trường measure ⇒ từ chối
+    expect(TurnBundle.safeParse(turn({ measure: 'overhead_bare' })).success).toBe(true);
+    expect(TurnBundle.safeParse(turn({ measure: '--bare' })).success).toBe(false);
+    const { measure: _m, ...noMeasure } = turn();
+    expect(TurnBundle.safeParse(noMeasure).success).toBe(false);
     expect(ProbeBundle.safeParse(loginCheck({ op: 'probe:shell' })).success).toBe(false);
     expect(ProbeBundle.safeParse(loginCheck({ authMethod: 'password' })).success).toBe(false);
   });

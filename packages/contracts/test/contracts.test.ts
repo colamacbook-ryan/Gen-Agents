@@ -1,6 +1,8 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   buildTermWebSocketInit,
+  CERTAINTY_LEVELS,
+  type Certainty,
   DB_TIMESTAMP_RE,
   type EngineAdapter,
   EngineInstallStatus,
@@ -13,6 +15,8 @@ import {
   isEntityPrefix,
   LOGIN_EXEC,
   loginExecEnv,
+  MEASURE_KINDS,
+  type MeasureKind,
   mapDbError,
   PTY,
   PTY_CLOSE_REASONS,
@@ -25,9 +29,12 @@ import {
   settingValueJson,
   settingWritableBy,
   TermTicketClaims,
+  ToolArgs,
   TURN_EXEC,
   TurnPlan,
+  type TurnPlanInput,
   TurnRequest,
+  TurnResult,
   toDbTimestamp,
   UpdaterCommand,
 } from '../src/index.ts';
@@ -231,9 +238,49 @@ describe('sessions', () => {
       sourceMessageId: null,
       idempotencyKey: 'tg:1',
       timeoutMs: null,
+      measure: null,
     };
     expect(TurnRequest.safeParse(req).success).toBe(true);
     expect(TurnRequest.safeParse({ ...req, resume: 'abc' }).success).toBe(false);
+  });
+  it('phiên đo (CNS-178): baseline ⇔ measure; tài khoản chỉ định; prompt_worst mang id bản worst', () => {
+    const base = {
+      workspaceId: ULID,
+      agentKind: 'role',
+      trigger: 'baseline',
+      roleId: ULID,
+      taskId: null,
+      threadId: null,
+      sourceMessageId: null,
+      idempotencyKey: 'measure:1',
+      timeoutMs: null,
+    };
+    for (const measure of [
+      { kind: 'overhead_bare', engineAccountId: ULID },
+      { kind: 'overhead_shell', engineAccountId: ULID },
+      { kind: 'prompt_worst', engineAccountId: ULID, compiledPromptId: ULID },
+    ]) {
+      expect(TurnRequest.safeParse({ ...base, measure }).success, measure.kind).toBe(true);
+      // measure ngoài baseline ⇒ từ chối
+      expect(TurnRequest.safeParse({ ...base, trigger: 'chat', measure }).success, measure.kind).toBe(false);
+    }
+    expect(TurnRequest.safeParse({ ...base, measure: null }).success).toBe(false);
+    expect(TurnRequest.safeParse({ ...base, measure: { kind: 'prompt_worst', engineAccountId: ULID } }).success).toBe(
+      false,
+    );
+    expect(TurnRequest.safeParse({ ...base, measure: { kind: 'overhead', engineAccountId: ULID } }).success).toBe(
+      false,
+    );
+    expect([...MEASURE_KINDS]).toEqual(['overhead_bare', 'overhead_shell', 'prompt_worst']);
+    expectTypeOf<TurnPlanInput['measure']>().toEqualTypeOf<MeasureKind | null>();
+  });
+  it('TurnResult mang certainty (sure | unsure | null) + phase; report_task dùng cùng enum', () => {
+    expectTypeOf<TurnResult['certainty']>().toEqualTypeOf<Certainty | null>();
+    expectTypeOf<TurnResult['phase']>().toEqualTypeOf<'planning' | 'acting' | null>();
+    expect(TurnResult.shape.certainty.safeParse('maybe').success).toBe(false);
+    expect(ToolArgs.report_task.shape.certainty.safeParse('unsure').success).toBe(true);
+    expect(ToolArgs.report_task.shape.certainty.safeParse('maybe').success).toBe(false);
+    expect([...CERTAINTY_LEVELS]).toEqual(['sure', 'unsure']);
   });
 });
 

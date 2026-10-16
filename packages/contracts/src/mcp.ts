@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ENTITY_TYPES, type EntityPrefix } from './ids.ts';
+import { CERTAINTY_LEVELS } from './sessions.ts';
 
 // Hợp đồng MCP gateway (BUILD-PLAN §B.4 `gateway/`, STD-08 §3–§5; CNS-133).
 //
@@ -149,7 +150,7 @@ export const ToolArgs = {
     status: z.enum(['done', 'failed', 'blocked', 'waiting_approval']),
     summary: z.string().max(4000),
     /** Role tự khai chưa chắc (nguồn chat_messages.certainty / avatar 'unsure', G-13). */
-    certainty: z.enum(['sure', 'unsure']).nullable(),
+    certainty: z.enum(CERTAINTY_LEVELS).nullable(),
   }),
   send_telegram: z.strictObject({ chatRef: z.string().min(1), text: z.string().min(1).max(4096) }),
   propose_change: z.strictObject({ title: z.string().min(1).max(200), items: z.array(z.json()).min(1) }),

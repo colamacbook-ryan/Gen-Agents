@@ -542,6 +542,8 @@ export interface TurnPlanInput {
   systemPrompt: string | null;
   /** Tuyệt đối: tệp chứa systemPrompt, null khi không có. */
   systemPromptFile: string | null;
+  /** Phiên đo (CNS-178): 'overhead_bare' ⇒ KHÔNG cấu hình MCP / tool gateway (CLI trần); khác ⇒ như lượt thường. */
+  measure: 'overhead_bare' | 'overhead_shell' | 'prompt_worst' | null;
   /** Lấy từ registry (STD-10), null = để CLI tự chọn. Đã qua MODEL_ID_RE / EFFORT_RE; adapter vẫn chỉ đặt làm GIÁ TRỊ của cờ khai. */
   model: string | null;
   effort: string | null;

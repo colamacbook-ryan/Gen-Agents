@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AUTH_METHODS, CAPABILITY_AUTH_MODES, ENGINE_SLUG_RE, NATIVE_MEMORY_POLICY, ProbeOutcome } from './engine.ts';
 import { ULID_RE } from './ids.ts';
+import { MEASURE_KINDS } from './sessions.ts';
 
 // Giao thức ga-app ↔ ga-runner (chạy TRONG container Role / hệ thống) — BUILD-PLAN §B.5, §B.7; CNS-168.
 //
@@ -95,6 +96,8 @@ function buildRunnerBundles<Slug extends z.ZodType<string>>(engineSlug: Slug) {
         'prompt user / system phải là hai tệp khác nhau',
       ),
     timeoutMs: z.number().int().positive().max(3_600_000),
+    /** Phiên đo (CNS-178): 'overhead_bare' ⇒ adapter dựng plan KHÔNG có cấu hình MCP / tool gateway. null = lượt thường. */
+    measure: z.enum(MEASURE_KINDS).nullable(),
     nativeMemoryPolicy: z.literal(NATIVE_MEMORY_POLICY),
     /** Hết hạn cùng vé lượt. */
     expiresAt: DbTs,
