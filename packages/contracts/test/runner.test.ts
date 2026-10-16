@@ -232,6 +232,17 @@ describe('bundle = ý định có schema đóng', () => {
       'x'.repeat(97),
       '.hidden',
       '/abs',
+      // hậu tố [..] chỉ dạng hẹp ở cuối
+      'a[',
+      'a[]',
+      'a[x y]',
+      'a]',
+      'a[1M]',
+      'a[123456789]',
+      'a[1m][2m]',
+      'a[1m]x',
+      '[1m]',
+      'a[--x]',
     ];
     for (const model of badModels) {
       expect(TurnBundle.safeParse(turn({ params: { model, effort: null } })).success, JSON.stringify(model)).toBe(
@@ -243,7 +254,14 @@ describe('bundle = ý định có schema đóng', () => {
         false,
       );
     }
-    for (const model of ['vendor-model-4.5', 'models/x-1', 'q3:32b', 'A1']) {
+    for (const model of [
+      'vendor-model-4.5',
+      'models/x-1',
+      'q3:32b',
+      'A1',
+      'model-x[1m]',
+      `${'m'.repeat(96)}[12345678]`,
+    ]) {
       expect(TurnBundle.safeParse(turn({ params: { model, effort: 'xhigh' } })).success, model).toBe(true);
     }
   });

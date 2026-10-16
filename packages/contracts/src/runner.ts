@@ -42,14 +42,17 @@ export type EngineSlugList = readonly [string, ...string[]];
 
 /**
  * id model lấy từ capability registry: bắt đầu bằng chữ / số (không bao giờ dạng cờ `-…`), chỉ `[A-Za-z0-9._:/-]`, ≤ 96 ký tự
- * (không khoảng trắng, `=`, nháy, ký tự điều khiển). Adapter còn kiểm thuộc registry và chỉ đặt làm GIÁ TRỊ của cờ khai.
+ * (không khoảng trắng, `=`, nháy, ký tự điều khiển), + hậu tố hẹp tuỳ chọn `[<1–8 chữ thường / số>]` ở CUỐI (vd biến thể
+ * ngữ cảnh `…[1m]`; L-ENG đề xuất, Gen duyệt). Giá trị đi vào argv thành một phần tử riêng (không qua shell). Adapter còn
+ * kiểm thuộc registry và chỉ đặt làm GIÁ TRỊ của cờ khai.
  */
-export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,95}$/;
+export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,95}(?:\[[0-9a-z]{1,8}\])?$/;
+export const MODEL_ID_MAX = 106;
 /** Mức effort: chữ thường bắt đầu, ≤ 16 ký tự. */
 export const EFFORT_RE = /^[a-z][a-z0-9_-]{0,15}$/;
 
 export const TurnParams = z.strictObject({
-  model: z.string().max(96).regex(MODEL_ID_RE).nullable(),
+  model: z.string().max(MODEL_ID_MAX).regex(MODEL_ID_RE).nullable(),
   effort: z.string().max(16).regex(EFFORT_RE).nullable(),
 });
 export type TurnParams = z.infer<typeof TurnParams>;

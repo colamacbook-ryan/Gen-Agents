@@ -396,8 +396,11 @@ const CREDENTIAL_ASSIGNMENT_RE = new RegExp(
   'i',
 );
 
-/** Đoạn token tối đại ≥ 32 (quét bằng regex một lớp ký tự; lastIndex nhảy qua cả đoạn ⇒ tuyến tính). */
-const LONG_TOKEN_RUN_RE = /[0-9A-Za-z_-]{32,}/g;
+/**
+ * Đoạn token tối đại ≥ 32: lookbehind MỘT ký tự (không quantifier) ⇒ chỉ thử ở ĐẦU đoạn, mỗi đoạn quét một lần (nhanh ~3×
+ * so với thử ở mọi vị trí trên chuỗi nhiều đoạn ngắn); lastIndex nhảy qua cả đoạn ⇒ tuyến tính.
+ */
+const LONG_TOKEN_RUN_RE = /(?<![0-9A-Za-z_-])[0-9A-Za-z_-]{32,}/g;
 
 /**
  * Đoạn token liền ≥ 32 ký tự có CẢ chữ hoa, chữ thường VÀ chữ số (Gen quyết 2026-10-16, CNS-169). Đoạn chỉ gồm chữ số hex
