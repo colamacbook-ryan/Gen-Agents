@@ -14,6 +14,7 @@ import {
   createAuthHandlers,
   firstPasswordFile,
   LOGIN_LIMITS,
+  normalizeUsername,
   SqliteAuthStore,
 } from '../src/auth/index.ts';
 
@@ -314,5 +315,26 @@ describe('auth owner', () => {
       JSON.stringify(env.conn.db.prepare('SELECT * FROM users').all());
     expect(dump).not.toContain(token);
     expect(dump).not.toContain(first);
+  });
+
+  it('tên đăng nhập 100 K ký tự: kiểm trần thô TRƯỚC NFC (rào L-36) — từ chối nhanh, như user lạ (đúng một lần băm)', async () => {
+    const huge = `${'a'.repeat(100_000)}${String.fromCharCode(0x301)}`;
+    const t0 = performance.now();
+    expect(normalizeUsername(huge)).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(50);
+    // tên sát trần thô nhưng quá dài sau chuẩn hoá ⇒ cũng null; NFC vẫn áp cho tên hợp lệ
+    expect(normalizeUsername('b'.repeat(256))).toBeNull();
+    expect(normalizeUsername(`  Ad${'mi'}n  `)).toBe('admin');
+    const before = passwordHasherRuns();
+    const r = await env.service.login({ username: huge, password: 'x', ip: '10.9.0.1', userAgent: null });
+    expect(r).toEqual({ ok: false, code: 'invalid_credentials' });
+    expect(passwordHasherRuns() - before).toBe(1);
+    // tên không phải chuỗi ⇒ request hỏng (không băm)
+    const before2 = passwordHasherRuns();
+    expect(await env.service.login({ username: 42, password: 'x', ip: '10.9.0.2', userAgent: null })).toEqual({
+      ok: false,
+      code: 'bad_request',
+    });
+    expect(passwordHasherRuns() - before2).toBe(0);
   });
 });

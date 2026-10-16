@@ -39,6 +39,11 @@ export const PASSWORD_RULES = {
   maxChars: 256,
   /** Trần byte UTF-8 của MỌI mật khẩu nhận vào (cả lúc đăng nhập) — kiểm trước khi băm. */
   maxBytes: 1024,
+  /**
+   * Trần code unit THÔ, kiểm TRƯỚC khi NFC (rào L-36). UTF-8 ≥ 1 byte mỗi code unit và NFC gộp không làm số byte xuống dưới
+   * số code unit thô ⇒ không chặn nhầm mật khẩu nào hợp lệ theo maxBytes.
+   */
+  maxRawUnits: 1024,
   /** Ít hơn ngần này ký tự khác nhau ⇒ quá lặp ("aaaaaaaaaaaa", "abababababab"). */
   minDistinctChars: 5,
 } as const;
@@ -124,10 +129,25 @@ class Argon2Worker {
 
 const hasher = new Argon2Worker();
 
-/** Byte UTF-8 (NFC) của mật khẩu; null nếu rỗng hoặc vượt trần (không băm). */
+/** Trần code unit THÔ của tên đăng nhập trước khi NFC (rào L-36); tên hợp lệ sau chuẩn hoá ngắn hơn nhiều. */
+export const USERNAME_RAW_MAX = 256;
+
+/**
+ * NFC có trần (rào L-36, lint no-raw-normalize): chuỗi dài hơn `maxRaw` code unit ⇒ null, KHÔNG chuẩn hoá. Dùng cho mật
+ * khẩu và tên đăng nhập — RFC 8265 OpaqueString quy định NFC (không NFKC). Mọi NFC của gói đi qua đúng một chỗ này.
+ */
+export function boundedNfc(s: string, maxRaw: number): string | null {
+  if (s.length > maxRaw) return null;
+  // lint-allow no-raw-normalize: NFC theo RFC 8265 OpaqueString; đã chặn trần thô maxRaw ngay trên, NFC phình tối đa ~3×
+  return s.normalize('NFC');
+}
+
+/** Byte UTF-8 (NFC) của mật khẩu; null nếu rỗng hoặc vượt trần (thô hoặc sau NFC) — không băm. */
 function passwordBytes(password: string): Buffer | null {
   if (typeof password !== 'string' || password.length === 0) return null;
-  const buf = Buffer.from(password.normalize('NFC'), 'utf8');
+  const nfc = boundedNfc(password, PASSWORD_RULES.maxRawUnits);
+  if (nfc === null) return null;
+  const buf = Buffer.from(nfc, 'utf8');
   return buf.byteLength > PASSWORD_RULES.maxBytes ? null : buf;
 }
 
@@ -272,16 +292,17 @@ export function validateNewPassword(
   password: string,
   ctx: { username: string; currentPassword?: string; minChars?: number },
 ): { ok: true } | { ok: false; reason: PasswordPolicyViolation } {
-  const pw = password.normalize('NFC');
+  const pw = boundedNfc(password, PASSWORD_RULES.maxRawUnits);
+  if (pw === null) return { ok: false, reason: 'too_long' };
   const chars = [...pw];
   if (chars.length < Math.max(PASSWORD_RULES.minChars, ctx.minChars ?? 0)) return { ok: false, reason: 'too_short' };
   if (chars.length > PASSWORD_RULES.maxChars || Buffer.byteLength(pw, 'utf8') > PASSWORD_RULES.maxBytes) {
     return { ok: false, reason: 'too_long' };
   }
   if (new Set(chars).size < PASSWORD_RULES.minDistinctChars) return { ok: false, reason: 'too_repetitive' };
-  const user = ctx.username.normalize('NFC').toLowerCase();
+  const user = (boundedNfc(ctx.username, USERNAME_RAW_MAX) ?? '').toLowerCase();
   if (user.length >= 3 && pw.toLowerCase().includes(user)) return { ok: false, reason: 'contains_username' };
-  if (ctx.currentPassword !== undefined && ctx.currentPassword.normalize('NFC') === pw) {
+  if (ctx.currentPassword !== undefined && boundedNfc(ctx.currentPassword, PASSWORD_RULES.maxRawUnits) === pw) {
     return { ok: false, reason: 'same_as_current' };
   }
   return { ok: true };

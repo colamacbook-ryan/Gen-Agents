@@ -4,6 +4,7 @@ import { argon2id } from 'hash-wasm';
 import { describe, expect, it } from 'vitest';
 import {
   ARGON2ID,
+  boundedNfc,
   FIRST_PASSWORD_WORDS,
   firstPasswordEntropyBits,
   generateFirstPassword,
@@ -14,6 +15,7 @@ import {
   PasswordHashFormatError,
   passwordHasherRuns,
   prepareDummyHash,
+  USERNAME_RAW_MAX,
   validateNewPassword,
   verifyAgainstDummy,
   verifyPassword,
@@ -165,5 +167,29 @@ describe('chính sách mật khẩu mới', () => {
       ok: false,
       reason: 'same_as_current',
     });
+  });
+});
+
+describe('NFC có trần (rào L-36): kiểm trần thô TRƯỚC khi chuẩn hoá', () => {
+  it('boundedNfc: vượt trần thô ⇒ null, không chuẩn hoá; trong trần ⇒ NFC (không NFKC)', () => {
+    const decomposed = `e${String.fromCharCode(0x301)}`;
+    expect(boundedNfc(decomposed, 2)).toBe(String.fromCharCode(0xe9));
+    expect(boundedNfc(decomposed, 1)).toBeNull();
+    const fullwidthA = String.fromCharCode(0xff21);
+    expect(boundedNfc(fullwidthA, 4)).toBe(fullwidthA);
+    expect(USERNAME_RAW_MAX).toBe(256);
+    expect(PASSWORD_RULES.maxRawUnits).toBeGreaterThanOrEqual(PASSWORD_RULES.maxBytes);
+  });
+  it('mật khẩu 100 K ký tự ⇒ từ chối TRƯỚC khi băm (hash / verify / chính sách mật khẩu mới)', async () => {
+    const huge = 'Ab3-'.repeat(25_000);
+    const phc = await hashPassword(['correct', 'horse', 'battery', '42'].join('-'));
+    const before = passwordHasherRuns();
+    const t0 = performance.now();
+    await expect(hashPassword(huge)).rejects.toThrow(RangeError);
+    expect(await verifyPassword(huge, phc)).toBe(false);
+    expect(validateNewPassword(huge, { username: 'admin' })).toEqual({ ok: false, reason: 'too_long' });
+    expect(validateNewPassword('Ab3-xyz-QWE-998', { username: 'u'.repeat(100_000) })).toEqual({ ok: true });
+    expect(performance.now() - t0).toBeLessThan(50);
+    expect(passwordHasherRuns() - before).toBe(0);
   });
 });

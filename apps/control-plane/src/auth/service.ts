@@ -13,6 +13,7 @@ import {
   ACCOUNT_LOCKOUT,
   type AccountLockoutPolicy,
   accountLockSeconds,
+  boundedNfc,
   checkRequestOrigin,
   csrfTokenFor,
   generateFirstPassword,
@@ -30,6 +31,7 @@ import {
   SlidingWindowLimiter,
   serializeClearSessionCookie,
   serializeSessionCookie,
+  USERNAME_RAW_MAX,
   validateNewPassword,
   verifyAgainstDummy,
   verifyCsrfToken,
@@ -155,10 +157,15 @@ export interface AuthServiceOptions {
   policy?: Partial<AuthPolicy>;
 }
 
-/** Tên đăng nhập: NFC, bỏ khoảng trắng hai đầu, chữ thường; rỗng / dài / ký tự điều khiển ⇒ null. */
+/**
+ * Tên đăng nhập: kiểm trần THÔ (USERNAME_RAW_MAX code unit) TRƯỚC khi NFC (rào L-36 — không chuẩn hoá chuỗi dài tuỳ ý),
+ * rồi NFC, bỏ khoảng trắng hai đầu, chữ thường, kiểm lại trần trên kết quả; rỗng / dài / ký tự điều khiển ⇒ null.
+ */
 export function normalizeUsername(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const u = raw.normalize('NFC').trim().toLowerCase();
+  const nfc = boundedNfc(raw, USERNAME_RAW_MAX);
+  if (nfc === null) return null;
+  const u = nfc.trim().toLowerCase();
   if (u.length === 0 || u.length > USERNAME_MAX || /[\p{Cc}\p{Cf}\s]/u.test(u)) return null;
   return u;
 }
@@ -267,8 +274,19 @@ export class AuthService {
     // vẫn tiêu lượt của IP / toàn cục khi đầu vào hỏng — không có đường thử miễn phí
     const limited = this.consume(input.ip, username);
     if (limited) return limited;
-    if (!username || typeof password !== 'string' || Buffer.byteLength(password, 'utf8') > PASSWORD_RULES.maxBytes) {
+    if (typeof password !== 'string' || Buffer.byteLength(password, 'utf8') > PASSWORD_RULES.maxBytes) {
       return { ok: false, code: 'bad_request' };
+    }
+    if (!username) {
+      if (typeof input.username !== 'string') return { ok: false, code: 'bad_request' };
+      // tên là chuỗi nhưng không hợp lệ (quá dài, rỗng, ký tự điều khiển): trả như user lạ, tốn đúng một lần băm giả
+      try {
+        await verifyAgainstDummy(password);
+      } catch (e) {
+        if (e instanceof PasswordHasherBusyError) return { ok: false, code: 'rate_limited', retryAfterSeconds: 5 };
+        throw e;
+      }
+      return { ok: false, code: 'invalid_credentials' };
     }
     const user = this.o.store.findUserByUsername(username);
     if (user && !user.disabledAt) {

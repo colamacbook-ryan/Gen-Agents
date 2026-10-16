@@ -28,6 +28,7 @@ describe('lint-rules', () => {
         'db-actor-columns-from-context',
         'no-invisible-chars',
         'no-chibi-testing-import',
+        'no-raw-normalize',
       ]),
     );
   });
