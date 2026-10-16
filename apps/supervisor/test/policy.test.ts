@@ -1,6 +1,6 @@
 import { EXEC_ARGV } from '@ga/contracts';
 import { describe, expect, it } from 'vitest';
-import { absoluteArgv, checkCreate, checkExec, type ExecSpec, type PolicyConfig } from '../src/policy.ts';
+import { absoluteArgv, checkCreate, checkExec, type ExecSpec, type PolicyConfig, sameJson } from '../src/policy.ts';
 import { buildConsumerContainer, buildInstallerContainer, buildVolumeInitContainer } from '../src/templates.ts';
 import { ENV, ROLE, SYS } from './helpers.ts';
 
@@ -12,6 +12,9 @@ const CFG: PolicyConfig = {
   runtimeImage: ENV.runtimeImage,
   rolesNetwork: ENV.rolesNetwork,
   enginesVolume: ENV.enginesVolume,
+  egressProxyUrl: ENV.egressProxyUrl,
+  noProxy: ENV.noProxy,
+  fakeEngineSourceUrl: 'http://fake-source:8080',
   forbiddenValues: [SECRET],
 };
 
@@ -27,19 +30,27 @@ function host(b: Record<string, unknown>) {
 }
 
 describe('mẫu hợp lệ không vi phạm', () => {
+  const noFake: PolicyConfig = { ...CFG, fakeEngineSourceUrl: null };
   it.each([
-    ['role.v1', () => roleBody()],
-    ['sys.v1', () => buildConsumerContainer('sys.v1', SYS, ['ga-auth-en-0003'], ENV)],
-    ['engine-install.v1', () => buildInstallerContainer('demo-cli', ENV)],
+    ['role.v1', () => roleBody(), CFG],
+    ['sys.v1', () => buildConsumerContainer('sys.v1', SYS, ['ga-auth-en-0003'], ENV), CFG],
+    ['engine-install.v1', () => buildInstallerContainer('demo-cli', ENV), noFake],
     [
       'engine-install.v1 (nguồn fake)',
       () => buildInstallerContainer('demo', { ...ENV, fakeEngineSourceUrl: 'http://fake-source:8080' }),
+      CFG,
     ],
-    ['volume-init.v1 auth', () => buildVolumeInitContainer('ga-auth-en-0001', 'auth', ENV)],
-    ['volume-init.v1 engines', () => buildVolumeInitContainer('ga-engines', 'engines', ENV)],
-  ])('%s', (_n, build) => {
+    ['volume-init.v1 auth', () => buildVolumeInitContainer('ga-auth-en-0001', 'auth', ENV), CFG],
+    ['volume-init.v1 engines', () => buildVolumeInitContainer('ga-engines', 'engines', ENV), CFG],
+  ] as const)('%s', (_n, build, cfg) => {
     const b = build();
-    expect(checkCreate(b.name, b.body, CFG)).toEqual([]);
+    expect(checkCreate(b.name, b.body, cfg)).toEqual([]);
+  });
+  it('cấu hình có nguồn fake mà container cài không mang (hoặc ngược lại) ⇒ env', () => {
+    const b = buildInstallerContainer('demo-cli', ENV);
+    expect(rules(b.name, b.body)).toEqual(['env']);
+    const f = buildInstallerContainer('demo', { ...ENV, fakeEngineSourceUrl: 'http://fake-source:8080' });
+    expect([...new Set(checkCreate(f.name, f.body, noFake).map((v) => v.rule))]).toEqual(['env']);
   });
 });
 
@@ -144,8 +155,69 @@ const MUTATIONS: Mut[] = [
     (b) => (host(b).Mounts as unknown[]).push({ Type: 'npipe', Source: 'x', Target: '/x' }),
     'mount_type',
   ],
-  ['HostConfig khoá lạ (Sysctls)', (b) => (host(b).Sysctls = { 'net.ipv4.ip_forward': '1' }), 'unknown_field'],
-  ['ExtraHosts (đổi DNS)', (b) => (host(b).ExtraHosts = ['api.vendor.invalid:1.2.3.4']), 'unknown_field'],
+  ['Sysctls', (b) => (host(b).Sysctls = { 'net.ipv4.ip_forward': '1' }), 'security_opt'],
+  ['MaskedPaths rỗng (mở /proc)', (b) => (host(b).MaskedPaths = []), 'security_opt'],
+  ['ExtraHosts (đổi DNS)', (b) => (host(b).ExtraHosts = ['api.vendor.invalid:1.2.3.4']), 'network_mode'],
+  ['Dns riêng', (b) => (host(b).Dns = ['1.1.1.1']), 'network_mode'],
+  ['HostConfig khoá lạ (Runtime)', (b) => (host(b).Runtime = 'runc'), 'unknown_field'],
+  ['HostConfig khoá lạ (AutoRemove)', (b) => (host(b).AutoRemove = true), 'unknown_field'],
+  ['PidMode rỗng vẫn bị từ chối (khoá mẫu không dùng)', (b) => (host(b).PidMode = ''), 'host_namespace'],
+  ['CapAdd rỗng vẫn bị từ chối', (b) => (host(b).CapAdd = []), 'cap_add'],
+  ['GroupAdd', (b) => (host(b).GroupAdd = ['docker']), 'user'],
+  // (a) endpoint mạng: chỉ `{}` — alias / IP tĩnh / MAC / link cho phép giả danh service khác (vd alias = ga-app)
+  ...(
+    [
+      ['Aliases trùng gateway', { Aliases: ['ga-app'] }],
+      ['IPAMConfig IP tĩnh', { IPAMConfig: { IPv4Address: '172.30.0.2' } }],
+      ['IPAddress', { IPAddress: '172.30.0.2' }],
+      ['MacAddress', { MacAddress: '02:42:ac:11:00:02' }],
+      ['Links', { Links: ['ga-app:ga-app'] }],
+      ['DriverOpts', { DriverOpts: { 'com.docker.network.endpoint.sysctls': 'x' } }],
+      ['DNSNames', { DNSNames: ['ga-app'] }],
+    ] as const
+  ).map(
+    ([n, ep]): Mut => [
+      `endpoint ${n}`,
+      (b) => (b.NetworkingConfig = { EndpointsConfig: { [ENV.rolesNetwork]: { ...ep } } }),
+      'network_mode',
+    ],
+  ),
+  ['bỏ NetworkingConfig', (b) => delete b.NetworkingConfig, 'network_mode'],
+  // (b) RestartPolicy / LogConfig KHỚP CHÍNH XÁC mẫu
+  ['RestartPolicy always', (b) => (host(b).RestartPolicy = { Name: 'always' }), 'restart_policy'],
+  [
+    'RestartPolicy on-failure',
+    (b) => (host(b).RestartPolicy = { Name: 'on-failure', MaximumRetryCount: 3 }),
+    'restart_policy',
+  ],
+  ['bỏ RestartPolicy', (b) => delete host(b).RestartPolicy, 'restart_policy'],
+  ...(
+    [
+      ['syslog ra host ngoài', { Type: 'syslog', Config: { 'syslog-address': 'tcp://203.0.113.9:514' } }],
+      ['gelf', { Type: 'gelf', Config: { 'gelf-address': 'udp://203.0.113.9:12201' } }],
+      ['fluentd', { Type: 'fluentd', Config: { 'fluentd-address': '203.0.113.9:24224' } }],
+      ['json-file max-size khác', { Type: 'json-file', Config: { 'max-size': '10g', 'max-file': '1' } }],
+      ['json-file thêm tuỳ chọn', { Type: 'json-file', Config: { 'max-size': '1m', 'max-file': '1', tag: 'x' } }],
+      ['json-file thiếu Config', { Type: 'json-file' }],
+    ] as const
+  ).map(([n, lc]): Mut => [`LogConfig ${n}`, (b) => (host(b).LogConfig = structuredClone(lc)), 'log_config']),
+  ['bỏ LogConfig (driver mặc định của host)', (b) => delete host(b).LogConfig, 'log_config'],
+  ['Init false', (b) => (host(b).Init = false), 'init'],
+  ['WorkingDir khác', (b) => (b.WorkingDir = '/'), 'working_dir'],
+  ['swap không giới hạn', (b) => (host(b).MemorySwap = -1), 'resources'],
+  ['RAM nhỏ hơn mẫu', (b) => (host(b).Memory = 1024 ** 3), 'resources'],
+  [
+    'nhãn ngoài genagents.*',
+    (b) => ((b.Labels as Record<string, string>)['com.docker.compose.project'] = 'x'),
+    'labels',
+  ],
+  ['proxy trỏ nơi khác (vòng egress)', (b) => ((b.Env as string[])[0] = 'HTTPS_PROXY=http://ga-app:7401'), 'env'],
+  ['NO_PROXY = *', (b) => ((b.Env as string[])[2] = 'NO_PROXY=*'), 'env'],
+  ['env trùng biến', (b) => (b.Env as string[]).push((b.Env as string[])[0] as string), 'env'],
+  ['bỏ biến proxy', (b) => (b.Env as string[]).splice(0, 1), 'env'],
+  ['bỏ Mounts', (b) => delete host(b).Mounts, 'mount_type'],
+  ['thiếu mount ga-engines', (b) => (host(b).Mounts as unknown[]).pop(), 'volume_mount'],
+  ['bỏ AttachStdin (phải là false)', (b) => delete b.AttachStdin, 'container_io'],
   ['Entrypoint', (b) => (b.Entrypoint = ['/bin/sh']), 'unknown_field'],
   ['Tty / stdin mở', (b) => (b.OpenStdin = true), 'container_io'],
 ];
@@ -165,6 +237,179 @@ describe('mỗi luật một ca âm — chỉ chính luật đó chặn', () => 
     const { CREATE_RULES } = await import('../src/policy.ts');
     const covered = new Set([...MUTATIONS.map((m) => m[2]), 'labels']);
     expect(CREATE_RULES.filter((r) => !covered.has(r))).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------- test meta: mặc định từ chối, không khoá nào bị bỏ qua
+// Danh sách khoá của Docker Engine API (v1.47+): ContainerConfig + HostConfig (gồm Resources). Khoá mới của Docker mà policy
+// chưa biết vẫn bị từ chối (unknown_field) — danh sách này chỉ để chứng minh từng khoá đã biết.
+const DOCKER_TOP_KEYS = [
+  'Hostname',
+  'Domainname',
+  'User',
+  'AttachStdin',
+  'AttachStdout',
+  'AttachStderr',
+  'ExposedPorts',
+  'Tty',
+  'OpenStdin',
+  'StdinOnce',
+  'Env',
+  'Cmd',
+  'Healthcheck',
+  'ArgsEscaped',
+  'Image',
+  'Volumes',
+  'WorkingDir',
+  'Entrypoint',
+  'NetworkDisabled',
+  'MacAddress',
+  'OnBuild',
+  'Labels',
+  'StopSignal',
+  'StopTimeout',
+  'Shell',
+  'HostConfig',
+  'NetworkingConfig',
+];
+const DOCKER_HOST_KEYS = [
+  // Resources
+  'CpuShares',
+  'Memory',
+  'CgroupParent',
+  'BlkioWeight',
+  'BlkioWeightDevice',
+  'BlkioDeviceReadBps',
+  'BlkioDeviceWriteBps',
+  'BlkioDeviceReadIOps',
+  'BlkioDeviceWriteIOps',
+  'CpuPeriod',
+  'CpuQuota',
+  'CpuRealtimePeriod',
+  'CpuRealtimeRuntime',
+  'CpusetCpus',
+  'CpusetMems',
+  'Devices',
+  'DeviceCgroupRules',
+  'DeviceRequests',
+  'KernelMemoryTCP',
+  'MemoryReservation',
+  'MemorySwap',
+  'MemorySwappiness',
+  'NanoCpus',
+  'OomKillDisable',
+  'Init',
+  'PidsLimit',
+  'Ulimits',
+  'CpuCount',
+  'CpuPercent',
+  'IOMaximumIOps',
+  'IOMaximumBandwidth',
+  // HostConfig
+  'Binds',
+  'ContainerIDFile',
+  'LogConfig',
+  'NetworkMode',
+  'PortBindings',
+  'RestartPolicy',
+  'AutoRemove',
+  'VolumeDriver',
+  'VolumesFrom',
+  'Mounts',
+  'ConsoleSize',
+  'Annotations',
+  'CapAdd',
+  'CapDrop',
+  'CgroupnsMode',
+  'Dns',
+  'DnsOptions',
+  'DnsSearch',
+  'ExtraHosts',
+  'GroupAdd',
+  'IpcMode',
+  'Cgroup',
+  'Links',
+  'OomScoreAdj',
+  'PidMode',
+  'Privileged',
+  'PublishAllPorts',
+  'ReadonlyRootfs',
+  'SecurityOpt',
+  'StorageOpt',
+  'Tmpfs',
+  'UTSMode',
+  'UsernsMode',
+  'ShmSize',
+  'Sysctls',
+  'Runtime',
+  'Isolation',
+  'MaskedPaths',
+  'ReadonlyPaths',
+];
+const CANDIDATES: unknown[] = [null, 0, 1, -1, '', 'x', true, false, [], ['x'], {}, { x: 1 }];
+const META_BODIES: [string, () => { name: string; body: Record<string, unknown> }][] = [
+  ['role.v1', () => roleBody()],
+  ['sys.v1', () => buildConsumerContainer('sys.v1', SYS, ['ga-auth-en-0003'], ENV)],
+  [
+    'engine-install.v1',
+    () => buildInstallerContainer('demo', { ...ENV, fakeEngineSourceUrl: 'http://fake-source:8080' }),
+  ],
+  ['volume-init.v1', () => buildVolumeInitContainer('ga-auth-en-0001', 'auth', ENV)],
+];
+
+describe('meta — mọi khoá phải KHỚP mẫu; khoá mẫu không dùng ⇒ từ chối', () => {
+  it.each(META_BODIES)(
+    '%s: mọi khoá HostConfig của Docker — thêm (mẫu không dùng) / đổi / xoá (mẫu dùng) ⇒ vi phạm',
+    (_t, build) => {
+      const b = build();
+      const tpl = host(b.body);
+      const misses: string[] = [];
+      for (const k of DOCKER_HOST_KEYS) {
+        const inTemplate = Object.hasOwn(tpl, k);
+        const variants = CANDIDATES.filter((v) => !inTemplate || !sameJson(v, tpl[k]));
+        for (const v of variants) {
+          const body = structuredClone(b.body);
+          host(body)[k] = structuredClone(v);
+          if (checkCreate(b.name, body, CFG).length === 0) misses.push(`${k}=${JSON.stringify(v)}`);
+        }
+        if (inTemplate) {
+          const body = structuredClone(b.body);
+          delete host(body)[k];
+          if (checkCreate(b.name, body, CFG).length === 0) misses.push(`xoá ${k}`);
+        }
+      }
+      expect(misses).toEqual([]);
+    },
+  );
+  it.each(META_BODIES)('%s: mọi khoá cấp trên của Docker — thêm / đổi / xoá ⇒ vi phạm', (_t, build) => {
+    const b = build();
+    const misses: string[] = [];
+    for (const k of DOCKER_TOP_KEYS) {
+      const inTemplate = Object.hasOwn(b.body, k);
+      for (const v of CANDIDATES.filter((c) => !inTemplate || !sameJson(c, b.body[k]))) {
+        const body = structuredClone(b.body);
+        body[k] = structuredClone(v);
+        if (checkCreate(b.name, body, CFG).length === 0) misses.push(`${k}=${JSON.stringify(v)}`);
+      }
+      if (inTemplate) {
+        const body = structuredClone(b.body);
+        delete body[k];
+        if (checkCreate(b.name, body, CFG).length === 0) misses.push(`xoá ${k}`);
+      }
+    }
+    expect(misses).toEqual([]);
+  });
+  it('volume-init.v1 (không mạng) thêm NetworkingConfig ⇒ network_mode', () => {
+    const b = buildVolumeInitContainer('ga-engines', 'engines', ENV);
+    const body = structuredClone(b.body);
+    body.NetworkingConfig = { EndpointsConfig: { [ENV.rolesNetwork]: {} } };
+    expect(rules(b.name, body)).toEqual(['network_mode']);
+  });
+  it('sameJson: chặt về kiểu / tập khoá, không phụ thuộc thứ tự khoá', () => {
+    expect(sameJson({ a: 1, b: [1, { c: 2 }] }, { b: [1, { c: 2 }], a: 1 })).toBe(true);
+    expect(sameJson({ a: 1 }, { a: 1, b: undefined })).toBe(false);
+    expect(sameJson([1], { 0: 1 })).toBe(false);
+    expect(sameJson('1', 1)).toBe(false);
   });
 });
 

@@ -131,6 +131,9 @@ export async function startSupervisor(o: {
       runtimeImage: o.image,
       rolesNetwork: ROLES_NET,
       enginesVolume: ENGINES_VOLUME,
+      egressProxyUrl: 'http://ga-egress:3128',
+      noProxy: 'ga-app',
+      fakeEngineSourceUrl: FAKE_SOURCE_URL,
       forbiddenValues: [
         supervisorKey.toString('hex'),
         supervisorKey.toString('base64'),

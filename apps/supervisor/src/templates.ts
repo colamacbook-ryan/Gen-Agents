@@ -31,9 +31,18 @@ export const TMPFS: Readonly<Record<string, string>> = {
   '/run/ga': 'rw,nosuid,nodev,size=268435456,uid=10001,gid=10001,mode=0700',
   '/tmp': 'rw,nosuid,nodev,size=268435456,uid=10001,gid=10001,mode=1777',
 };
-/** Trần tài nguyên mỗi container [ĐỀ XUẤT — L-RT]. Policy ép 0 < giá trị ≤ trần. */
+/** Tài nguyên mỗi container [ĐỀ XUẤT — L-RT]. Policy so KHỚP CHÍNH XÁC. */
 export const LIMITS = { memory: 2 * 1024 ** 3, nanoCpus: 2_000_000_000, pids: 512 } as const;
 export const IDLE_CMD = ['sleep', 'infinity'] as const;
+export const WORKING_DIR = '/tmp';
+export const CONTAINER_LANG = 'C.UTF-8';
+/** Không tự khởi động lại (supervisor reconcile quyết định). Policy so KHỚP CHÍNH XÁC. */
+export const RESTART_POLICY: Readonly<{ Name: 'no' }> = { Name: 'no' };
+/** Log driver cục bộ duy nhất (driver gửi log ra ngoài — syslog / gelf / fluentd… — vòng qua egress). Policy so KHỚP CHÍNH XÁC. */
+export const LOG_CONFIG: Readonly<{ Type: 'json-file'; Config: Readonly<Record<string, string>> }> = {
+  Type: 'json-file',
+  Config: { 'max-size': '1m', 'max-file': '1' },
+};
 
 export interface TemplateEnv {
   runtimeImage: string;
@@ -79,7 +88,7 @@ function proxyEnv(env: TemplateEnv): string[] {
     `HTTPS_PROXY=${env.egressProxyUrl}`,
     `HTTP_PROXY=${env.egressProxyUrl}`,
     `NO_PROXY=${env.noProxy}`,
-    'LANG=C.UTF-8',
+    `LANG=${CONTAINER_LANG}`,
   ];
 }
 
@@ -97,8 +106,8 @@ function baseHostConfig(networkMode: string, mounts: unknown[], tmpfs: Record<st
     MemorySwap: LIMITS.memory,
     NanoCpus: LIMITS.nanoCpus,
     PidsLimit: LIMITS.pids,
-    RestartPolicy: { Name: 'no' },
-    LogConfig: { Type: 'json-file', Config: { 'max-size': '1m', 'max-file': '1' } },
+    RestartPolicy: { ...RESTART_POLICY },
+    LogConfig: { Type: LOG_CONFIG.Type, Config: { ...LOG_CONFIG.Config } },
   };
 }
 
@@ -143,7 +152,7 @@ export function buildConsumerContainer(
     Image: env.runtimeImage,
     Cmd: [...IDLE_CMD],
     User: RUNTIME_USER,
-    WorkingDir: '/tmp',
+    WorkingDir: WORKING_DIR,
     Env: proxyEnv(env),
     Labels: {
       [LABELS.kind]: kind,
@@ -171,7 +180,7 @@ export function buildInstallerContainer(slug: string, env: TemplateEnv): BuiltCo
     Image: env.runtimeImage,
     Cmd: [...IDLE_CMD],
     User: RUNTIME_USER,
-    WorkingDir: '/tmp',
+    WorkingDir: WORKING_DIR,
     Env: [...proxyEnv(env), ...extraEnv],
     Labels: {
       [LABELS.kind]: 'sys',
@@ -200,8 +209,8 @@ export function buildVolumeInitContainer(volume: string, kind: 'auth' | 'engines
     Image: env.runtimeImage,
     Cmd: ['true'],
     User: RUNTIME_USER,
-    WorkingDir: '/tmp',
-    Env: ['LANG=C.UTF-8'],
+    WorkingDir: WORKING_DIR,
+    Env: [`LANG=${CONTAINER_LANG}`],
     Labels: {
       [LABELS.kind]: 'sys',
       [LABELS.managedBy]: MANAGED_BY,

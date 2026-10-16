@@ -19,6 +19,9 @@ export function buildSupervisor(env: NodeJS.ProcessEnv) {
       runtimeImage: cfg.runtimeImage,
       rolesNetwork: cfg.rolesNetwork,
       enginesVolume: cfg.enginesVolume,
+      egressProxyUrl: cfg.egressProxyUrl,
+      noProxy: cfg.noProxy,
+      fakeEngineSourceUrl: cfg.fakeEngineSourceUrl,
       forbiddenValues: [
         cfg.supervisorKey.toString('hex'),
         cfg.supervisorKey.toString('base64'),
