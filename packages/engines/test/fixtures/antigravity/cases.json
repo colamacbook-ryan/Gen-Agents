@@ -1,0 +1,758 @@
+{
+  "_doc": "Ca kiểm adapter theo slug. Tệp *.txt/*.out/*.err: output THẬT của Spike 1b (agy 1.3.5, chưa đăng nhập; đã rút URL OAuth, thay id). Ca có \"assumed\": dạng dựng theo REPORT / giả định — chuyển sang CLI giả chung (testing/fakes, L-FAKE) khi có. Tệp \"fake:<tên>\" = dữ liệu Spike 1b trong CLI giả chung (testing/fakes/<binary>/dumps/), không chép lại ở đây.",
+  "adapter": {
+    "authAllowlist": "unknown",
+    "nativeStatePaths": [".gemini/antigravity-cli"],
+    "outputSignals": {
+      "phase": "stream",
+      "certainty": "unmeasured"
+    },
+    "helpFile": "fake:help.txt",
+    "flagsObservedOutsideHelp": ["--version", "--help"],
+    "loginArgvSubscriptionTail": [],
+    "systemPrompt": {
+      "in": "file",
+      "path": "GEMINI.md"
+    },
+    "valueForm": "split",
+    "apiKeyFiles": ["home/.gemini/antigravity-cli/settings.json"],
+    "mcpConfigFile": "home/.gemini/antigravity-cli/mcp_servers.json",
+    "checksumAlgorithm": "sha512",
+    "selfUpdate": "enabled",
+    "phaseAfterToolCall": "acting",
+    "_doc_stream": "stream-json theo schema thống nhất với CLI giả: testing/fakes ASSUMPTIONS AG-STREAM-1 (= AGY-STREAM-01) — giả định.",
+    "flagsAssumedNotInHelp": ["--allowed-tools"],
+    "toolRestriction": {
+      "flags": ["--allowed-tools"],
+      "argvContains": ["--allowed-tools", "mcp__ga"]
+    }
+  },
+  "stream": [
+    {
+      "name": "lỗi chưa đăng nhập (Spike 1b): usage + error",
+      "lineFile": "print-nologin.out",
+      "expected": [
+        {
+          "type": "usage",
+          "usage": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": null,
+            "thinking": 0,
+            "costMicroUsd": null
+          }
+        },
+        {
+          "type": "error",
+          "code": "agy_status_error",
+          "message": "authentication failed or timed out"
+        }
+      ]
+    },
+    {
+      "name": "output json một object (dạng đã thấy, AGY-STREAM-01): delta + usage",
+      "line": "{\"conversation_id\":\"c-1\",\"status\":\"SUCCESS\",\"response\":\"Xin chào\",\"error\":\"\",\"duration_seconds\":1.2,\"num_turns\":1,\"usage\":{\"input_tokens\":120,\"output_tokens\":8,\"thinking_tokens\":3,\"cache_read_tokens\":100,\"total_tokens\":231}}",
+      "expected": [
+        {
+          "type": "delta",
+          "text": "Xin chào"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input": 120,
+            "output": 8,
+            "cacheRead": 100,
+            "cacheWrite": null,
+            "thinking": 3,
+            "costMicroUsd": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "lệnh /usage (command) không phải lượt chat",
+      "line": "{\"status\":\"SUCCESS\",\"command\":{\"name\":\"usage\",\"data\":{\"groups\":[]}}}",
+      "expected": []
+    },
+    {
+      "name": "dòng không phải JSON",
+      "line": "Fetching available models...",
+      "expected": []
+    },
+    {
+      "name": "JSON mảng",
+      "line": "[{\"status\":\"SUCCESS\"}]",
+      "expected": []
+    },
+    {
+      "name": "JSON hỏng",
+      "line": "{\"status\":\"SUCC",
+      "expected": []
+    },
+    {
+      "name": "object không có status",
+      "line": "{\"type\":\"message\",\"text\":\"x\"}",
+      "expected": []
+    },
+    {
+      "name": "stream-json init ⇒ model (assumed AG-STREAM-1)",
+      "line": "{\"type\":\"init\",\"conversation_id\":\"c-1\",\"model\":\"m-flash\"}",
+      "expected": [
+        {
+          "type": "model",
+          "model": "m-flash"
+        }
+      ]
+    },
+    {
+      "name": "stream-json tool_call ⇒ gọi công cụ (assumed AG-STREAM-1)",
+      "line": "{\"type\":\"tool_call\",\"id\":\"t1\",\"name\":\"recall\"}",
+      "expected": [
+        {
+          "type": "tool",
+          "stage": "call",
+          "name": "recall",
+          "callId": "t1"
+        }
+      ]
+    },
+    {
+      "name": "stream-json tool_result ⇒ kết quả có tên (assumed AG-STREAM-1)",
+      "line": "{\"type\":\"tool_result\",\"id\":\"t1\",\"name\":\"recall\",\"is_error\":false,\"text\":\"ok\"}",
+      "expected": [
+        {
+          "type": "tool",
+          "stage": "result",
+          "name": "recall",
+          "callId": "t1"
+        }
+      ]
+    },
+    {
+      "name": "stream-json delta (assumed AG-STREAM-1)",
+      "line": "{\"type\":\"delta\",\"text\":\"Xin chào\"}",
+      "expected": [
+        {
+          "type": "delta",
+          "text": "Xin chào"
+        }
+      ]
+    },
+    {
+      "name": "stream-json result thành công: chỉ usage (văn bản đã đến qua delta)",
+      "line": "{\"type\":\"result\",\"conversation_id\":\"c-1\",\"status\":\"SUCCESS\",\"response\":\"Xin chào\",\"error\":\"\",\"duration_seconds\":1,\"num_turns\":1,\"usage\":{\"input_tokens\":120,\"output_tokens\":8,\"thinking_tokens\":3,\"cache_read_tokens\":100,\"total_tokens\":231}}",
+      "expected": [
+        {
+          "type": "usage",
+          "usage": {
+            "input": 120,
+            "output": 8,
+            "cacheRead": 100,
+            "cacheWrite": null,
+            "thinking": 3,
+            "costMicroUsd": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "stream-json result lỗi ⇒ usage + error",
+      "line": "{\"type\":\"result\",\"status\":\"ERROR\",\"response\":\"\",\"error\":\"boom\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"thinking_tokens\":0,\"cache_read_tokens\":0,\"total_tokens\":0}}",
+      "expected": [
+        {
+          "type": "usage",
+          "usage": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": null,
+            "thinking": 0,
+            "costMicroUsd": null
+          }
+        },
+        {
+          "type": "error",
+          "code": "agy_status_error",
+          "message": "boom"
+        }
+      ]
+    },
+    {
+      "name": "stream-json loại lạ ⇒ bỏ",
+      "line": "{\"type\":\"thought\",\"text\":\"x\"}",
+      "expected": []
+    }
+  ],
+  "classify": [
+    {
+      "name": "lượt thành công (assumed)",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"conversation_id\":\"c\",\"status\":\"SUCCESS\",\"response\":\"ok\",\"error\":\"\",\"usage\":{}}",
+      "stderr": "",
+      "expected": {
+        "outcome": "ok",
+        "ruleId": "AGY-E01",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "chưa đăng nhập: chỉ JSON stdout (không stderr) ⇒ cần đăng nhập",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdoutFile": "print-nologin.out",
+      "stderr": "",
+      "expected": {
+        "outcome": "AUTH_REQUIRED",
+        "ruleId": "AGY-E02",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "chưa đăng nhập: exit 1 + JSON lỗi xác thực (Spike 1b)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdoutFile": "print-nologin.out",
+      "stderrFile": "print-nologin.err",
+      "expected": {
+        "outcome": "AUTH_REQUIRED",
+        "ruleId": "AGY-E02",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "chưa đăng nhập, bị timeout giết vẫn in JSON (Spike 1b)",
+      "exit": {
+        "exitCode": null,
+        "signal": "SIGTERM",
+        "timedOut": true
+      },
+      "stdoutFile": "print-nologin.out",
+      "stderrFile": "print-interrupted.err",
+      "expected": {
+        "outcome": "AUTH_REQUIRED",
+        "ruleId": "AGY-E02",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "API key sai: exit 3 + AGY_ERROR API_KEY_INVALID (Spike 1b)",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdoutFile": "print-fakekey.out",
+      "stderrFile": "print-fakekey.err",
+      "expected": {
+        "outcome": "AUTH_REQUIRED",
+        "ruleId": "AGY-E03",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "401 UNAUTHENTICATED (assumed)",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"status\":\"ERROR\",\"error\":\"agent executor error: Error 401, Message: Request had invalid authentication credentials.\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"Error 401 invalid authentication credentials\",\"status\":\"UNAUTHENTICATED\",\"error_code\":401,\"code_kind\":\"http\",\"retryable\":false}",
+      "expected": {
+        "outcome": "login_expired",
+        "ruleId": "AGY-E04",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "403 PERMISSION_DENIED (assumed)",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"status\":\"ERROR\",\"error\":\"agent executor error: Error 403\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"Error 403\",\"status\":\"PERMISSION_DENIED\",\"error_code\":403,\"code_kind\":\"http\",\"retryable\":false}",
+      "expected": {
+        "outcome": "account_suspended",
+        "ruleId": "AGY-E05",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "429 RESOURCE_EXHAUSTED (assumed) — không đoán giờ reset",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"status\":\"ERROR\",\"error\":\"agent executor error: Error 429\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"Error 429\",\"status\":\"RESOURCE_EXHAUSTED\",\"error_code\":429,\"code_kind\":\"http\",\"retryable\":true}",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "AGY-E06",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "503 UNAVAILABLE (assumed)",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"status\":\"ERROR\",\"error\":\"agent executor error: Error 503\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"Error 503\",\"status\":\"UNAVAILABLE\",\"error_code\":503,\"code_kind\":\"http\",\"retryable\":true}",
+      "expected": {
+        "outcome": "outage",
+        "ruleId": "AGY-E07",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "mất mạng: code_kind network (assumed AG-ERR-NET) ⇒ outage",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"status\":\"ERROR\",\"error\":\"agent executor error: dial tcp: lookup api.invalid: no such host\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"dial tcp: lookup api.invalid: no such host\",\"error_code\":0,\"code_kind\":\"network\",\"retryable\":true}",
+      "expected": {
+        "outcome": "outage",
+        "ruleId": "AGY-E12",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "exit 2 sai cách dùng cờ (Spike 1b)",
+      "exit": {
+        "exitCode": 2,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "",
+      "stderr": "flag provided but not defined: -bogus",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E08",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "retryable DEADLINE_EXCEEDED (assumed)",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"status\":\"ERROR\",\"error\":\"agent executor error: deadline\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"deadline\",\"status\":\"DEADLINE_EXCEEDED\",\"code_kind\":\"rpc\",\"retryable\":true}",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E09",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "hết giờ không có output",
+      "exit": {
+        "exitCode": null,
+        "signal": "SIGKILL",
+        "timedOut": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E10",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "exit 1 không rõ (agent not found)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "",
+      "stderr": "error: agent not found",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "exit 0 nhưng status ERROR không rõ lý do ⇒ không phải ok",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"status\":\"ERROR\",\"error\":\"weird\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: stream-json THÀNH CÔNG, delta chứa \"quota exceeded\" / \"API_KEY_INVALID\" ⇒ ok",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"delta\",\"text\":\"quota exceeded (quota resets at 2099-01-01T00:00:00Z) API_KEY_INVALID authentication failed\"}\n{\"type\":\"result\",\"status\":\"SUCCESS\",\"response\":\"x\",\"error\":\"\",\"usage\":{}}",
+      "stderr": "",
+      "expected": {
+        "outcome": "ok",
+        "ruleId": "AGY-E01",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: exit 1 không có dòng result, delta chứa \"authentication failed\" ⇒ không phải cần đăng nhập",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"delta\",\"text\":\"error: authentication failed or timed out\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: tool_result mang status ERROR giả ⇒ không coi là dòng kết quả",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"tool_result\",\"id\":\"t\",\"name\":\"recall\",\"is_error\":true,\"text\":\"x\",\"status\":\"ERROR\",\"error\":\"authentication failed\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "429 có \"(quota resets at …)\" trong short_error ⇒ hết quota, resetAt null (không tin chữ)",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"status\":\"ERROR\",\"error\":\"agent executor error: Error 429 (quota resets at 2099-01-01T00:00:00Z)\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"Error 429 (quota resets at 2099-01-01T00:00:00Z)\",\"status\":\"RESOURCE_EXHAUSTED\",\"error_code\":429,\"code_kind\":\"http\",\"retryable\":false}",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "AGY-E06",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: dòng result SUCCESS nhưng exit ≠ 0, stderr có chữ \"quota exceeded\" ⇒ không đọc chữ (transient)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"status\":\"SUCCESS\",\"response\":\"x\",\"error\":\"\",\"usage\":{}}",
+      "stderr": "tool output: quota exceeded; no such host; API_KEY_INVALID",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
+    }
+  ],
+  "login": [
+    {
+      "name": "OAuth chưa đăng nhập: models exit 1 \"Please sign in\" (Spike 1b)",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": 1,
+        "signal": null,
+        "stdoutFile": "models-nologin.txt",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_out",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "expired",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "OAuth đã đăng nhập: models exit 0 + TSV (assumed AGY-L01)",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": 0,
+        "signal": null,
+        "stdoutFile": "fake:models.tsv",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_in",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "logged_in",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "models exit 0 nhưng không có dòng TSV ⇒ chưa xác định",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "Fetching available models...\n",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "unknown",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "unknown",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "models hết giờ ⇒ lỗi",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": null,
+        "signal": "SIGKILL",
+        "stdout": "",
+        "stderr": "",
+        "timedOut": true
+      },
+      "expected": {
+        "status": "unknown",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "error",
+        "probeStatus": "failed"
+      }
+    },
+    {
+      "name": "API key sai: -p exit 3 API_KEY_INVALID (Spike 1b)",
+      "authMethod": "api_key",
+      "outcome": {
+        "exitCode": 3,
+        "signal": null,
+        "stdoutFile": "print-fakekey.out",
+        "stderrFile": "print-fakekey.err",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_out",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "expired",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "API key đúng: -p SUCCESS (assumed)",
+      "authMethod": "api_key",
+      "outcome": {
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "{\"status\":\"SUCCESS\",\"response\":\"OK\",\"usage\":{}}",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_in",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "logged_in",
+        "probeStatus": "ok"
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "name": "chưa đăng nhập (Spike 1b): version + help + models exit 1 — agy 1.3.5 thiếu cờ giới hạn công cụ ⇒ chưa kiểm tương thích",
+      "authMode": "none",
+      "outcomes": [
+        {
+          "exitCode": 0,
+          "stdoutFile": "fake:version.txt"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "fake:help.txt"
+        },
+        {
+          "exitCode": 1,
+          "stdoutFile": "models-nologin.txt"
+        }
+      ],
+      "values": {
+        "version:cli": "1.3.5"
+      },
+      "known": [
+        "flag:--effort",
+        "flag:-p",
+        "flag:--print-timeout",
+        "effort:low",
+        "effort:medium",
+        "effort:high",
+        "effort:xhigh",
+        "effort:max",
+        "mode:accept-edits",
+        "mode:auto",
+        "mode:plan",
+        "output_format:text",
+        "output_format:json",
+        "output_format:stream-json",
+        "subcommand:models",
+        "subcommand:mcp"
+      ],
+      "unknown": {
+        "model:*": "unknown_requires_login",
+        "quota_window:*": "unknown_requires_login"
+      },
+      "scan": {
+        "compatibility": "untested",
+        "missingTurnFlags": ["--allowed-tools"],
+        "probeStatus": "partial"
+      }
+    },
+    {
+      "name": "chế độ API key: models = catalog tĩnh; /usage groups rỗng (dựng theo REPORT §1) — agy 1.3.5 thiếu cờ giới hạn công cụ ⇒ chưa kiểm tương thích",
+      "authMode": "api_key",
+      "outcomes": [
+        {
+          "exitCode": 0,
+          "stdoutFile": "fake:version.txt"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "fake:help.txt"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "fake:models.tsv"
+        },
+        {
+          "exitCode": 0,
+          "stdout": "{\"status\":\"SUCCESS\",\"command\":{\"name\":\"usage\",\"data\":{\"groups\":[]}}}"
+        }
+      ],
+      "values": {
+        "model:gemini-3.1-pro-high": "Gemini 3.1 Pro (High)"
+      },
+      "confidence": {
+        "model:gemini-3.1-pro-high": "static_catalog"
+      },
+      "known": ["model:gemini-3.8-flash-low"],
+      "unknown": {
+        "quota_window:*": "unknown: /usage không có cửa sổ quota (chế độ API key)"
+      },
+      "scan": {
+        "compatibility": "untested",
+        "missingTurnFlags": ["--allowed-tools"],
+        "probeStatus": "partial"
+      }
+    },
+    {
+      "name": "phiên bản mới + help hỏng ⇒ chưa kiểm tương thích, cờ chưa xác định",
+      "authMode": "none",
+      "outcomes": [
+        {
+          "exitCode": 0,
+          "stdout": "1.4.0\n"
+        },
+        {
+          "exitCode": null,
+          "signal": "SIGKILL",
+          "timedOut": true,
+          "stdout": ""
+        },
+        {
+          "exitCode": 1,
+          "stdoutFile": "models-nologin.txt"
+        }
+      ],
+      "values": {
+        "version:cli": "1.4.0"
+      },
+      "known": [],
+      "unknown": {
+        "flag:*": "unknown: lệnh quét hết thời gian",
+        "effort:*": "unknown: lệnh quét hết thời gian"
+      },
+      "scan": {
+        "compatibility": "untested",
+        "missingTurnFlags": [],
+        "probeStatus": "partial"
+      }
+    }
+  ],
+  "streamFiles": [],
+  "fakeScenarios": {
+    "ok": {
+      "outcome": "ok",
+      "resetAt": null
+    },
+    "quota_exhausted": {
+      "outcome": "quota_exhausted",
+      "resetAt": null
+    },
+    "account_suspended": {
+      "outcome": "account_suspended",
+      "resetAt": null
+    },
+    "login_expired": {
+      "outcome": "login_expired",
+      "resetAt": null
+    },
+    "outage": {
+      "outcome": "outage",
+      "resetAt": null
+    },
+    "network_down": {
+      "outcome": "outage",
+      "resetAt": null
+    },
+    "malformed_json": {
+      "outcome": "outage",
+      "resetAt": null
+    }
+  },
+  "_doc_fake": "fakeScenarios: kịch bản của CLI giả chung (testing/fakes, GA_FAKE_SCENARIO) ⇒ kết quả phân loại mong đợi. Kịch bản quota_exhausted chạy với resetAt 2026-10-16T19:00:00Z."
+}

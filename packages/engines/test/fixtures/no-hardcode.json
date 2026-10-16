@@ -1,0 +1,13 @@
+{
+  "_doc": "Mẫu dùng trong test/no-hardcode.test.ts. Để ở fixture (không phải mã) vì luật lint no-model-cli-names áp cả cho mã test trong packages/. STD-10: danh sách model / mức effort / quota phải quét lúc chạy, không viết cứng trong adapter.",
+  "modelIdPatterns": [
+    "gemini-\\d",
+    "claude-(opus|sonnet|haiku|fable)",
+    "\\b(opus|sonnet|haiku|fable)(\\[1m\\])?\\b",
+    "gpt-\\d",
+    "\\bo\\d-(mini|pro)\\b"
+  ],
+  "effortLiterals": ["low", "medium", "high", "xhigh", "max"],
+  "quotaLiterals": ["five_hour", "seven_day", "weekly", "monthly"],
+  "baitName": "claude"
+}
