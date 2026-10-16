@@ -54,7 +54,9 @@ export class RedactingLineWriter {
     if (this.dropping) {
       this.write(`${DROPPED_LINE_MARKER}\n`);
     } else {
-      this.write(`${redactLine(this.buf)}\n`);
+      // đoạn thay `[REDACTED:<id>]` có thể DÀI hơn đoạn gốc ⇒ kiểm trần lần nữa SAU khi che (dòng quá trần làm vỡ giao thức stdout)
+      const red = redactLine(this.buf);
+      this.write(`${red.length > this.maxLine ? DROPPED_LINE_MARKER : red}\n`);
     }
     this.buf = '';
     this.dropping = false;

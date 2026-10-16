@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ga/contracts": "workspace:*",
-    "@ga/engines": "workspace:*"
+    "@ga/engines": "workspace:*",
+    "@ga/security": "workspace:*"
   }
 }

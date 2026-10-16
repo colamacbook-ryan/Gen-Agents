@@ -35,6 +35,9 @@ importers:
       '@ga/engines':
         specifier: workspace:*
         version: link:../../packages/engines
+      '@ga/security':
+        specifier: workspace:*
+        version: link:../../packages/security
 
   apps/supervisor:
     dependencies:
