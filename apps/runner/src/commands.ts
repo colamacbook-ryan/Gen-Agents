@@ -10,13 +10,14 @@ import {
   runnerBundleSchemas,
   runnerReportLine,
   runnerStdoutLine,
+  TURN_TICKET,
   ULID_RE,
 } from '@ga/contracts';
 import { type AdapterRegistry, requireAdapter } from './adapters.ts';
 import { authGc } from './auth-gc.ts';
 import { writeNewFileInside } from './fsutil.ts';
 import { getText } from './http.ts';
-import { isTurnTicket, RunnerError, type RunnerRoots, TICKET_FILE_MODE, TURN_ENV } from './paths.ts';
+import { GATEWAY_MCP_PATH, isTurnTicket, RunnerError, type RunnerRoots, TICKET_FILE_MODE, TURN_ENV } from './paths.ts';
 import { EXIT_RUNNER_ERROR, emitError, exitCodeOf } from './report.ts';
 import { CappedText, checkPlan, outcomeOf, runPlan } from './run-plan.ts';
 import { createSessionDir, finishSession, prepareSession, type Session, type SessionFile } from './session.ts';
@@ -111,7 +112,7 @@ export async function cmdTurn(ctx: RunnerContext): Promise<number> {
     writeNewFileInside(dir, 'ticket', ticket, TICKET_FILE_MODE);
 
     const res = await getText(
-      `${gatewayUrl}/turn/bundle`,
+      `${gatewayUrl}${TURN_TICKET.bundlePath}`,
       { authorization: `Bearer ${ticket}`, accept: 'application/json' },
       { timeoutMs: 15_000, maxBytes: BUNDLE_MAX_BYTES },
     );
@@ -139,7 +140,7 @@ export async function cmdTurn(ctx: RunnerContext): Promise<number> {
         detectedFlags: b.detectedFlags,
         model: b.params.model,
         effort: b.params.effort,
-        gatewayUrl,
+        gatewayUrl: `${gatewayUrl}${GATEWAY_MCP_PATH}`,
         turnDir: dir,
         homeDir: join(dir, 'home'),
         ticketFile: join(dir, 'ticket'),

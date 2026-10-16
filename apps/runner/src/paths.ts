@@ -17,6 +17,12 @@ export interface RunnerRoots {
 export const FIXED_ROOTS: RunnerRoots = { run: '/run/ga', auth: '/auth', engines: '/opt/engines' };
 
 export const TURN_ENV = { turnId: 'GA_TURN_ID', gatewayUrl: 'GA_GATEWAY_URL' } as const;
+/**
+ * Đường MCP (Streamable HTTP) của gateway dưới GA_GATEWAY_URL (= gốc gateway; bundle ở TURN_TICKET.bundlePath).
+ * contracts TurnPlanInput.gatewayUrl là "URL MCP gateway" ⇒ runner truyền `${GA_GATEWAY_URL}${GATEWAY_MCP_PATH}` cho adapter
+ * (cầu mcp-bridge gọi đúng URL này). [ĐỀ XUẤT — L-RT → L0: đưa vào contracts TURN_TICKET.mcpPath.]
+ */
+export const GATEWAY_MCP_PATH = '/mcp';
 export const TICKET_FILE_MODE = 0o400;
 /** Marker gắn vào env của tiến trình PTY để `pty-kill` tìm cả tiến trình đã tự tách nhóm (setsid). */
 export const PTY_MARKER_ENV = 'GA_PTY_ID';

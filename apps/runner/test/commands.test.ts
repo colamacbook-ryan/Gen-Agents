@@ -143,6 +143,24 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
     expect(lstatSync(join(sb.authDir, 'cred.json')).isFile()).toBe(true);
   });
 
+  it('adapter nhận URL MCP = GA_GATEWAY_URL + /mcp và tệp vé tmpfs của lượt (cầu mcp-bridge gọi đúng chỗ)', async () => {
+    bundleBody = turnBundle();
+    const seen: { gatewayUrl?: string; ticketFile?: string } = {};
+    const base = fakeAdapter();
+    const registry = registryOf([
+      fakeAdapter({
+        turnPlan: (i) => {
+          seen.gatewayUrl = i.gatewayUrl;
+          seen.ticketFile = i.ticketFile;
+          return base.turnPlan(i);
+        },
+      }),
+    ]);
+    const { c } = ctx({ registry });
+    expect(await cmdTurn(c)).toBe(0);
+    expect(seen).toEqual({ gatewayUrl: `${gwUrl}/mcp`, ticketFile: join(sb.roots.run, TURN_ID, 'ticket') });
+  });
+
   const bad: [string, () => void, Partial<{ registry: AdapterRegistry; stdin: string }>][] = [
     ['bundle có trường lạ (argv)', () => (bundleBody = { ...turnBundle(), argv: ['/bin/sh'] }), {}],
     ['bundle có env tự do', () => (bundleBody = { ...turnBundle(), env: { LD_PRELOAD: '/x' } }), {}],

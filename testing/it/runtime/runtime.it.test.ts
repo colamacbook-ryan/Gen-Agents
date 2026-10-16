@@ -512,6 +512,143 @@ describe.sequential('IT runtime — Docker thật', () => {
     expect(reqs.filter((q) => q.path === '/turn/bundle' && q.auth)).toHaveLength(1);
   }, 240_000);
 
+  it('lượt fake-claude gọi tool qua cầu mcp-bridge THẬT (/usr/local/bin/ga-runner) → MCP của gateway; vé từ tệp tmpfs', async () => {
+    const adapter = adapterFor(CLAUDE);
+    const ticket = randomBytes(32).toString('base64url');
+    const scenario = { name: 'ok', script: { reply: 'xong', calls: [{ tool: 'echo', args: { x: 1 } }] } };
+    const cfg = JSON.stringify({ GA_FAKE_SCENARIO: JSON.stringify(scenario) });
+    expect(cexec(SYS, ['sh', '-c', 'cat > /run/ga/ga-fakes-config.json'], { input: cfg }).code).toBe(0);
+    await fetch(`http://${stubHost}:7499/_test/mcp-reset`, { method: 'POST' });
+    try {
+      const turnId = ulid();
+      const bundle = {
+        v: 2,
+        op: 'turn',
+        turnId,
+        sessionId: ulid(),
+        engineSlug: CLAUDE,
+        engineAccount: 'EN-9002',
+        params: { model: null, effort: null },
+        authMethod: 'subscription',
+        detectedFlags: [...(adapter?.requiredTurnFlags ?? [])],
+        prompt: { user: { path: 'user.md', content: 'Gọi công cụ echo.' }, system: null },
+        timeoutMs: 120_000,
+        measure: null,
+        nativeMemoryPolicy: 'tmpfs-per-turn',
+        expiresAt: expiresAt(),
+      };
+      await fetch(`http://${stubHost}:7499/_test/bundle`, { method: 'POST', body: JSON.stringify({ ticket, bundle }) });
+      const r = await sup.rpc('exec', {
+        container: { name: SYS },
+        run: { command: 'turn', turnId, ticket },
+        timeoutMs: 180_000,
+      });
+      const fs = frames(r.text);
+      const p = protocol(fs);
+      if (!p.ok || p.report.command !== 'turn') throw new Error(`lượt MCP: ${JSON.stringify(p).slice(0, 2000)}`);
+      expect(p.report.exit.exitCode).toBe(0);
+      // CLI giả thấy kết quả tool do gateway trả qua cầu (SSE → một dòng JSON-RPC)
+      expect(p.lines.some((l) => l.includes('tool_result') && l.includes('echo:'))).toBe(true);
+      // gateway: đúng chuỗi MCP, vé đúng (sai ⇒ 401, không ghi log), cầu nhớ mcp-session-id sau initialize
+      const log = (await (await fetch(`http://${stubHost}:7499/_test/mcp`)).json()) as {
+        method: string;
+        tool: string | null;
+        args: unknown;
+        session: string | null;
+      }[];
+      expect(log.map((m) => m.method)).toEqual(['initialize', 'notifications/initialized', 'tools/call']);
+      expect(log[0]?.session).toBeNull();
+      expect(log[2]).toMatchObject({ tool: 'echo', args: { x: 1 }, session: 'stub-sess-1' });
+      // vé không ra output; tmpfs lượt (kể cả tệp vé) đã xoá
+      expect(r.text).not.toContain(ticket);
+      expect(cexec(SYS, ['sh', '-c', `test -e /run/ga/${turnId} && echo còn || echo không`]).stdout.trim()).toBe(
+        'không',
+      );
+    } finally {
+      cexec(SYS, ['rm', '-f', '/run/ga/ga-fakes-config.json']);
+    }
+  }, 240_000);
+
+  it('cầu mcp-bridge THẬT trong container: vé sai ⇒ lỗi JSON-RPC 401; thiếu tệp vé ⇒ thoát kèm lỗi rõ; quá cỡ ⇒ -32600, thông điệp sau vẫn đi', async () => {
+    const good = randomBytes(32).toString('base64url');
+    const bad = randomBytes(32).toString('base64url');
+    await fetch(`http://${stubHost}:7499/_test/bundle`, {
+      method: 'POST',
+      body: JSON.stringify({ ticket: good, bundle: {} }),
+    });
+    await fetch(`http://${stubHost}:7499/_test/mcp-reset`, { method: 'POST' });
+    const dir = `/run/ga/${ulid()}`;
+    const writeTicket = (t: string) =>
+      cexec(
+        SYS,
+        [
+          'sh',
+          '-c',
+          `mkdir -p -m 0700 ${dir} && rm -f ${dir}/ticket && umask 077 && cat > ${dir}/ticket && chmod 0400 ${dir}/ticket`,
+        ],
+        {
+          input: t,
+        },
+      );
+    const bridge = (ticketFile: string, input: string) =>
+      cexec(
+        SYS,
+        ['/usr/local/bin/ga-runner', 'mcp-bridge', '--url', 'http://ga-app:7410/mcp', '--ticket-file', ticketFile],
+        {
+          input,
+        },
+      );
+    const ping = (id: number) => `${JSON.stringify({ jsonrpc: '2.0', id, method: 'ping' })}\n`;
+    const out = (s: string) =>
+      s
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as Record<string, unknown>);
+    try {
+      // đối chứng: vé đúng ⇒ đi qua
+      expect(writeTicket(good).code).toBe(0);
+      const ok = bridge(`${dir}/ticket`, ping(1));
+      expect([ok.code, out(ok.stdout)]).toEqual([0, [{ jsonrpc: '2.0', id: 1, result: {} }]]);
+      // vé sai (đúng dạng, không phải vé lượt) ⇒ gateway 401 ⇒ lỗi JSON-RPC đúng id, không im lặng
+      expect(writeTicket(bad).code).toBe(0);
+      const wrong = bridge(`${dir}/ticket`, ping(2));
+      expect(out(wrong.stdout)).toEqual([
+        { jsonrpc: '2.0', id: 2, error: { code: -32001, message: 'gateway trả 401' } },
+      ]);
+      // thiếu tệp vé ⇒ không chạy, thoát 125 + sự kiện lỗi rõ trên stderr, stdout trống
+      const missing = bridge(`/run/ga/${ulid()}/ticket`, ping(3));
+      expect(missing.code).toBe(125);
+      expect(missing.stdout).toBe('');
+      expect(missing.stderr).toContain('ticket_file_missing');
+      // thông điệp > 1 MiB ⇒ -32600 (id null), bị bỏ trước khi tới gateway; thông điệp sau vẫn đi
+      expect(writeTicket(good).code).toBe(0);
+      const big = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'tools/call',
+        params: { name: 'echo', arguments: { p: 'a'.repeat(1024 * 1024) } },
+      });
+      const over = bridge(`${dir}/ticket`, `${big}\n${ping(4)}`);
+      const o = out(over.stdout);
+      expect(o).toHaveLength(2);
+      expect(o[0]).toMatchObject({ id: null, error: { code: -32600 } });
+      expect(o[1]).toEqual({ jsonrpc: '2.0', id: 4, result: {} });
+      // gateway chỉ thấy hai ping hợp lệ (vé sai bị 401 trước khi ghi; thông điệp quá cỡ không bao giờ gửi)
+      const log = (await (await fetch(`http://${stubHost}:7499/_test/mcp`)).json()) as {
+        method: string;
+        bytes: number;
+      }[];
+      expect(log.map((m) => m.method)).toEqual(['ping', 'ping']);
+      expect(Math.max(...log.map((m) => m.bytes))).toBeLessThan(1024);
+      for (const r of [ok, wrong, missing, over]) {
+        expect(r.stdout + r.stderr).not.toContain(good);
+        expect(r.stdout + r.stderr).not.toContain(bad);
+      }
+    } finally {
+      cexec(SYS, ['rm', '-rf', dir]);
+    }
+  }, 120_000);
+
   it('container Role: không docker.sock, không gọi được 7401, bị chặn example.com (cả qua egress lẫn đi thẳng)', async () => {
     const e = await rpcJson('ensureContainer', { consumer: ROLE, template: 'role.v1', authVolumes: [VOL_ROLE] });
     const name = String((e.json?.container as { name?: string } | undefined)?.name);
