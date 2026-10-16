@@ -481,36 +481,7 @@ function EMO(): string {
       40,
     ),
   );
-  o.push(
-    E(
-      'gourd',
-      144,
-      118,
-      `<g class="gd"><path d="M0 -26 C-6 -26 -7 -17 -4 -12 C-14 -8 -17 4 -14 14 C-10 25 10 25 14 14 C17 4 14 -8 4 -12 C7 -17 6 -26 0 -26Z" fill="#D9892B" style="stroke-width:2px"/><path d="M-9 -4 Q-12 6 -8 14" fill="none" stroke="#F4C46A" style="stroke-width:2.4px"/><rect x="-3" y="-34" width="6" height="9" rx="2" fill="#7A4A1A" style="stroke-width:1.5px"/><path d="M-5 -10 Q0 -6 5 -10" fill="none" stroke="#C8363B" style="stroke-width:2.6px"/></g>`,
-      40,
-    ),
-  );
   o.push(E('hic', 150, 20, TXT('hic!', 20, 'font-style="italic"'), 40));
-  o.push(
-    E(
-      'pad',
-      100,
-      152,
-      `<rect x="-40" y="-22" width="80" height="44" rx="12" fill="#4B4F63" style="stroke-width:2.4px"/><rect x="-23" y="-15" width="46" height="30" rx="4" fill="#9BE3A9" style="stroke-width:1.8px"/><g class="scr"><rect x="-17" y="-8" width="6" height="6" fill="${INK}" stroke="none"/><rect x="-4" y="1" width="6" height="6" fill="${INK}" stroke="none"/><rect x="8" y="-9" width="6" height="6" fill="${INK}" stroke="none"/></g>` +
-        `<path d="M-33 -3 H-27 M-30 -6 V0" fill="none" stroke="#E8E4DD" style="stroke-width:2.6px"/><circle cx="31" cy="-5" r="3" fill="#E5483F" style="stroke-width:1.2px"/><circle cx="36" cy="2" r="3" fill="#3FA9F5" style="stroke-width:1.2px"/>` +
-        [
-          [-14, -30],
-          [2, -36],
-          [16, -29],
-        ]
-          .map(
-            ([x, y], i) =>
-              `<g class="blp" style="--i:${i}"><rect x="${x}" y="${y}" width="5" height="5" fill="#FFE45E" style="stroke-width:1.2px"/></g>`,
-          )
-          .join(''),
-      48,
-    ),
-  );
   o.push(E('bang3', 100, -20, TXT('!!!', 40, 'y="10"'), 48));
   o.push(E('sweatL', 152, 34, `<g transform="scale(2.5)">${DROP}</g>`, 40));
   o.push(E('qwob', 100, -8, `<g transform="scale(2)">${QM('#FFD84A')}</g>`, 40));
@@ -606,9 +577,7 @@ export const EMOTES = [
   'glasses',
   'dots',
   'scope',
-  'gourd',
   'hic',
-  'pad',
   'bang3',
   'sweatL',
   'qwob',
@@ -616,6 +585,32 @@ export const EMOTES = [
   'rays',
 ] as const;
 export type EmoteName = (typeof EMOTES)[number];
+
+/* ---- vật CẦM THẬT (không phải emote): hồ lô ở tay phải, máy chơi game ở hai tay ---- */
+export const HOLD_NAMES = ['gourd', 'pad'] as const;
+export type HoldName = (typeof HOLD_NAMES)[number];
+/** hồ lô: gốc (0,0) = bàn tay, cổ hồ lô nằm trong lòng bàn tay (bàn tay vẽ SAU, che phần nắm) */
+export const GOURD_HELD = `<g transform="translate(0 12)"><g class="gd"><path d="M0 -26 C-6 -26 -7 -17 -4 -12 C-14 -8 -17 4 -14 14 C-10 25 10 25 14 14 C17 4 14 -8 4 -12 C7 -17 6 -26 0 -26Z" fill="#D9892B" style="stroke-width:2px"/><path d="M-9 -4 Q-12 6 -8 14" fill="none" stroke="#F4C46A" style="stroke-width:2.4px"/><rect x="-3" y="-34" width="6" height="9" rx="2" fill="#7A4A1A" style="stroke-width:1.5px"/><path d="M-5 -10 Q0 -6 5 -10" fill="none" stroke="#C8363B" style="stroke-width:2.6px"/></g></g>`;
+/** máy chơi game cầm tay: vẽ ở toạ độ nhân vật, giữa hai bàn tay (ngón cái nằm trên phím điều hướng và nút bấm) */
+export const PAD_HELD =
+  `<g transform="translate(100 166)"><g class="padb">` +
+  `<rect x="-40" y="-22" width="80" height="44" rx="12" fill="#4B4F63" style="stroke-width:2.4px"/><rect x="-23" y="-15" width="46" height="30" rx="4" fill="#9BE3A9" style="stroke-width:1.8px"/><g class="scr"><rect x="-17" y="-8" width="6" height="6" fill="${INK}" stroke="none"/><rect x="-4" y="1" width="6" height="6" fill="${INK}" stroke="none"/><rect x="8" y="-9" width="6" height="6" fill="${INK}" stroke="none"/></g>` +
+  `<path d="M-33 -3 H-27 M-30 -6 V0" fill="none" stroke="#E8E4DD" style="stroke-width:2.6px"/><circle cx="31" cy="-5" r="3" fill="#E5483F" style="stroke-width:1.2px"/><circle cx="36" cy="2" r="3" fill="#3FA9F5" style="stroke-width:1.2px"/>` +
+  [
+    [-14, -30],
+    [2, -36],
+    [16, -29],
+  ]
+    .map(
+      ([x, y], i) =>
+        `<g class="blp" style="--i:${i}"><rect x="${x}" y="${y}" width="5" height="5" fill="#FFE45E" style="stroke-width:1.2px"/></g>`,
+    )
+    .join('') +
+  `</g></g>`;
+export const holdMarkup = (h: HoldName | null): { hx: string; pad: string } => ({
+  hx: h === 'gourd' ? GOURD_HELD : '',
+  pad: h === 'pad' ? PAD_HELD : '',
+});
 
 /* ---- hero badge cho 32 / 64 px: lưới 32×32, một biểu tượng đọc được ---- */
 const BG = `<circle class="hbg" cx="16" cy="16" r="15" fill="#FFF7E6" stroke="${INK}" stroke-width="2.4"/>`;

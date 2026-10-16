@@ -257,9 +257,9 @@ describe('biểu cảm khoa trương (bảng C spike): mỗi tướng đều có
         return (
           em(id, 'idle', 'nap').has('zzz') &&
           em(id, 'idle', 'nap').has('snot') &&
-          em(id, 'idle', 'drunk').has('gourd') &&
+          d.hold === 'gourd' &&
           em(id, 'idle', 'drunk').has('hic') &&
-          em(id, 'idle', 'game').has('pad') &&
+          g.hold === 'pad' &&
           new Set([n.m.join(), d.m.join(), g.m.join()]).size === 3
         );
       },
@@ -303,6 +303,23 @@ describe('chuyển động: quy tắc cấu trúc của CSS', () => {
     expect(new Set(names)).toEqual(new Set(['chb-k-blink', 'chb-k-breathe']));
   });
 
+  it('ui.avatar_motion: full không có thuộc tính; subtle / off gắn data-chb-mo + khung đỉnh không emote; CSS tĩnh chỉ tắt animation, không bật thêm', () => {
+    const full = svg('tq044', 'penalty', { size: 160, fixedPhase: true });
+    const subtle = svg('tq044', 'penalty', { size: 160, fixedPhase: true, motion: 'subtle' });
+    const off = svg('tq044', 'penalty', { size: 160, fixedPhase: true, motion: 'off' });
+    expect(full).not.toContain('data-chb-mo="');
+    expect(subtle).toContain('data-chb-mo="s"');
+    expect(off).toContain('data-chb-mo="o"');
+    expect(full).toContain('data-chb-em="excl"'); // pha đầu của penalty có emote
+    for (const o of [subtle, off]) expect(o).toContain('data-chb-em=""');
+    for (const o of [subtle, off]) expect(o).toContain('data-chb-eyes="sob"'); // khung đỉnh
+    const css = stripComments(CSS);
+    const stat = blocks(css).filter((b) => b.head.includes('[data-chb-mo'));
+    expect(stat.length).toBeGreaterThan(30); // cùng bộ pose tĩnh với reduced-motion
+    for (const b of stat) expect(b.body).not.toMatch(/animation\s*:\s*(?!none)/);
+    expect(css).toMatch(/\.chb\[data-chb-mo="s"\] \*:not\(\.chb-breath\):not\(\.chb-e-n\)\{ animation:none !important/);
+  });
+
   it('keyframes chỉ animate transform / opacity / rotate / scale / stroke-dashoffset; không animate biến tuỳ ý (không còn @property)', () => {
     const allowed = new Set(['transform', 'opacity', 'stroke-dashoffset', 'rotate', 'scale']);
     const bad = new Set<string>();
@@ -335,6 +352,30 @@ describe('chuyển động: quy tắc cấu trúc của CSS', () => {
     for (const v of IDLE_VARIANTS) expect(svg('tq080', 'idle', { variant: v })).toContain(`data-chb-v="${v}"`);
     expect(svg('tq080', 'idle')).toContain('data-chb-auto="1"');
     expect(svg('tq080', 'idle', { variant: 'nap' })).not.toContain('data-chb-auto');
+  });
+
+  it('hồ lô / máy game là vật CẦM THẬT (không còn là emote trôi nổi): chỉ dựng ở cỡ lớn, đúng biến thể idle', () => {
+    expect(EMOTES as readonly string[]).not.toContain('gourd');
+    expect(EMOTES as readonly string[]).not.toContain('pad');
+    const drunk = svg('tq046', 'idle', { variant: 'drunk', size: 160, fixedPhase: true });
+    const game = svg('tq046', 'idle', { variant: 'game', size: 160, fixedPhase: true });
+    const nap = svg('tq046', 'idle', { variant: 'nap', size: 160, fixedPhase: true });
+    expect(drunk).toMatch(/class="chb-hx"><g transform="translate\(0 12\)"><g class="chb-gd"/);
+    expect(game).toMatch(/class="chb-gpad"><g transform="translate\(100 166\)"><g class="chb-padb"/);
+    expect(drunk).not.toContain('chb-padb');
+    expect(game).not.toContain('chb-gd');
+    expect(nap).not.toMatch(/chb-gd|chb-padb/);
+    expect(svg('tq046', 'idle', { variant: 'drunk', size: 64 })).not.toMatch(/chb-gd|chb-hx/);
+    expect(svg('tq046', 'normal', { size: 160 })).toMatch(/class="chb-hx"><\/g>/);
+    for (const id of CODES) {
+      expect(resolve(id, 'idle', 'drunk').hold).toBe('gourd');
+      expect(resolve(id, 'idle', 'game').hold).toBe('pad');
+      expect(resolve(id, 'idle', 'nap').hold).toBeNull();
+      expect(resolve(id, 'normal').hold).toBeNull();
+    }
+    // hai bàn tay luôn có điểm đặt trên máy game (biến góc + tỉ lệ tay)
+    expect(game).toMatch(/--chb-gripL:-?[\d.]+deg;/);
+    expect(game).toMatch(/--chb-gripKR:[\d.]+/);
   });
 
   it('cỡ nhỏ / vừa chỉ giữ thân + đầu + một huy hiệu (ít phần tử hơn cỡ lớn)', () => {

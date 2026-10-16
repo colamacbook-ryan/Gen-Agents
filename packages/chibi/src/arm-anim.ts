@@ -12,6 +12,9 @@
 //   X-hR         góc đạo cụ riêng (--hR) cho .held-h (lồng trong .held), chỉ họ nào có --hR
 // Chỉ thị trong CSS_MOTION:  "@arm <tiền tố selector> | <họ> | <thời gian + easing>"  và  "@armnone <tiền tố selector> | R".
 
+/** Góc (theo thế giới) của đạo cụ cầm tay khi bàn tay ở ngang cằm / ngực (chắp tay, nghĩ, xoa tay): mũi đạo cụ chúc xuống, không cắt ngang mặt */
+export const STOW = '150deg';
+
 export interface ArmFrame {
   /** bộ chọn khung CSS: "0%,12%", "from", "to" */
   at: string;
@@ -28,12 +31,12 @@ export const ARM_FAMILIES: Record<string, ArmFrame[]> = {
     { at: '50%', raL: 'var(--flail)', raR: 'calc(var(--flail) * -1)' },
   ],
   'k-ar-wait': [
-    { at: 'from', raL: 'calc(var(--prayL) - 9deg)', raR: 'calc(var(--prayR) + 9deg)', hR: '62deg' },
-    { at: 'to', raL: 'calc(var(--prayL) + 7deg)', raR: 'calc(var(--prayR) - 7deg)', hR: '62deg' },
+    { at: 'from', raL: 'calc(var(--prayL) - 9deg)', raR: 'calc(var(--prayR) + 9deg)', hR: STOW },
+    { at: 'to', raL: 'calc(var(--prayL) + 7deg)', raR: 'calc(var(--prayR) - 7deg)', hR: STOW },
   ],
   'k-ar-reward': [
-    { at: 'from', raL: 'calc(var(--chestL) - 10deg)', raR: 'calc(var(--chestR) + 10deg)' },
-    { at: 'to', raL: 'calc(var(--chestL) + 9deg)', raR: 'calc(var(--chestR) - 9deg)' },
+    { at: 'from', raL: 'calc(var(--chestL) - 10deg)', raR: 'calc(var(--chestR) + 10deg)', hR: STOW },
+    { at: 'to', raL: 'calc(var(--chestL) + 9deg)', raR: 'calc(var(--chestR) - 9deg)', hR: STOW },
   ],
   'k-ar-penalty': [
     { at: 'from', raL: 'calc(var(--outL) * 1.6)', raR: 'var(--limpR)' },
@@ -170,34 +173,46 @@ export const ARM_FAMILIES: Record<string, ArmFrame[]> = {
     { at: '75%', raL: 'calc(var(--chestL) + 10deg)' },
   ],
   'k-ar-chin': [
-    { at: 'from', raR: 'calc(var(--chinR) - 4deg)' },
-    { at: 'to', raR: 'calc(var(--chinR) + 5deg)' },
+    { at: 'from', raR: 'calc(var(--chinR) - 4deg)', hR: STOW },
+    { at: 'to', raR: 'calc(var(--chinR) + 5deg)', hR: STOW },
   ],
   'k-ar-unsure': [
-    { at: '0%,6%', raL: '0deg', raR: '0deg' },
-    { at: '12%', raR: 'var(--scratchR)', raL: 'calc(var(--chestL) * .8)' },
-    { at: '16%,28%,40%', raR: 'calc(var(--scratchR) + 7deg)' },
+    { at: '0%,6%', raL: '0deg', raR: '0deg', hR: '0deg' },
+    { at: '12%', hR: '0deg', raR: 'var(--scratchR)', raL: 'calc(var(--chestL) * .8)' },
+    { at: '16%,28%,40%', raR: 'calc(var(--scratchR) + 7deg)', hR: '0deg' },
     { at: '20%,32%,36%', raR: 'calc(var(--scratchR) - 7deg)' },
     { at: '24%', raR: 'calc(var(--scratchR) + 7deg)' },
-    { at: '48%', raL: 'var(--chestL)', raR: 'var(--chestR)' },
+    { at: '48%', raL: 'var(--chestL)', raR: 'var(--chestR)', hR: STOW },
     { at: '54%,66%,78%', raL: 'calc(var(--chestL) + 6deg)', raR: 'calc(var(--chestR) - 6deg)' },
     { at: '60%,72%', raL: 'calc(var(--chestL) - 6deg)', raR: 'calc(var(--chestR) + 6deg)' },
-    { at: '90%', raL: 'calc(var(--chestL) * .6)', raR: 'calc(var(--chestR) * .6)' },
-    { at: '100%', raL: '0deg', raR: '0deg' },
+    { at: '90%', raL: 'calc(var(--chestL) * .6)', raR: 'calc(var(--chestR) * .6)', hR: STOW },
+    { at: '100%', raL: '0deg', raR: '0deg', hR: '0deg' },
   ],
   'k-ar-drink': [
-    { at: '0%', raR: 'var(--limpR)', raL: 'calc(var(--limpL) - 6deg)' },
+    { at: '0%', raR: 'var(--limpR)', raL: 'calc(var(--limpL) - 6deg)', kR: '1' },
     { at: '12%', raR: 'var(--limpR)' },
     { at: '25%', raL: 'calc(var(--limpL) + 10deg)' },
-    { at: '30%,56%', raR: 'var(--eatR)' },
+    { at: '30%,56%', raR: 'var(--eatR)', kR: 'var(--eatK)' },
     { at: '50%', raL: 'calc(var(--limpL) - 6deg)' },
-    { at: '70%,100%', raR: 'var(--limpR)' },
+    { at: '70%,100%', raR: 'var(--limpR)', kR: '1' },
     { at: '75%', raL: 'calc(var(--limpL) + 10deg)' },
     { at: '100%', raL: 'calc(var(--limpL) - 6deg)' },
   ],
   'k-ar-game': [
-    { at: 'from', raL: 'calc(var(--chestL) - 4deg)', raR: 'calc(var(--chestR) + 3deg)' },
-    { at: 'to', raL: 'calc(var(--chestL) + 4deg)', raR: 'calc(var(--chestR) - 3deg)' },
+    {
+      at: 'from',
+      raL: 'calc(var(--gripL) - 4deg)',
+      raR: 'calc(var(--gripR) + 3deg)',
+      kL: 'var(--gripKL)',
+      kR: 'var(--gripKR)',
+    },
+    {
+      at: 'to',
+      raL: 'calc(var(--gripL) + 4deg)',
+      raR: 'calc(var(--gripR) - 3deg)',
+      kL: 'var(--gripKL)',
+      kR: 'var(--gripKR)',
+    },
   ],
   'k-ar-discover': [
     { at: '0%,14%', raL: '0deg', raR: '0deg', kL: '1' },
@@ -292,7 +307,7 @@ function armRules(prefix: string, family: string, timing: string): string {
     out.push(`${arm}{ animation:${family}-${s} ${timing} }`);
     const ra = rotKey(s);
     if ((ARM_FAMILIES[family] ?? []).some((f) => f[ra] !== undefined)) {
-      const kids = s === 'R' ? ['.held', '.brush', '.ribw'] : ['.ribw'];
+      const kids = s === 'R' ? ['.held', '.brush', '.ribw', '.hx:not(:empty)'] : ['.ribw'];
       out.push(`${kids.map((c) => `${arm} ${c}`).join(',')}{ animation:${family}-c${s} ${timing} }`);
     }
     if (s === 'R' && hasHeld(family)) out.push(`${arm} .held-h{ animation:${family}-hR ${timing} }`);
@@ -303,7 +318,7 @@ function armRules(prefix: string, family: string, timing: string): string {
 /** tắt animation của tay bên s (và các con quay ngược) khi một token khác chiếm tay đó */
 function armNone(prefix: string, s: Side): string {
   const arm = `${prefix} .arm-${s}`;
-  const kids = s === 'R' ? ['.held', '.held-h', '.brush', '.ribw'] : ['.ribw'];
+  const kids = s === 'R' ? ['.held', '.held-h', '.brush', '.ribw', '.hx'] : ['.ribw'];
   return `${arm}{ animation:none }\n${kids.map((c) => `${arm} ${c}`).join(',')}{ animation:none }`;
 }
 

@@ -36,7 +36,7 @@ interface Session {
   errors: string[];
 }
 
-describe.skipIf(!enabled)('Chromium thật', () => {
+describe.skipIf(!enabled)('Chromium thật', { timeout: 180_000 }, () => {
   let server: TestServer;
   let browser: Browser;
   const sessions: BrowserContext[] = [];
@@ -303,6 +303,236 @@ describe.skipIf(!enabled)('Chromium thật', () => {
       'normal',
     ]);
     expect(res.fallback).toBe('normal');
+    expect(errors).toEqual([]);
+  });
+
+  it('đạo cụ cầm tay không cắt vùng mắt–mũi khi chắp tay / nghĩ / xoa tay (điểm yếu spike, đo bằng hình học thật)', async () => {
+    const { page, errors } = await open(false);
+    const res = await page.evaluate(
+      async ({ ids, states, skip }: { ids: string[]; states: string[]; skip: string[] }) => {
+        type Q = { x: number; y: number }[];
+        const W = window as never as {
+          __api: { mount(id: string, s: string): SVGSVGElement; freeze(f: number): void };
+        };
+        // hai hình tứ giác lồi giao nhau? (SAT)
+        const sat = (A: Q, B: Q): boolean => {
+          for (const P of [A, B]) {
+            for (let i = 0; i < 4; i++) {
+              const a = P[i] as Q[number];
+              const c = P[(i + 1) % 4] as Q[number];
+              const nx = -(c.y - a.y);
+              const ny = c.x - a.x;
+              const pr = (Qd: Q) => Qd.map((p) => p.x * nx + p.y * ny);
+              const pa = pr(A);
+              const pb = pr(B);
+              if (Math.max(...pa) < Math.min(...pb) || Math.max(...pb) < Math.min(...pa)) return false;
+            }
+          }
+          return true;
+        };
+        const quad = (el: SVGGraphicsElement): Q => {
+          const bb = el.getBBox();
+          const m = el.getScreenCTM() as DOMMatrix;
+          return [
+            [bb.x, bb.y],
+            [bb.x + bb.width, bb.y],
+            [bb.x + bb.width, bb.y + bb.height],
+            [bb.x, bb.y + bb.height],
+          ].map(([x, y]) => {
+            const p = new DOMPoint(x, y).matrixTransform(m);
+            return { x: p.x, y: p.y };
+          });
+        };
+        const bad: string[] = [];
+        let samples = 0;
+        for (const id of ids) {
+          for (const s of states) {
+            if (skip.includes(`${id}/${s}`)) continue;
+            const svg = W.__api.mount(id, s);
+            for (let k = 0; k < 20; k++) {
+              W.__api.freeze(k / 20);
+              const held = svg.querySelector('.chb-arm-R .chb-held');
+              const face = svg.querySelector('[data-part="face"]') as SVGGraphicsElement;
+              if (!held) continue;
+              samples++;
+              const fm = face.getScreenCTM() as DOMMatrix;
+              // vùng mắt + mũi (toạ độ đầu): x 62–138, y 58–92
+              const zone: Q = [
+                [62, 58],
+                [138, 58],
+                [138, 92],
+                [62, 92],
+              ].map(([x, y]) => {
+                const p = new DOMPoint(x, y).matrixTransform(fm);
+                return { x: p.x, y: p.y };
+              });
+              for (const el of held.querySelectorAll<SVGGraphicsElement>('path,rect,circle,ellipse')) {
+                if (el.closest('.chb-dt')) continue;
+                const bb = el.getBBox();
+                if (Math.max(bb.width, bb.height) < 38) continue; // chỉ phần chính (lông quạt, lưỡi kiếm, mặt quạt lụa); tay cầm + tua nhỏ bỏ qua
+                if (sat(quad(el), zone)) {
+                  bad.push(`${id}/${s}@${k / 20}`);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        return { bad, samples };
+      },
+      {
+        ids: ['tq046', 'tq080', 'tq141', 'tq010'],
+        states: ['wait', 'reward', 'think'],
+        // khi mừng Tôn Thượng Hương múa kiếm (trait prop-swordT, chủ ý hài): kiếm vung qua mặt là hành vi, không phải lỗi tư thế
+        skip: ['tq141/reward'],
+      },
+    );
+    expect(res.samples).toBeGreaterThan(200);
+    expect(res.bad).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  it('hồ lô nằm trong bàn tay phải và lên tới miệng khi uống; máy game nằm giữa hai bàn tay (ngón cái trên phím)', async () => {
+    const { page, errors } = await open(false);
+    const res = await page.evaluate(
+      async (ids: string[]) => {
+        const W = window as never as {
+          Chibi: { mount(el: Element, id: string, s: string, o: object): { svg: SVGSVGElement; destroy(): void } };
+          __api: { freeze(f: number): void };
+        };
+        const host = document.getElementById('s') as HTMLElement;
+        const rect = (el: Element) => el.getBoundingClientRect();
+        const near = (a: DOMRect, b: DOMRect, pad: number) =>
+          a.left < b.right + pad && a.right > b.left - pad && a.top < b.bottom + pad && a.bottom > b.top - pad;
+        const bad: string[] = [];
+        for (const id of ids) {
+          const d = W.Chibi.mount(host, id, 'idle', { size: 160, variant: 'drunk', fixedPhase: true });
+          for (const f of [0.02, 0.2, 0.45, 0.9]) {
+            W.__api.freeze(f);
+            const gd = d.svg.querySelector('.chb-gd');
+            const hand = d.svg.querySelector('.chb-arm-R [data-part="hand"]');
+            if (!gd || !hand) {
+              bad.push(`${id}: thiếu hồ lô / bàn tay`);
+              continue;
+            }
+            if (!near(rect(gd), rect(hand), 3)) bad.push(`${id}: hồ lô rời tay @${f}`);
+            // Triệu Vân khoá hai tay giữ em bé (lockR): hồ lô ở lại chỗ tay giữ, không lên miệng
+            if (f === 0.45 && id !== 'tq047') {
+              const face = rect(d.svg.querySelector('[data-part="face"]') as Element);
+              if (!near(rect(gd), face, 0) || rect(gd).bottom < face.top + face.height * 0.45)
+                bad.push(`${id}: hồ lô chưa lên miệng @${f}`);
+            }
+          }
+          d.destroy();
+          const g = W.Chibi.mount(host, id, 'idle', { size: 160, variant: 'game', fixedPhase: true });
+          for (const f of [0.02, 0.25, 0.5, 0.75]) {
+            W.__api.freeze(f);
+            const pad = g.svg.querySelector('.chb-padb');
+            const hl = g.svg.querySelector('.chb-arm-L [data-part="hand"]');
+            const hr = g.svg.querySelector('.chb-arm-R [data-part="hand"]');
+            if (!pad || !hl || !hr) {
+              bad.push(`${id}: thiếu máy game / tay`);
+              continue;
+            }
+            const p = rect(pad);
+            for (const [n, h] of [
+              ['trái', hl],
+              ['phải', hr],
+            ] as const) {
+              const r = rect(h);
+              const cx = r.left + r.width / 2;
+              const cy = r.top + r.height / 2;
+              if (cx < p.left - 4 || cx > p.right + 4 || cy < p.top - 4 || cy > p.bottom + 4)
+                bad.push(`${id}: tay ${n} rời máy game @${f}`);
+            }
+          }
+          g.destroy();
+        }
+        return bad;
+      },
+      [...CODES],
+    );
+    expect(res).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  it('ui.avatar_motion: full > subtle (chỉ thở + chớp mắt) > off (0 animation, pose tĩnh + huy hiệu); đổi nóng bằng setMotion', async () => {
+    const { page, errors } = await open(false);
+    const res = await page.evaluate(async () => {
+      const C = (
+        window as never as {
+          Chibi: {
+            mount(
+              el: Element,
+              id: string,
+              s: string,
+              o: object,
+            ): { svg: SVGSVGElement; setMotion(l: string): void; setState(s: string): void; destroy(): void };
+          };
+        }
+      ).Chibi;
+      const host = document.getElementById('s') as HTMLElement;
+      const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
+      const kinds = (svg: SVGSVGElement) =>
+        [
+          ...new Set(
+            svg.getAnimations({ subtree: true }).map((a) => {
+              const t = (a.effect as KeyframeEffect).target as Element;
+              return t.classList.contains('chb-breath')
+                ? 'breath'
+                : t.classList.contains('chb-e-n')
+                  ? 'blink'
+                  : (t.getAttribute('class') ?? '');
+            }),
+          ),
+        ].sort();
+      const out: Record<string, unknown> = {};
+      for (const m of ['full', 'subtle', 'off']) {
+        const h = C.mount(host, 'tq044', 'reward', { size: 160, motion: m });
+        await frame();
+        const hero = h.svg.querySelector('svg.chb-hero');
+        const emo = h.svg.querySelector('.chb-emo');
+        out[m] = {
+          n: h.svg.getAnimations({ subtree: true }).length,
+          kinds: kinds(h.svg),
+          hero: !!hero && getComputedStyle(hero).display !== 'none',
+          emo: !!emo && getComputedStyle(emo).display !== 'none',
+          em: h.svg.getAttribute('data-chb-em'),
+        };
+        h.destroy();
+      }
+      const h = C.mount(host, 'tq044', 'reward', { size: 160 });
+      await frame();
+      const a0 = h.svg.getAnimations({ subtree: true }).length;
+      h.setMotion('off');
+      await frame();
+      const a1 = h.svg.getAnimations({ subtree: true }).length;
+      h.setMotion('subtle');
+      await frame();
+      const a2 = kinds(h.svg);
+      h.setMotion('full');
+      h.setState('penalty');
+      await new Promise((r) => setTimeout(r, 120));
+      const a3 = h.svg.getAnimations({ subtree: true }).length;
+      h.destroy();
+      return { out, live: { a0, a1, a2, a3 } };
+    });
+    const o = res.out as Record<string, { n: number; kinds: string[]; hero: boolean; emo: boolean; em: string }>;
+    expect(o.full?.n).toBeGreaterThan(8);
+    expect(o.full?.emo).toBe(true);
+    expect(o.off?.n).toBe(0);
+    expect(o.off?.hero).toBe(true);
+    expect(o.off?.emo).toBe(false);
+    expect(o.off?.em).toBe('');
+    expect(o.subtle?.kinds.every((k) => k === 'breath' || k === 'blink')).toBe(true);
+    expect(o.subtle?.n).toBeGreaterThanOrEqual(1);
+    expect(o.subtle?.n).toBeLessThanOrEqual(2);
+    expect(o.subtle?.hero).toBe(true);
+    expect(o.subtle?.emo).toBe(false);
+    expect(res.live.a0).toBeGreaterThan(8);
+    expect(res.live.a1).toBe(0);
+    expect(res.live.a2.every((k: string) => k === 'breath' || k === 'blink')).toBe(true);
+    expect(res.live.a3).toBeGreaterThan(8);
     expect(errors).toEqual([]);
   });
 

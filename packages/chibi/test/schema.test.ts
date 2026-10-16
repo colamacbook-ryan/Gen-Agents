@@ -318,3 +318,63 @@ describe('svg(): dữ liệu từ ngoài không chui vào markup', () => {
     expect(svg('tq046', '<script>')).toContain('data-chb-s="normal"');
   });
 });
+
+describe('hiệu năng bộ kiểm với dữ liệu từ ngoài (STD-11: giới hạn kích thước + không bùng nổ)', () => {
+  const timeMs = (fn: () => void): number => {
+    const t0 = performance.now();
+    fn();
+    return performance.now() - t0;
+  };
+
+  it('trường hợp xấu nhất còn nằm dưới trần 32 KB (11 phép kiểm lồng sâu 3 tầng × 4 nhánh) kiểm xong < 500 ms', () => {
+    const leaf = { part: 'prop-fan' };
+    const wide = (d: number): unknown =>
+      d === 0 ? leaf : { [d % 2 ? 'all' : 'any']: Array.from({ length: 4 }, () => wide(d - 1)) };
+    const o = base();
+    const id = o.identity as { must: { check: unknown }[]; extra: { label: string; check: unknown }[] };
+    for (const m of id.must) m.check = wide(3);
+    id.must.length = 3;
+    id.extra = Array.from({ length: 8 }, (_, i) => ({ label: `x${i}`, check: wide(3) }));
+    const text = JSON.stringify(o);
+    const bytes = new TextEncoder().encode(text).length;
+    expect(bytes).toBeLessThanOrEqual(MAX_SPEC_BYTES);
+    expect(bytes).toBeGreaterThan(15_000);
+    let ok = false;
+    const ms = timeMs(() => {
+      ok = parse(text).ok;
+    });
+    expect(ok).toBe(true);
+    expect(ms).toBeLessThan(500);
+  });
+
+  it('chuỗi khổng lồ / mảng khổng lồ bị từ chối nhanh (không quét hết, không treo)', () => {
+    const o = base();
+    setIn(o, 'name', 'x'.repeat(5_000_000));
+    const ms1 = timeMs(() => {
+      expect(validate(o).ok).toBe(false);
+    });
+    const p = base();
+    setIn(
+      p,
+      'identity.extra',
+      Array.from({ length: 50_000 }, () => ({ label: 'x', check: { part: 'a' } })),
+    );
+    const ms2 = timeMs(() => {
+      expect(validate(p).ok).toBe(false);
+    });
+    expect(ms1).toBeLessThan(200);
+    expect(ms2).toBeLessThan(2000);
+    const ms3 = timeMs(() => {
+      expect(parse(`{"a":"${'x'.repeat(10_000_000)}"}`).ok).toBe(false); // chặn theo kích thước trước khi parse
+    });
+    expect(ms3).toBeLessThan(300);
+  });
+
+  it('kiểm 10 nhân vật thật: trung bình < 5 ms mỗi nhân vật', () => {
+    const specs = rawSpecs();
+    const ms = timeMs(() => {
+      for (let i = 0; i < 20; i++) for (const s of specs) validate(s);
+    });
+    expect(ms / (20 * specs.length)).toBeLessThan(5);
+  });
+});

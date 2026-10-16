@@ -66,6 +66,7 @@ export function arm(
   p: Params,
   held: string,
   cls: string,
+  hx: string | null = null,
 ): string {
   const [dx, dy] = d;
   const L = Math.hypot(dx, dy);
@@ -82,7 +83,7 @@ export function arm(
   const shadeD = `M${Pt(0, sd * W(0) * 0.08)} L${Pt(1, sd * W(1) * 0.08)} L${Pt(1, sd * W(1) * 0.5)} L${Pt(0, sd * W(0) * 0.5)}Z`;
   const t0 = 0.78;
   const cuff = `M${Pt(t0, W(t0) / 2)} L${Pt(1, W(1) / 2)} L${Pt(1, -W(1) / 2)} L${Pt(t0, -W(t0) / 2)}Z`;
-  const hx = f(dx + ux * 7);
+  const hx0 = f(dx + ux * 7);
   const hy = f(dy + uy * 7);
   const rib = p.ribbon ? waterSleeve(side, dx, dy, ux, uy, p.ribbon) : '';
   return (
@@ -95,8 +96,8 @@ export function arm(
     (p.armor
       ? `<g data-part="armor-gold"><path d="M-15 -3 C-15 -17 15 -17 15 -3 C15 6 8 10 0 10 C-8 10 -15 6 -15 -3Z" fill="${p.armorColor}"/><path class="dt" d="M-9 -9 Q0 -14 9 -9 M-11 -2 Q0 -8 11 -2" fill="none" stroke="${shade(p.armorColor, 0.35)}" style="stroke-width:1.5px"/></g>`
       : '') +
-    `<g transform="translate(${hx} ${hy})">${held ? `<g class="held"><g class="held-h">${held}</g></g>` : ''}` +
-    `<circle r="8.2" fill="${p.skin}"/><path d="M1 -2 Q5 1 2 5" fill="none" stroke="${shade(p.skin, 0.3)}" class="dt" style="stroke-width:1.4px"/>` +
+    `<g transform="translate(${hx0} ${hy})">${held ? `<g class="held"><g class="held-h">${held}</g></g>` : ''}${hx === null ? '' : `<g class="hx">${hx}</g>`}` +
+    `<circle data-part="hand" r="8.2" fill="${p.skin}"/><path d="M1 -2 Q5 1 2 5" fill="none" stroke="${shade(p.skin, 0.3)}" class="dt" style="stroke-width:1.4px"/>` +
     (side === 'R'
       ? `<g class="brush"><path d="M0 -14 L0 8" stroke="#6B4430" fill="none" style="stroke-width:3.4px"/><path d="M-2.2 8 L2.2 8 L0 17Z" fill="${INK}" stroke="none"/></g>`
       : '') +

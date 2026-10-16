@@ -19,6 +19,10 @@ const shortD = (a: number, b: number): number => {
 const cwD = (a: number, b: number): number => norm(b - a);
 const ccwD = (a: number, b: number): number => -norm(a - b);
 const toward = (S: Vec2, T: Vec2): number => deg(Math.atan2(T[1] - S[1], T[0] - S[0]));
+/** vị trí hai bàn tay khi cầm máy game (PAD_HELD ở (100,166): d-pad trái, nút bấm phải) */
+const GRIP_L: Vec2 = [70, 164];
+const GRIP_R: Vec2 = [131, 164];
+
 export function armVars(P: Params, cv: Cover | undefined): string {
   const p = P;
   const aL = angOf(p.armL),
@@ -59,8 +63,18 @@ export function armVars(P: Params, cv: Cover | undefined): string {
     wipeL: shortD(aL, toward(SL, [82, 76])) * kL,
     eatR: shortD(aR, toward(SR, [102, 100])) * kR,
     reachDownR: shortD(aR, 90) * kR,
+    // máy game: hai bàn tay đặt trên phím điều hướng (trái) và nút bấm (phải)
+    gripL: shortD(aL, toward(SL, GRIP_L)) * kL,
+    gripR: shortD(aR, toward(SR, GRIP_R)) * kR,
   };
-  const num = { wipeK: Math.min(1.4, 44 / lenL), eatK: Math.min(1, 36 / lenR) };
+  const reach = (S: Vec2, T: Vec2, len: number, locked: boolean): number =>
+    locked ? 1 : Math.max(0.5, Math.min(1.4, Math.hypot(T[0] - S[0], T[1] - S[1]) / len));
+  const num = {
+    wipeK: Math.min(1.4, 44 / lenL),
+    eatK: Math.min(1, 36 / lenR),
+    gripKL: reach(SL, GRIP_L, lenL, !!p.lockL),
+    gripKR: reach(SR, GRIP_R, lenR, !!p.lockR),
+  };
   return (
     Object.entries(v)
       .map(([k, x]) => `--${k}:${f(x)}deg`)

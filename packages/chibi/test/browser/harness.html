@@ -13,9 +13,9 @@ import * as C from '/src/index.ts';
 import { ST } from '/src/states.ts';
 
 const base = '/skins/tam-quoc-chibi/1.0.0/';
-const manifest = await (await fetch(base + 'manifest.json')).json();
+const manifest = await (await fetch(`${base}manifest.json`)).json();
 const chars = {};
-for (const c of manifest.characters) chars[c.file] = await (await fetch(base + c.file)).json();
+for (const c of manifest.characters) chars[c.file] = await (await fetch(`${base}${c.file}`)).json();
 C.loadSkinPack(manifest, (f) => chars[f]);
 const el = document.getElementById('s');
 window.Chibi = C.Chibi;

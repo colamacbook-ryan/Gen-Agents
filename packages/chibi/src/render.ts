@@ -3,7 +3,7 @@ import { armVars } from './arm-vars.ts';
 import { esc, f } from './color.ts';
 import { nsMarkup } from './css.ts';
 import { figure } from './face.ts';
-import { type MotionLevel, prefersReducedMotion } from './motion.ts';
+import { effectiveMotion, type MotionLevel, motionAttr } from './motion.ts';
 import { heroMarkup, needOf, pickVariant } from './need.ts';
 import { getChar } from './registry.ts';
 import { resolve } from './resolve.ts';
@@ -59,11 +59,11 @@ export function svg(id: string, state: AvatarState | string, o: SvgOptions = {})
   const R = resolve(id, st, variant);
   const first = R.ph[0]?.[1] ?? R.peak;
   const big = sz === 'b' && emote;
-  const motion = prefersReducedMotion() ? 'off' : (o.motion ?? 'full');
-  const face = motion === 'off' ? Object.assign({}, R.peak, { em: '' }) : first;
+  const motion = effectiveMotion(o.motion);
+  const face = motion !== 'full' ? Object.assign({}, R.peak, { em: '' }) : first;
   const a = C.spec.anim ?? {};
   const need = needOf(R);
-  let fig = figure(C.P, !big, need);
+  let fig = figure(C.P, !big, need, R.hold);
   const clipId = o.round ? `chb-clip-${++uid}` : '';
   if (crop && o.round) {
     fig = `<clipPath id="${clipId}"><circle cx="${crop[0] + crop[2] / 2}" cy="${crop[1] + crop[2] / 2}" r="${crop[2] / 2}"/></clipPath><g clip-path="url(#${clipId})">${fig}</g>`;
@@ -83,7 +83,7 @@ export function svg(id: string, state: AvatarState | string, o: SvgOptions = {})
     armVars(C.P, C.spec.cover);
   const s =
     `<svg class="chb" xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${wpx}" height="${hpx}" role="img" aria-label="${esc(o.label ?? C.spec.name)}"` +
-    ` data-chb-c="${id}" data-chb-s="${st}"${variant ? ` data-chb-v="${variant}"` : ''}${variant && !o.variant ? ' data-chb-auto="1"' : ''} data-chb-m="${R.m.join(' ')}" data-chb-sz="${sz}"${big ? '' : ' data-chb-sm="1"'} data-chb-eyes="${face.eyes}" data-chb-mouth="${face.mouth}" data-chb-brow="${face.brow}" data-chb-face="${face.face}" data-chb-em="${face.em}"` +
+    ` data-chb-c="${id}" data-chb-s="${st}"${variant ? ` data-chb-v="${variant}"` : ''}${variant && !o.variant ? ' data-chb-auto="1"' : ''} data-chb-m="${R.m.join(' ')}"${motionAttr(motion)} data-chb-sz="${sz}"${big ? '' : ' data-chb-sm="1"'} data-chb-eyes="${face.eyes}" data-chb-mouth="${face.mouth}" data-chb-brow="${face.brow}" data-chb-face="${face.face}" data-chb-em="${face.em}"` +
     ` style="${style}">` +
     `<ellipse class="shadow" cx="100" cy="237" rx="64" ry="4.5" opacity=".3"/>` +
     fig +

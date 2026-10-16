@@ -1,6 +1,6 @@
 // Mặt (các lớp biểu cảm bật / tắt bằng opacity), đầu và ráp nhân vật (nội dung SVG, chưa có thẻ gốc).
 import { f, INK, shade, sk } from './color.ts';
-import { COIN, CROWN, DROP, EMOMAP, emoFor } from './emotes.ts';
+import { COIN, CROWN, DROP, EMOMAP, emoFor, type HoldName, holdMarkup } from './emotes.ts';
 import type { Params } from './params.ts';
 import { arm, body } from './parts/body.ts';
 import { CAPS } from './parts/caps.ts';
@@ -216,7 +216,8 @@ function head(p: Params, small: boolean, need: Need): string {
 }
 
 /* ---- ráp nhân vật (nội dung SVG, chưa có thẻ gốc) ---- */
-export function figure(p: Params, small: boolean, need: Need): string {
+export function figure(p: Params, small: boolean, need: Need, hold: HoldName | null = null): string {
+  const held = holdMarkup(hold);
   const back = (p.cape ? CAPE(p) : '') + (isBack(p.prop) ? BACK[p.prop](p) : '');
   const heldR = isHeld(p.prop) ? HELD[p.prop](p) : '';
   const clsR =
@@ -234,8 +235,9 @@ export function figure(p: Params, small: boolean, need: Need): string {
     back +
     body(p) +
     `<g class="hd">${head(p, small, need)}</g>` +
+    (small ? '' : `<g class="gpad">${held.pad}</g>`) +
     arm('L', [66, 119], p.armL, p, '', '') +
-    arm('R', [134, 119], p.armR, p, heldR, clsR) +
+    arm('R', [134, 119], p.armR, p, heldR, clsR, small ? null : held.hx) +
     `</g></g></g>` +
     (small ? '' : `<g class="ink emo" ${g}>${emoFor(need.em)}</g>`)
   );

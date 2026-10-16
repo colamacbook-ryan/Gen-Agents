@@ -7,6 +7,7 @@ import { svg } from './render.ts';
 import { resolve } from './resolve.ts';
 import { freeze, getBudget, injectCSS, keyframeNames, scan, setBudget } from './runtime.ts';
 import { ChibiParamsV1, parse, toJsonSchema, validate } from './schema.ts';
+import { loadSkinPack } from './skin-pack.ts';
 import { AVATAR_STATES, stateI18nKeys } from './state-keys.ts';
 
 export type { CheckContext, IdentityReport, PartView, SvgView } from './identity.ts';
@@ -51,6 +52,7 @@ export const Chibi = {
   parse,
   register,
   registerAll,
+  loadSkinPack,
   unregister,
   toJsonSchema,
   get cast() {

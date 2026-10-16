@@ -1,6 +1,6 @@
 // resolve(id, state, variant): gộp mặc định của trạng thái + TRAITS theo bộ phận của nhân vật → dữ liệu thuần JSON-hoá được
 // (token chuyển động, các pha mặt, emote, keyframes tư thế). Không có closure, không phụ thuộc DOM.
-import type { HeroName } from './emotes.ts';
+import type { HeroName, HoldName } from './emotes.ts';
 import { getChar } from './registry.ts';
 import type { AvatarState } from './state-keys.ts';
 import { type Face, IDLE_VARIANTS, type IdleVariant, type Phase, ST } from './states.ts';
@@ -18,10 +18,22 @@ export interface Resolved {
   frac: number;
   pose: string[];
   hero: HeroName | null;
+  /** vật cầm thật của trạng thái (hồ lô / máy game), null = dùng đạo cụ thường */
+  hold: HoldName | null;
   /** true nếu nhân vật có hành vi riêng nhờ TRAITS ở trạng thái này */
   own: boolean;
   emotes: string[];
   traits: string[];
+}
+
+interface Base {
+  T: number;
+  frac: number;
+  hero: HeroName | null;
+  hold: HoldName | null;
+  m: TokenName[];
+  ph: Phase[];
+  peak: Face;
 }
 
 const isVariant = (v: unknown): v is IdleVariant => (IDLE_VARIANTS as readonly unknown[]).includes(v);
@@ -29,12 +41,12 @@ const isVariant = (v: unknown): v is IdleVariant => (IDLE_VARIANTS as readonly u
 export function resolve(id: string, state: AvatarState, variant?: string | null): Resolved {
   const C = getChar(id);
   const S = ST[state];
-  let base = { T: S.T, frac: S.frac, hero: S.hero, m: S.m ?? [], ph: S.ph, peak: S.peak };
+  let base: Base = { T: S.T, frac: S.frac, hero: S.hero, hold: null, m: S.m ?? [], ph: S.ph, peak: S.peak };
   let vOut: IdleVariant | null = null;
   if (S.variants) {
     const v: IdleVariant = isVariant(variant) ? variant : IDLE_VARIANTS[0];
     const V = S.variants[v];
-    base = { T: V.T, frac: V.frac, hero: V.hero, m: V.m, ph: V.ph, peak: V.peak };
+    base = { T: V.T, frac: V.frac, hero: V.hero, hold: V.hold ?? null, m: V.m, ph: V.ph, peak: V.peak };
     vOut = v;
   }
   const traits = traitsOf(C.P);
@@ -88,6 +100,7 @@ export function resolve(id: string, state: AvatarState, variant?: string | null)
     frac: frac || base.frac,
     pose: kf,
     hero: base.hero,
+    hold: base.hold,
     own: srcs.length > 0,
     emotes,
     traits: traits.filter((t) => t.over[state]).map((t) => t.id),

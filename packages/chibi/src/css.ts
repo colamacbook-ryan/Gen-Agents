@@ -1,7 +1,7 @@
 // CSS của engine: nền, reduced-motion (pose tĩnh), chuyển động theo token. Class / keyframes / biến CSS đều có tiền tố chb- (nsCss).
 // Chỉ animate transform + opacity (+ stroke-dashoffset cho nét chữ ký tay, + biến góc tay). Mọi animation nằm trong
 // @media (prefers-reduced-motion: no-preference) ⇒ reduce = 0 animation bằng cấu trúc, không cần kiểm lại từng luật.
-import { armKeyframes, expandArm } from './arm-anim.ts';
+import { armKeyframes, expandArm, STOW } from './arm-anim.ts';
 import { f } from './color.ts';
 import { EMOTES } from './emotes.ts';
 import { EYE_LAYERS, MOUTH_LAYERS } from './states.ts';
@@ -13,7 +13,8 @@ export const CSS_BASE = `
 .chb[data-sz="s"] .fth{ stroke-width:calc(var(--sw) * .3) } .chb[data-sz="m"] .fth{ stroke-width:calc(var(--sw) * .6) }
 .chb{ --raL:0deg; --raR:0deg; --hR:0deg; --kL:1; --kR:1 }
 .arm-L{ rotate:var(--raL); scale:var(--kL) } .arm-R{ rotate:var(--raR); scale:var(--kR) }
-.held{ rotate:calc(-1 * var(--raR)) } .held-h{ rotate:var(--hR) }
+.held{ rotate:calc(-1 * var(--raR)) } .held-h{ rotate:var(--hR) } .hx{ rotate:calc(-1 * var(--raR)) }
+.chb[data-s="idle"][data-v="drunk"] .held,.chb[data-s="idle"][data-v="game"] .held{ display:none }
 .brush{ display:none; rotate:calc(var(--raR) * -1) }
 .chb[data-s="rest"] .brush{ display:inline } .chb[data-s="rest"] .held{ opacity:0 }
 .bd{ transform-origin:100px 236px } .hd{ transform-origin:100px 108px } .capg{ transform-origin:100px 44px }
@@ -51,12 +52,9 @@ export const CSS_BASE = `
 .chb[data-vis="0"] *{ animation-play-state:paused !important }
 `;
 
-export const CSS_REDUCE = `
-@media (prefers-reduced-motion: reduce){
-  .chb *,.chb *::before{ animation:none !important; transition:none !important }
-  .emo,.snot,.jet{ display:none !important }
-  .chb[data-sz="b"] .hero{ display:inline }
-  .chb[data-s="reward"]{ --raL:var(--chestL); --raR:var(--chestR) }
+/** pose tĩnh của từng trạng thái (dùng chung cho prefers-reduced-motion và ui.avatar_motion = off / subtle) */
+const REDUCE_POSES = `
+  .chb[data-s="reward"]{ --raL:var(--chestL); --raR:var(--chestR); --hR:${STOW} }
   .chb[data-s="reward"] .bd{ transform:translateY(-12px) scale(.96,1.08) }
   .chb[data-s="penalty"]{ --raL:calc(var(--outL) * 1.6); --raR:var(--limpR) }
   .chb[data-s="penalty"] .bd{ transform:translateY(7px) scale(1.12,.86) } .chb[data-s="penalty"] .hd{ transform:rotate(-10deg) scale(1.04,1.08) }
@@ -70,7 +68,7 @@ export const CSS_REDUCE = `
   .chb[data-s="rest"]{ --raR:var(--writeR) }
   .chb[data-s="sleep"] .hd{ transform:rotate(12deg) translateY(3px) }
   .chb[data-s="sleep"]{ --raL:var(--limpL); --raR:var(--limpR) }
-  .chb[data-s="wait"]{ --raL:var(--prayL); --raR:var(--prayR) }
+  .chb[data-s="wait"]{ --raL:var(--prayL); --raR:var(--prayR); --hR:${STOW} }
   .chb[data-s="wait"] .bd{ transform:translateY(11px) scale(1.09,.83) } .chb[data-s="wait"] .hd{ transform:rotate(-12deg) }
   .chb[data-s="run"] .bd{ transform:rotate(8deg) }
   .chb[data-s="failover"] .bd{ transform:translate(30px,-6px) rotate(9deg) scale(.97) } .chb[data-s="failover"]{ --raL:calc(var(--outL) * 1.4); --raR:calc(var(--outR) * 1.4) }
@@ -80,14 +78,29 @@ export const CSS_REDUCE = `
   .chb[data-m~="cranePose"] .shoeR{ transform:translateY(-22px) } .chb[data-m~="cranePose"]{ --raL:calc(var(--outL) * 2); --raR:calc(var(--outR) * 2) }
   .chb[data-m~="takePulse"]{ --raL:var(--reachL) }
   .chb[data-s="commit"]{ --raR:var(--cheerR); --raL:var(--chestL) } .chb[data-s="commit"] .bd{ transform:translateY(-4px) scale(1,1.04) }
-  .chb[data-s="think"]{ --raR:var(--chinR); --raL:calc(var(--limpL) + 14deg); --kL:.78 } .chb[data-s="think"] .hd{ transform:rotate(6deg) translateY(3px) } .chb[data-s="think"] .bd{ transform:rotate(2deg) scale(1.02,.97) }
+  .chb[data-s="think"]{ --hR:${STOW}; --raR:var(--chinR); --raL:calc(var(--limpL) + 14deg); --kL:.78 } .chb[data-s="think"] .hd{ transform:rotate(6deg) translateY(3px) } .chb[data-s="think"] .bd{ transform:rotate(2deg) scale(1.02,.97) }
   .chb[data-s="unsure"]{ --raR:var(--scratchR); --raL:calc(var(--chestL) * .8) } .chb[data-s="unsure"] .hd{ transform:rotate(-7deg) }
   .chb[data-s="discover"]{ --raL:var(--pointL); --raR:var(--aimR); --kL:1.2 } .chb[data-s="discover"] .bd{ transform:translateY(-8px) rotate(-9deg) scale(1.04,1.02) } .chb[data-s="discover"] .hd{ transform:rotate(-12deg) scale(1.03,1.06) }
   .chb[data-s="idle"][data-v="nap"] .hd{ transform:rotate(16deg) translateY(4px) } .chb[data-s="idle"][data-v="nap"] .bd{ transform:translateY(6px) scale(1.05,.93) } .chb[data-s="idle"][data-v="nap"]{ --raL:var(--limpL); --raR:var(--limpR) }
-  .chb[data-s="idle"][data-v="drunk"] .bd{ transform:rotate(7deg) translateX(8px) } .chb[data-s="idle"][data-v="drunk"] .hd{ transform:rotate(-9deg) } .chb[data-s="idle"][data-v="drunk"]{ --raR:var(--eatR) }
-  .chb[data-s="idle"][data-v="game"]{ --raL:var(--chestL); --raR:var(--chestR) } .chb[data-s="idle"][data-v="game"] .hd{ transform:rotate(9deg) translateY(3px) } .chb[data-s="idle"][data-v="game"] .bd{ transform:translateY(4px) scale(1.05,.94) }
+  .chb[data-s="idle"][data-v="drunk"] .bd{ transform:rotate(7deg) translateX(8px) } .chb[data-s="idle"][data-v="drunk"] .hd{ transform:rotate(-9deg) } .chb[data-s="idle"][data-v="drunk"]{ --raR:var(--eatR); --kR:var(--eatK) }
+  .chb[data-s="idle"][data-v="game"]{ --raL:var(--gripL); --raR:var(--gripR); --kL:var(--gripKL); --kR:var(--gripKR) } .chb[data-s="idle"][data-v="game"] .hd{ transform:rotate(9deg) translateY(3px) } .chb[data-s="idle"][data-v="game"] .bd{ transform:translateY(4px) scale(1.05,.94) }
   .chb[data-m~="pointScold"]{ --raL:var(--pointL) } .chb[data-m~="helmSlip"] .capg{ transform:translate(18px,5px) rotate(11deg) } .chb[data-m~="helmSlip"]{ --raR:var(--foreheadR) }
-}
+`;
+
+export const CSS_REDUCE = `
+@media (prefers-reduced-motion: reduce){
+  .chb *,.chb *::before{ animation:none !important; transition:none !important }
+  .emo,.snot,.jet{ display:none !important }
+  .chb[data-sz="b"] .hero{ display:inline }
+${REDUCE_POSES}}
+`;
+
+/** ui.avatar_motion: off = tĩnh hoàn toàn; subtle = chỉ thở + chớp mắt (cả hai: pose tĩnh của trạng thái + một huy hiệu thay emote) */
+export const CSS_STATIC = `${REDUCE_POSES.replace(/\.chb\[/g, '.chb[data-mo][')}
+.chb[data-mo="o"] *,.chb[data-mo="o"] *::before{ animation:none !important; transition:none !important }
+.chb[data-mo="s"] *:not(.breath):not(.e-n){ animation:none !important; transition:none !important }
+.chb[data-mo] .emo,.chb[data-mo] .snot,.chb[data-mo] .jet{ display:none !important }
+.chb[data-mo][data-sz="b"] .hero{ display:inline }
 `;
 
 export const CSS_MOTION = `
@@ -154,7 +167,7 @@ export const CSS_MOTION = `
 .em-scroll .s1{ stroke-dasharray:60; animation:k-sc1 5s linear infinite } .em-scroll .s2{ stroke-dasharray:60; animation:k-sc2 5s linear infinite }
 .em-scroll .s3{ stroke-dasharray:60; animation:k-sc3 5s linear infinite }
 /* --- 5 kiểu mặt: emote / miệng động --- */
-.em-resolve .in,.em-bang3 .in,.em-dots .in,.em-scope .in,.em-gourd .in,.em-hic .in,.em-pad .in,.em-sweatL .in,.em-qwob .in,.em-band .in{ animation:k-pop .55s cubic-bezier(.3,1.7,.5,1) both }
+.em-resolve .in,.em-bang3 .in,.em-dots .in,.em-scope .in,.em-hic .in,.em-sweatL .in,.em-qwob .in,.em-band .in{ animation:k-pop .55s cubic-bezier(.3,1.7,.5,1) both }
 .em-resolve .bb{ animation:k-bob .5s ease-in-out .55s infinite } .em-bang3 .bb{ animation:k-wob .09s ease-in-out infinite alternate } .em-dots .bb{ animation:k-bob 2s ease-in-out .55s infinite }
 .em-band .bt{ transform-box:fill-box; transform-origin:0 0; animation:k-flagw .3s ease-in-out infinite alternate }
 .em-glasses .gls{ animation:k-slide 2.4s ease-in-out infinite alternate }
@@ -163,12 +176,12 @@ export const CSS_MOTION = `
 @keyframes k-dd{ 0%,18%{ opacity:0 } 30%,85%{ opacity:1 } 100%{ opacity:0 } }
 .em-scope .bb{ animation:k-scope .8s ease-in-out .55s infinite alternate } .em-scope .tw{ animation:k-tw .9s ease-in-out infinite }
 @keyframes k-scope{ from{ transform:translateY(0) rotate(-3deg) } to{ transform:translateY(-4px) rotate(3deg) } }
-.em-gourd .gd{ transform-box:fill-box; transform-origin:50% 90%; animation:k-gtilt var(--T) ease-in-out infinite }
+.hx .gd{ transform-box:fill-box; transform-origin:50% 90%; animation:k-gtilt var(--T) ease-in-out infinite }
 @keyframes k-gtilt{ 0%,10%{ transform:rotate(0) } 28%,56%{ transform:rotate(-72deg) translate(-4px,-4px) } 74%,100%{ transform:rotate(0) } }
 .em-hic .bb{ animation:k-hic .6s ease-in-out infinite } @keyframes k-hic{ 0%,100%{ transform:translateY(0) scale(1) } 50%{ transform:translateY(-6px) scale(1.15) } }
-.em-pad .bb{ animation:k-wob .14s ease-in-out infinite alternate }
-.em-pad .blp{ animation:k-blip .6s ease-out infinite; animation-delay:calc(var(--i) * -.2s) } @keyframes k-blip{ 0%{ transform:translateY(6px); opacity:0 } 30%{ opacity:1 } 100%{ transform:translateY(-12px); opacity:0 } }
-.em-pad .scr{ animation:k-scr .4s steps(2) infinite } @keyframes k-scr{ from{ transform:translateX(0) } to{ transform:translateX(6px) } }
+.gpad .padb{ transform-box:fill-box; transform-origin:50% 50%; animation:k-wob .14s ease-in-out infinite alternate }
+.gpad .blp{ animation:k-blip .6s ease-out infinite; animation-delay:calc(var(--i) * -.2s) } @keyframes k-blip{ 0%{ transform:translateY(6px); opacity:0 } 30%{ opacity:1 } 100%{ transform:translateY(-12px); opacity:0 } }
+.gpad .scr{ animation:k-scr .4s steps(2) infinite } @keyframes k-scr{ from{ transform:translateX(0) } to{ transform:translateX(6px) } }
 .em-sweatL .bb{ animation:k-drip 1.6s ease-in .6s infinite } .em-qwob .bb{ animation:k-qwob .24s ease-in-out infinite alternate } @keyframes k-qwob{ from{ transform:rotate(-14deg) } to{ transform:rotate(14deg) } }
 .em-blur .bl2{ animation:k-flick .12s steps(2) infinite; animation-delay:calc(var(--i) * -.04s) } @keyframes k-flick{ from{ opacity:1 } to{ opacity:.25 } }
 .em-rays .in{ animation:k-raypop .4s ease-out both } .em-rays .rr{ transform-box:fill-box; transform-origin:50% 50%; animation:k-spinz 14s linear infinite }
@@ -648,7 +661,7 @@ export const nsMarkup = (s: string): string =>
     .replace(/--(?!chb-)([a-zA-Z][\w-]*)/g, '--chb-$1');
 const nsCss = (s: string): string =>
   s
-    .replace(/\[data-(s|m|v|eyes|mouth|brow|face|em|vis|sz|lod)([=~\]])/g, '[data-chb-$1$2')
+    .replace(/\[data-(s|m|v|eyes|mouth|brow|face|em|vis|sz|lod|mo)([=~\]])/g, '[data-chb-$1$2')
     .replace(/\.([a-zA-Z][\w-]*)/g, (m, c: string) => (c === 'chb' ? m : `.${NSP}${c}`))
     .replace(/(^|[^\w-])k-([a-z][\w-]*)/g, '$1chb-k-$2')
     .replace(/--(?!chb-)([a-zA-Z][\w-]*)/g, '--chb-$1');
@@ -665,7 +678,7 @@ function faceRules(): string {
 /** toàn bộ stylesheet đã gắn tiền tố, không chú thích (chèn đúng một lần vào <style id="chb-css">) */
 export function buildCss(): string {
   const css = nsCss(
-    `${CSS_BASE}${faceRules()}${CSS_REDUCE}@media (prefers-reduced-motion: no-preference){${genKeyframes()}\n${armKeyframes()}}${stepify(expandArm(CSS_MOTION))}`,
+    `${CSS_BASE}${faceRules()}${CSS_REDUCE}${CSS_STATIC}@media (prefers-reduced-motion: no-preference){${genKeyframes()}\n${armKeyframes()}}${stepify(expandArm(CSS_MOTION))}`,
   );
   return css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{2,}/g, '\n');
 }

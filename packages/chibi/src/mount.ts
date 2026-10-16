@@ -1,11 +1,15 @@
 // mount(): dựng SVG vào một phần tử và bật theo dõi (pha mặt, tạm dừng ngoài màn hình, đổi trạng thái mượt).
+
+import type { MotionLevel } from './motion.ts';
 import { type SvgOptions, svg } from './render.ts';
-import { applyState, injectCSS, type StateOptions, startAuto, track, untrack } from './runtime.ts';
+import { applyState, injectCSS, type StateOptions, setMotion, startAuto, track, untrack } from './runtime.ts';
 import type { AvatarState } from './state-keys.ts';
 
 export interface ChibiHandle {
   svg: SVGSVGElement;
   setState(state: AvatarState | string, opts?: StateOptions): void;
+  /** đổi mức chuyển động (setting ui.avatar_motion): full | subtle | off */
+  setMotion(level: MotionLevel): void;
   destroy(): void;
 }
 
@@ -21,6 +25,9 @@ export function mount(el: Element, id: string, state: AvatarState | string = 'no
     svg: node,
     setState(s, o) {
       applyState(node, s, o);
+    },
+    setMotion(level) {
+      setMotion(node, level);
     },
     destroy() {
       untrack(node);

@@ -22,8 +22,19 @@ for (let r = 1; r <= rounds; r++) {
     const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
     await page.goto(`${server.url}/test/browser/bench.html?n=${l.n}&size=${l.size}&secs=${secs}`);
     await page.waitForFunction(() => (window as unknown as { __ready?: boolean }).__ready === true);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Performance.enable');
+    const metrics = async (): Promise<Record<string, number>> =>
+      Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map((m) => [m.name, m.value]));
+    const m0 = await metrics();
     const res = await page.evaluate(() => (window as unknown as { __bench(): Promise<unknown> }).__bench());
-    console.log(`lượt ${r}: ${JSON.stringify(res)} load ${loadavg()[0]?.toFixed(2)}`);
+    const m1 = await metrics();
+    const wall = (m1.Timestamp ?? 0) - (m0.Timestamp ?? 0);
+    const per = (k: string): number => +((((m1[k] ?? 0) - (m0[k] ?? 0)) * 1000) / wall).toFixed(1);
+    // styleMs = ms tính lại style mỗi giây (chỉ số bền trước tranh chấp CPU hơn fps); taskMs = ms luồng chính bận mỗi giây
+    console.log(
+      `lượt ${r}: ${JSON.stringify({ ...(res as object), styleMs: per('RecalcStyleDuration'), taskMs: per('TaskDuration') })} load ${loadavg()[0]?.toFixed(2)}`,
+    );
     await page.close();
   }
 }

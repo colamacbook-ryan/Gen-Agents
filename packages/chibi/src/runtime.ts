@@ -2,8 +2,9 @@
 // tạm dừng khi ngoài màn hình, ngân sách chi tiết, đổi trạng thái gom theo lô + chuyển tiếp mượt.
 // Không phụ thuộc framework; chỉ dùng API trình duyệt chuẩn (IntersectionObserver / MutationObserver / Web Animations).
 import { buildCss, nsMarkup, V } from './css.ts';
-import { EMOMAP, emoFor } from './emotes.ts';
+import { EMOMAP, emoFor, holdMarkup } from './emotes.ts';
 import { eyeSet, mouthSet } from './face.ts';
+import type { MotionLevel } from './motion.ts';
 import { heroMarkup, needOf, pickVariant } from './need.ts';
 import { type Character, getChar } from './registry.ts';
 import { type Resolved, resolve } from './resolve.ts';
@@ -210,7 +211,15 @@ function sched(node: Svg): void {
     clearTimeout(s.tm);
     s.tm = 0;
   }
-  if (s.frz || !node.isConnected || mqr?.matches || attr(node, 'vis') === '0' || isLite(node)) return;
+  if (
+    s.frz ||
+    !node.isConnected ||
+    mqr?.matches ||
+    attr(node, 'mo') !== '' ||
+    attr(node, 'vis') === '0' ||
+    isLite(node)
+  )
+    return;
   const ph = s.ph;
   const T = s.T;
   if (!ph) return;
@@ -307,6 +316,9 @@ interface Layers {
   emo: string;
   emb: string;
   hero: string;
+  /** vật cầm thật: hồ lô (trong bàn tay phải) và máy game (giữa hai tay) */
+  hx: string;
+  pad: string;
 }
 const layerCache = new WeakMap<Character, Map<string, Layers>>();
 /** chuỗi lớp mặt / emote đã gắn tiền tố, nhớ theo (nhân vật, trạng thái, biến thể, cỡ); cache gắn với đối tượng nhân vật nên tự hết khi unregister */
@@ -328,6 +340,8 @@ function layersFor(id: string, state: AvatarState, variant: string | null, small
     emo: small ? '' : nsMarkup(emoFor(need.em)),
     emb: small || !rays ? '' : nsMarkup(EMOMAP.rays ?? ''),
     hero: nsMarkup(heroMarkup(R.hero)),
+    hx: small ? '' : nsMarkup(holdMarkup(R.hold).hx),
+    pad: small ? '' : nsMarkup(holdMarkup(R.hold).pad),
   };
   per.set(k, L);
   return L;
@@ -348,6 +362,8 @@ function rebuildLayers(node: Svg, R: Resolved, variant: string | null): void {
   if (!small) {
     setHtml(node.querySelector('.chb-emo'), L.emo);
     setHtml(node.querySelector('.chb-emb'), L.emb);
+    setHtml(node.querySelector('.chb-hx'), L.hx);
+    setHtml(node.querySelector('.chb-gpad'), L.pad);
   }
   setHtml(node.querySelector('svg.chb-hero'), L.hero);
 }
@@ -384,7 +400,9 @@ function runPending(): void {
     state: (isState(state) ? state : 'normal') as AvatarState,
     opts,
     before:
-      !reduced && opts.transition !== false && node.isConnected && attr(node, 'vis') !== '0' ? snapshot(node) : null,
+      !reduced && attr(node, 'mo') !== 'o' && opts.transition !== false && node.isConnected && attr(node, 'vis') !== '0'
+        ? snapshot(node)
+        : null,
   }));
   for (const j of prep) mutate(j.node, j.state, j.opts, reduced);
   for (const j of prep) if (j.before) glide(j.node, j.before, j.opts.ms || 260);
@@ -410,7 +428,9 @@ function mutate(node: Svg, state: AvatarState, opts: StateOptions, reduced: bool
   if (old) old.replaceWith(old.cloneNode(false));
   s.i = -1;
   s.ph = R.ph;
-  applyFace(node, reduced ? Object.assign({}, R.peak, { em: '' }) : (R.ph[0]?.[1] ?? R.peak));
+  // tĩnh (reduced-motion của OS, hoặc ui.avatar_motion = off / subtle): khung đỉnh của trạng thái, không emote
+  const still = reduced || attr(node, 'mo') !== '';
+  applyFace(node, still ? Object.assign({}, R.peak, { em: '' }) : (R.ph[0]?.[1] ?? R.peak));
   if (same) {
     node.removeAttribute('data-chb-s');
     void node.getBoundingClientRect(); // đặt lại đúng trạng thái đang có: buộc animation chạy lại từ đầu
@@ -419,6 +439,15 @@ function mutate(node: Svg, state: AvatarState, opts: StateOptions, reduced: bool
   rebuildLayers(node, R, variant);
   if (!reg.has(node) && node.isConnected) track(node);
   else startClock(node);
+}
+
+/** đổi mức chuyển động (ui.avatar_motion) của một avatar đang chạy */
+export function setMotion(node: Svg, level: MotionLevel): void {
+  if (level === 'off') node.setAttribute('data-chb-mo', 'o');
+  else if (level === 'subtle') node.setAttribute('data-chb-mo', 's');
+  else node.removeAttribute('data-chb-mo');
+  const v = node.getAttribute('data-chb-v');
+  applyState(node, attr(node, 's'), { transition: false, variant: attr(node, 'auto') === '1' ? undefined : v });
 }
 
 /** idle tự xoay vòng 3 biến thể khi không truyền opts.variant */

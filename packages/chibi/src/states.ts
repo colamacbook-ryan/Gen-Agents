@@ -1,7 +1,7 @@
 // Bảng trạng thái MẶC ĐỊNH của khung xương (mọi nhân vật dùng chung): nhịp T, đỉnh pose, huy hiệu, token chuyển động, các pha mặt.
 // KHÔNG chứa nhãn / mô tả hiển thị: engine chỉ biết khoá; chữ lấy từ i18n (PS §4.7, xem i18n-keys.ts).
 
-import type { HeroName } from './emotes.ts';
+import type { HeroName, HoldName } from './emotes.ts';
 import type { AvatarState } from './state-keys.ts';
 import type { TokenName } from './tokens.ts';
 
@@ -67,6 +67,8 @@ export interface VariantDef {
   T: number;
   frac: number;
   hero: HeroName;
+  /** vật cầm thật (hồ lô / máy game) thay cho đạo cụ thường */
+  hold?: HoldName;
   m: TokenName[];
   ph: Phase[];
   peak: Face;
@@ -273,11 +275,12 @@ export const ST: Record<AvatarState, StateDef> = {
         T: 4.4,
         frac: 0.5,
         hero: 'gourd',
+        hold: 'gourd',
         m: ['stumble', 'wobbleHead', 'gourdArm'],
         ph: [
-          [0, F({ eyes: 'spiral', mouth: 'grin', face: 'blush', em: 'gourd stars' })],
-          [0.4, F({ eyes: 'spiral', mouth: 'laugh', face: 'blush', em: 'gourd stars hic' })],
-          [0.72, F({ eyes: 'spiral', mouth: 'grin', face: 'blush', em: 'gourd stars' })],
+          [0, F({ eyes: 'spiral', mouth: 'grin', face: 'blush', em: 'stars' })],
+          [0.4, F({ eyes: 'spiral', mouth: 'laugh', face: 'blush', em: 'stars hic' })],
+          [0.72, F({ eyes: 'spiral', mouth: 'grin', face: 'blush', em: 'stars' })],
         ],
         peak: F({ eyes: 'spiral', mouth: 'grin', face: 'blush' }),
       },
@@ -285,10 +288,11 @@ export const ST: Record<AvatarState, StateDef> = {
         T: 4,
         frac: 0.4,
         hero: 'pad',
+        hold: 'pad',
         m: ['gameHunch', 'gameHead', 'thumbMash'],
         ph: [
-          [0, F({ eyes: 'tired', mouth: 'tongue', brow: 'knit', em: 'pad' })],
-          [0.5, F({ eyes: 'tired', mouth: 'tongue', brow: 'knit', face: 'blush', em: 'pad' })],
+          [0, F({ eyes: 'tired', mouth: 'tongue', brow: 'knit' })],
+          [0.5, F({ eyes: 'tired', mouth: 'tongue', brow: 'knit', face: 'blush' })],
         ],
         peak: F({ eyes: 'tired', mouth: 'tongue', brow: 'knit' }),
       },
