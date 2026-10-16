@@ -11,6 +11,7 @@ import {
   ANCHOR_GRID_TABLES,
   ANCHOR_SCREENS,
   Anchor,
+  boundedNfkc,
   CREDENTIAL_BLOCKED,
   CREDENTIAL_DETECTORS,
   CREDENTIAL_KEY_NAME_MAX_CHARS,
@@ -311,6 +312,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       'encoded_marker_flood',
       'credential_field_name',
       'too_deep',
+      'too_large',
     ]);
     expect(
       SseEvent.safeParse({
@@ -742,10 +744,58 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
   };
   for (const [name, str] of Object.entries(adversarial)) {
     it(name, () => {
-      const ms = fastest(() => findCredentialLike(str));
+      // gọi THẲNG từng bộ phát hiện (findCredentialLike từ chối chuỗi > trần trước khi quét — xem 'NFKC có trần')
+      const ms = fastest(() => CREDENTIAL_DETECTORS.map((d) => d.test(str)));
       expect(ms, `${name}: ${ms.toFixed(1)} ms`).toBeLessThan(SCAN_BUDGET_MS);
     });
   }
+});
+
+describe('NFKC có trần (DoS: U+FDFA nở 18×)', () => {
+  const FDFA = '\ufdfa';
+  it('100 K ký tự U+FDFA trong value ⇒ denied payload_too_large, < 250 ms (cả khi gọi thẳng findCredentialLike)', () => {
+    const big = FDFA.repeat(100_000);
+    let r: ReturnType<typeof screenToolPayload> | undefined;
+    const ms = fastest(() => {
+      r = screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: big });
+    });
+    expect(r).toMatchObject({ status: 'denied', code: 'payload_too_large' });
+    expect(ms).toBeLessThan(250);
+    let hit: ReturnType<typeof findCredentialLike> = null;
+    const ms2 = fastest(() => {
+      hit = findCredentialLike({ v: big });
+    });
+    expect(hit).toEqual({ patternId: 'too_large' });
+    expect(ms2).toBeLessThan(250);
+  });
+
+  it('chuỗi nằm TRONG trần ký tự nhưng phình quá trần sau NFKC ⇒ payload_too_large, < 250 ms', () => {
+    const atCap = FDFA.repeat(TOOL_PAYLOAD_LIMITS.maxStringChars);
+    let r: ReturnType<typeof screenToolPayload> | undefined;
+    const ms = fastest(() => {
+      r = screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: atCap });
+    });
+    expect(r).toMatchObject({ status: 'denied', code: 'payload_too_large' });
+    expect(ms).toBeLessThan(250);
+    expect(boundedNfkc(FDFA.repeat(1000))).toBeNull();
+    // khoá object phình: khớp (fail-closed), normalizeCredentialName ném
+    const key = FDFA.repeat(2000);
+    expect(isCredentialKeyName(key)).toBe(true);
+    expect(() => normalizeCredentialName(key)).toThrow(RangeError);
+    expect(findCredentialLike({ [key]: 1 })).toEqual({ patternId: 'credential_field_name' });
+  });
+
+  it('văn bản tiếng Việt có dấu sát trần KHÔNG bị coi là phình (NFKC giữ nguyên); NFKC theo khúc = NFKC cả chuỗi', () => {
+    const vi = 'Đổi mật khẩu xong rồi nhé, kiểm tra giúp ở trang cài đặt. '
+      .repeat(400)
+      .slice(0, TOOL_PAYLOAD_LIMITS.maxStringChars);
+    expect(screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: vi }).status).toBe('ok');
+    const mixed = Array.from(
+      { length: 12_000 },
+      (_, i) => ['\uff41', 'ệ', 'x', '\u2460', '\ud835\udc00', ' '][i % 6],
+    ).join('');
+    expect(boundedNfkc(mixed, 1_000_000)).toBe(mixed.normalize('NFKC'));
+  });
 });
 
 describe('chặn kích thước TRƯỚC khi quét', () => {
