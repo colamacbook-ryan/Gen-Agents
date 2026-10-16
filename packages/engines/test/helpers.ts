@@ -56,6 +56,8 @@ export interface Cases {
   };
   streamFiles?: Array<{ name: string; file: string; expected: TurnStreamEvent[] }>;
   stream: Array<{ name: string; line?: string; lineFile?: string; expected: TurnStreamEvent[] }>;
+  /** Nhiều dòng qua parser CÓ trạng thái (khử trùng, nhớ tên công cụ). */
+  statefulCases: Array<{ name: string; lines: string[]; expected: TurnStreamEvent[] }>;
   classify: Array<{
     name: string;
     exit: { exitCode: number | null; signal: string | null; timedOut: boolean };

@@ -97,6 +97,12 @@ for (const adapter of ADAPTERS) {
           expect(adapter.parseStreamLine(line)).toEqual(s.expected[0] ?? null);
         });
       }
+      for (const sc of c.statefulCases) {
+        it(`có trạng thái: ${sc.name}`, () => {
+          const parser = adapter.createLineParser();
+          expect(sc.lines.flatMap((l) => parser.push(l))).toEqual(sc.expected);
+        });
+      }
       for (const f of c.streamFiles ?? []) {
         it(f.name, () => {
           const parser = adapter.createLineParser();
@@ -176,11 +182,11 @@ for (const adapter of ADAPTERS) {
           expect(interpretLoginCheck(adapter, l.authMethod, probeOutcome(slug, l.outcome))).toEqual(probe);
         });
       }
-      it('bộ thực thi ném lỗi ⇒ trạng thái lỗi, có ghi lý do (không nuốt)', async () => {
+      it('bộ thực thi ném lỗi ⇒ trạng thái lỗi (allowlist unknown: chưa xác định), có ghi lý do (không nuốt)', async () => {
         const probe = await runLoginCheck(adapter, { authMethod: 'subscription', ...probeInput() }, async () => {
           throw new Error('container biến mất');
         });
-        expect(probe.loginStatus).toBe('error');
+        expect(probe.loginStatus).toBe(adapter.authAllowlist === 'unknown' ? 'unknown' : 'error');
         expect(probe.probeStatus).toBe('failed');
         expect(probe.error).toContain('container biến mất');
       });

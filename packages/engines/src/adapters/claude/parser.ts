@@ -54,6 +54,27 @@ function streamEvent(line: JsonObject): TurnStreamEvent[] {
   return [];
 }
 
+function toolUseEvent(b: JsonObject | null): TurnStreamEvent | null {
+  if (b === null || (b.type !== 'tool_use' && b.type !== 'server_tool_use' && b.type !== 'mcp_tool_use')) return null;
+  const name = str(b.name);
+  return name === null || name === '' ? null : { type: 'tool', stage: 'call', name, callId: str(b.id) };
+}
+
+function assistantToolCalls(line: JsonObject): TurnStreamEvent[] {
+  if (isSubagent(line)) return [];
+  const content = obj(line.message)?.content;
+  if (!Array.isArray(content)) return [];
+  return content.map((b) => toolUseEvent(obj(b))).filter((e): e is TurnStreamEvent => e !== null);
+}
+
+/** Gọi công cụ lần đầu thấy (theo callId) ⇒ giữ và nhớ tên; đã thấy ⇒ bỏ (khử trùng stream_event ↔ assistant). */
+function firstSeenCall(e: TurnStreamEvent, names: Map<string, string>): boolean {
+  if (e.type !== 'tool' || e.stage !== 'call' || e.callId === null) return true;
+  if (names.has(e.callId)) return false;
+  if (names.size < MAX_TOOL_NAMES) names.set(e.callId, e.name);
+  return true;
+}
+
 function toolResults(line: JsonObject, names: Map<string, string> | null): TurnStreamEvent[] {
   if (isSubagent(line)) return [];
   const msg = obj(line.message);
@@ -106,13 +127,12 @@ function parse(raw: string, names: Map<string, string> | null): TurnStreamEvent[
     }
     case 'stream_event': {
       const events = streamEvent(line);
-      if (names !== null) {
-        for (const e of events) {
-          if (e.type === 'tool' && e.callId !== null && names.size < MAX_TOOL_NAMES) names.set(e.callId, e.name);
-        }
-      }
-      return events;
+      return names === null ? events : events.filter((e) => firstSeenCall(e, names));
     }
+    case 'assistant':
+      // Không trạng thái: bỏ (nội dung đã có qua stream_event). Có trạng thái: lấy gọi công cụ chưa thấy qua stream_event
+      // (CLI giả CL-STREAM-2 chỉ báo tool_use trong `assistant`; CLI thật thường báo cả hai — khử trùng theo id).
+      return names === null ? [] : assistantToolCalls(line).filter((e) => firstSeenCall(e, names));
     case 'user':
       return toolResults(line, names);
     case 'result':
@@ -120,7 +140,7 @@ function parse(raw: string, names: Map<string, string> | null): TurnStreamEvent[
     case 'rate_limit_event':
       return rateLimit(line);
     default:
-      // `assistant` lặp lại nội dung đã có qua stream_event (partial) ⇒ bỏ để không nhân đôi delta; dòng lạ ⇒ bỏ.
+      // Dòng lạ ⇒ bỏ. Văn bản trong `assistant` lặp lại delta của stream_event (partial) ⇒ không phát lại.
       return [];
   }
 }

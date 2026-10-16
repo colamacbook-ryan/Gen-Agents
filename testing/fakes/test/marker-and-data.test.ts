@@ -21,7 +21,7 @@ const all = walk(FAKES_DIR);
 describe('đánh dấu "chỉ dùng cho test, không vào image phát hành"', () => {
   const sources = all
     .filter((p) => /\.ts$/.test(p) && !rel(p).startsWith('test/'))
-    .concat(all.filter((p) => rel(p).startsWith('bin/')));
+    .concat(all.filter((p) => rel(p).startsWith('bin/') || rel(p).startsWith('bridge-bin/')));
 
   it('mọi tệp nguồn (ts + bin/*) mang marker ở 3 dòng đầu', () => {
     expect(sources.map(rel)).toContain('lib/common.ts'); // bộ quét thật sự thấy tệp
