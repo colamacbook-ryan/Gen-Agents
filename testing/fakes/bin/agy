@@ -1,0 +1,10 @@
+#!/bin/sh
+# GA-FAKES-TEST-ONLY — chỉ dùng trong test / image *-test, không bao giờ vào image phát hành.
+# Không phụ thuộc PATH (runner có thể chạy với env do adapter dựng): thử node trên PATH rồi các chỗ thường gặp.
+here="$(cd "$(dirname "$0")" && pwd)"
+GA_FAKE_LAUNCHER="$here/agy"; export GA_FAKE_LAUNCHER
+for n in "$(command -v node 2>/dev/null)" /usr/local/bin/node /usr/bin/node /opt/node22/bin/node; do
+  if [ -n "$n" ] && [ -x "$n" ]; then exec "$n" "$here/../agy/main.ts" "$@"; fi
+done
+echo "fake agy: không tìm thấy node" >&2
+exit 127

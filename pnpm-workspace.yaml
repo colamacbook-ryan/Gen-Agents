@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - apps/*
+  - testing/fakes
 
 # better-sqlite3 >= 13 kèm sẵn bản build N-API (prebuilds/) cho linux/darwin/win x64 + arm64:
 # không cần chạy node-gyp lúc cài (không cần mạng tới GitHub, không cần trình biên dịch).
