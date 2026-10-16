@@ -290,10 +290,16 @@ export function payloadLimitExceeded(value: unknown): string | null {
 // ---------------------------------------------------------------- bộ phát hiện credential (tối thiểu, BUILD-PLAN §B.4)
 // Chạy TUYẾN TÍNH: tách chuỗi thành các "đoạn token" tối đại bằng một regex một lớp ký tự (không lồng, không lookahead),
 // rồi kiểm từng mẫu bằng code (indexOf + đếm). Không regex nào ở đây có quantifier lồng hoặc lookahead chứa * / +.
+// Ngữ nghĩa phải KHÔNG YẾU HƠN bộ regex tham chiếu (test đối chiếu `mcp-detector-differential.test.ts`).
+
+/** Ký tự "từ" của `\b` trong regex JS: [0-9A-Za-z_] (KHÔNG gồm '-'). */
+function isWordCode(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
 
 /** Ký tự token [0-9A-Za-z_-] — so mã ký tự, không regex. */
 function isTokenCode(c: number): boolean {
-  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 45;
+  return isWordCode(c) || c === 45;
 }
 
 // runEnd[i] = vị trí kết thúc của đoạn token tối đại chứa i (hoặc i nếu s[i] không phải ký tự token). Tính MỘT lần mỗi chuỗi
@@ -325,7 +331,8 @@ function prefixThenRun(s: string, prefix: string, min: number, needWordStart = f
     const at = s.indexOf(prefix, from);
     if (at < 0) return false;
     if (
-      (!needWordStart || at === 0 || !isTokenCode(s.charCodeAt(at - 1))) &&
+      // đầu từ đúng nghĩa `\b` (ký tự trước không thuộc [0-9A-Za-z_]; '-' VẪN là ranh giới — `x-sk-…`, `--sk-…` bị bắt)
+      (!needWordStart || at === 0 || !isWordCode(s.charCodeAt(at - 1))) &&
       tokenRunLength(s, at + prefix.length) >= min
     ) {
       return true;
@@ -347,6 +354,30 @@ function hasJwt(s: string): boolean {
     }
     // mọi 'eyJ' sau đó trong CÙNG đoạn token có cùng điểm kết thúc ⇒ cùng kết quả (đoạn ngắn hơn) ⇒ nhảy qua cả đoạn
     from = at + Math.max(1, a);
+  }
+}
+
+/**
+ * PEM: `-----BEGIN ` + chuỗi [A-Z ] bất kỳ dài + `PRIVATE KEY-----` (tương đương regex tham chiếu `[A-Z ]*`, không giới hạn
+ * độ dài như bản {0,40} cũ). Đoạn [A-Z ] tối đại sau BEGIN phải kết thúc bằng `PRIVATE KEY` và ngay sau là `-----`
+ * ('-' không thuộc [A-Z ]). Các đoạn sau những `-----BEGIN ` khác nhau rời nhau ⇒ tuyến tính.
+ */
+function hasPemPrivateKey(s: string): boolean {
+  const head = '-----BEGIN ';
+  const tail = 'PRIVATE KEY';
+  let from = 0;
+  for (;;) {
+    const at = s.indexOf(head, from);
+    if (at < 0) return false;
+    const start = at + head.length;
+    let end = start;
+    while (end < s.length) {
+      const c = s.charCodeAt(end);
+      if (!((c >= 65 && c <= 90) || c === 32)) break;
+      end++;
+    }
+    if (end - start >= tail.length && s.startsWith(tail, end - tail.length) && s.startsWith('-----', end)) return true;
+    from = Math.max(at + 1, end);
   }
 }
 
@@ -379,8 +410,9 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   { id: 'google_api_key', test: (s) => prefixThenRun(s, 'AIza', 30) },
   { id: 'vendor_api_key_sk_ant', test: (s) => prefixThenRun(s, 'sk-ant-', 10) },
   // regex có quantifier GIỚI HẠN ({0,40}) ⇒ tuyến tính
-  { id: 'pem_private_key', test: (s) => /-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----/.test(s) },
-  { id: 'refresh_token_field', test: (s) => /["']?refresh_token["']?\s{0,8}[:=]/i.test(s) },
+  { id: 'pem_private_key', test: hasPemPrivateKey },
+  // tiền tố cố định + MỘT quantifier (\s*) ⇒ tuyến tính; không giới hạn số khoảng trắng (bản \s{0,8} cũ lọt khi chèn 9)
+  { id: 'refresh_token_field', test: (s) => /refresh_token["']?\s*[:=]/i.test(s) },
   { id: 'canary', test: (s) => /GA-CANARY-[0-9a-f-]{8}/i.test(s) },
   /** Khoá kiểu `sk-…` của các hãng (không riêng một hãng). */
   { id: 'generic_sk_key', test: (s) => prefixThenRun(s, 'sk-', 20, true) },
