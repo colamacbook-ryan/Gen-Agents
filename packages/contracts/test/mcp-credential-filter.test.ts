@@ -3,6 +3,8 @@
 // (2) tool "chỉ nhận anchor" được miễn quét trong khi slug anchor 40 ký tự vẫn chở được token chữ thường / hex.
 // CNS-169 (Gen quyết 2026-10-16): hex / UUID / đoạn thiếu một lớp ký tự CỐ Ý không chặn (trừ khi có tiền tố đã biết);
 // lần chặn ⇒ audit `credential.blocked` (cảnh báo owner), không phải harness.violation.
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -14,7 +16,9 @@ import {
   CREDENTIAL_PATTERN_IDS,
   findCredentialLike,
   freeFormFields,
+  isCredentialKeyName,
   MCP_TOOLS,
+  normalizeCredentialName,
   PENALTY_EVIDENCE_ACTIONS,
   payloadLimitExceeded,
   SseEvent,
@@ -26,6 +30,12 @@ import {
 } from '../src/index.ts';
 
 const CANARY = 'GA-CANARY-3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11';
+
+/** Đường tệp đã theo dõi của repo (dữ liệu thật cho đo báo nhầm). */
+function listRepoFiles(): string[] {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  return execFileSync('git', ['-C', root, 'ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+}
 /**
  * Giá trị GIẢ dựng lúc chạy (luật lane: không để chuỗi giống credential nằm nguyên văn trong mã nguồn — gitleaks quét lịch
  * sử). `fake(n, bảng)` lặp bảng ký tự cho đủ n; `kv(tên, dấu, giá trị)` ghép phép gán.
@@ -33,6 +43,10 @@ const CANARY = 'GA-CANARY-3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11';
 const fake = (n: number, alphabet = '0123456789abcdef') =>
   Array.from({ length: n }, (_, i) => alphabet[(i * 7 + 3) % alphabet.length]).join('');
 const kv = (name: readonly string[], sep: string, value: string) => `${name.join('_')}${sep}${value}`;
+/** Chuỗi base64 chuẩn GIẢ, tất định, luôn có '+' và '/' (dựng lúc chạy). */
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const b64 = (n: number, salt = 0) =>
+  Array.from({ length: n }, (_, i) => (i === 7 ? '/' : i === 19 ? '+' : B64[(i * 37 + salt * 11 + 5) % 64])).join('');
 const FAKE_JWT = `eyJhbGciOiJIUzI1NiJ9.${'eyJzdWIiOiJ4In0'}.${'c2lnbmF0dXJlLXRlc3Q'}`;
 const FAKE_ACCESS = `ya29.${'A0ARrdaM-test-only-0123456789'}`;
 const ANCHOR = 'grid:skills/row:SK-0004/col:C';
@@ -311,6 +325,166 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     ).toBe(true);
   });
 
+  it('url_userinfo xấp xỉ TRÊN parser WHATWG: ký tự lạ, userinfo dài, scheme đặc biệt không cần //, không cần ranh giới', () => {
+    const pw = (x: string) => `${x}${fake(6, 'Pw9x')}`;
+    for (const s of [
+      `https://u:${pw('"')}@h/x`,
+      `https://u:${pw("'")}@h`,
+      `https://u:${pw('<')}@h`,
+      `https://u:${pw('>')}@h`,
+      `https://u:${pw('a@b')}@h`,
+      `https://${'u'.repeat(2500)}:${'p'.repeat(2500)}@h/`,
+      `https://:${pw('')}@h`,
+      `log: ftp://deploy:${pw('')}@files.internal:21/up`,
+      `https://u:p\t${pw('')}@h`,
+      // TAB / LF / CR bị parser bỏ — kể cả giữa scheme
+      `ht\ntps://u:${pw('')}@h`,
+      `HTTPS://u:${pw('')}@h`,
+      // scheme đặc biệt: số gạch / gạch ngược tuỳ ý, kể cả không có
+      `https:\\\\u:${pw('')}@h`,
+      `https:/u:${pw('')}@h`,
+      `https:u:${pw('')}@h`,
+      `https:///u:${pw('')}@h`,
+      `wss:\\/u:${pw('')}@h`,
+      // scheme khác có //
+      `postgres://app:${pw('')}@db:5432/x`,
+      // review lần 3: ký tự scheme hợp lệ đứng trước scheme (fail-closed: không cần ranh giới trái)
+      `1.https://u:${pw('')}@h`,
+      `-https://u:${pw('')}@h`,
+      `x.ftp://u:${pw('')}@h`,
+      `xhttps:u:${pw('')}@h`,
+      `FILE:///u:${pw('')}@h`,
+    ]) {
+      expect(findCredentialLike(s)?.patternId, JSON.stringify(s.slice(0, 60))).toBe('url_userinfo');
+    }
+    for (const s of [
+      'https://u@h',
+      'mailto:a@b',
+      'mailto:a:b@c',
+      'urn:x:y@z',
+      'a:b@c',
+      'https://h:8080/x@y',
+      'https://u@h:8080',
+      'https://h/a:b@c',
+      'x:/u:p@h',
+      'x:///u:p@h',
+      'https:\\h\\a:b@c',
+      'http: lỗi kết nối: xem log@server',
+    ]) {
+      expect(findCredentialLike(s), JSON.stringify(s)).toBeNull();
+    }
+  });
+
+  it('url_userinfo ⊇ new URL(): mọi chuỗi có URL.password ≠ "" đều bị bắt (corpus tất định, đủ các dạng lệch)', () => {
+    // mulberry32 tất định (LCG 32-bit cho chuỗi ngẫu nhiên tương quan khi rút nhiều lần liên tiếp)
+    let seed = 20261016;
+    const rnd = () => {
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const one = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)] as T;
+    // không có khoảng trắng thô (xem chú thích hasUrlUserinfo); có TAB / LF / CR, \\, @, :, ký tự lạ
+    const ALPHA = 'abcXYZ019:@"\'<>%!$&()*+,;=~._-\t\n\r[]\\/';
+    const pick = (n: number) => Array.from({ length: n }, () => one([...ALPHA])).join('');
+    const withTab = (x: string) => {
+      if (rnd() < 0.8) return x;
+      const k = Math.floor(rnd() * (x.length + 1));
+      return `${x.slice(0, k)}${one(['\t', '\n', '\r'])}${x.slice(k)}`;
+    };
+    const SCHEMES = ['https', 'HTTPS', 'Http', 'http', 'ws', 'WSS', 'ftp', 'file', 'postgres', 'x-y', 'mailto', 'urn'];
+    const PREFIXES = ['', '', 'x.', 'a-', 'A+b.', 'z9'];
+    const SEPS = ['', '/', '//', '///', '\\', '\\\\', '/\\', '\\/', '//\\'];
+    let withPassword = 0;
+    const misses: string[] = [];
+    for (let k = 0; k < 80_000; k++) {
+      const s = `${one(PREFIXES)}${withTab(one(SCHEMES))}:${one(SEPS)}${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${one(['', '/p', '?q=1', '#f', ':8080/x', '\\p'])}`;
+      let u: URL;
+      try {
+        u = new URL(s);
+      } catch {
+        continue;
+      }
+      if (u.password === '') continue;
+      withPassword++;
+      if (findCredentialLike(s) === null || findCredentialLike(`xem ${s} nhé`) === null) misses.push(JSON.stringify(s));
+    }
+    expect(withPassword).toBeGreaterThan(1500);
+    expect(misses.slice(0, 5)).toEqual([]);
+  });
+
+  it('tên credential mọi kiểu viết (camel / kebab / snake / HOA) + giá trị hex / chữ thường ⇒ chặn (review tay M0)', () => {
+    const hex40 = fake(40);
+    const lower40 = fake(40, 'abcdefghijklmnopqrstuvwxyz');
+    // 8 ca lọt reviewer nêu (5 tên camel / kebab + 3 secret base64 có + /)
+    const leaks: unknown[] = [
+      { [['refresh', 'Token'].join('')]: hex40 },
+      { [['client', 'Secret'].join('')]: hex40 },
+      { [['access', 'Token'].join('')]: lower40 },
+      `${['api', 'key'].join('-')}: ${hex40}`,
+      `${['api', 'Secret'].join('')}=${hex40}`,
+      `aws secret: ${b64(40, 1)}`,
+      `"${b64(40, 2)}"`,
+      `K=${b64(44, 3)}`,
+    ];
+    for (const v of leaks) {
+      expect(findCredentialLike(v), JSON.stringify(v).slice(0, 70)).not.toBeNull();
+    }
+    for (const k of ['refreshToken', 'Refresh-Token', 'REFRESH_TOKEN', 'refresh__token', 'X-Api-Key', 'apiToken']) {
+      expect(isCredentialKeyName(k), k).toBe(true);
+      expect(findCredentialLike(`${k}=${hex40}`), k).not.toBeNull();
+    }
+    for (const k of ['refresh', 'token', 'tokenCount', 'apikeys', 'secretary', 'accessTokenCount']) {
+      expect(isCredentialKeyName(k), k).toBe(false);
+    }
+    expect(normalizeCredentialName('Refresh-Token')).toBe('refreshtoken');
+  });
+
+  it('base64_secret_run: bắt base64 có + / (≥ 99 % mẫu 40 ký tự); 0 báo nhầm trên đường tệp / URL thật', () => {
+    // độ phủ: 2 000 secret base64 40 ký tự ngẫu nhiên tất định, đủ '+' hoặc '/'
+    let seed = 7;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed / 4294967296;
+    };
+    let total = 0;
+    let caught = 0;
+    while (total < 2000) {
+      const v = Array.from({ length: 40 }, () => B64[Math.floor(rnd() * 64)]).join('');
+      if (!/[+/]/.test(v)) continue;
+      total++;
+      if (findCredentialLike(`k ${v} `) !== null) caught++;
+    }
+    expect(caught / total).toBeGreaterThanOrEqual(0.99);
+    // báo nhầm: mọi đường tệp của repo (tương đối + tuyệt đối) + URL GitHub / raw / có query dựng từ chúng + URL mẫu
+    const repoFiles = listRepoFiles();
+    const sha = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b';
+    const samples: string[] = [
+      'https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions',
+      'https://vnexpress.net/gia-vang-hom-nay-16-10-2026-4801234.html?utm_source=Facebook&utm_medium=Social&utm_campaign=Feed2026',
+      'https://www.npmjs.com/package/@biomejs/biome/v/2.5.15?activeTab=versions',
+      'https://stackoverflow.com/questions/12345678/how-to-escape-a-Forward-Slash-in-JavaScript-RegExp-2026',
+      '/usr/lib/node_modules/corepack/dist/lib/corepack.cjs:12345',
+      'C:/Users/RyanNguyen/AppData/Local/Programs/Microsoft VS Code/resources/app/out/vs/workbench/Workbench2026.js',
+      '/home/user/Second-Brain/01-projects/gen-agents/audit/CNS-2026-10-16-closure-m0.md',
+    ];
+    for (const f of repoFiles) {
+      samples.push(
+        f,
+        `/home/user/gen-agents/${f}`,
+        `https://github.com/example-org/gen-agents/blob/${sha}/${f}`,
+        `https://raw.githubusercontent.com/example-org/gen-agents/${sha}/${f}?token=&plain=1#L10-L20`,
+      );
+    }
+    const fp = samples.filter((x) => CREDENTIAL_DETECTORS.find((d) => d.id === 'base64_secret_run')?.test(x));
+    expect(samples.length).toBeGreaterThan(200);
+    expect(fp).toEqual([]);
+    // chuỗi base64 ngắn (< 40) không bắt
+    expect(findCredentialLike(`v=${b64(36)}`)).toBeNull();
+  });
+
   it('npm / hf / GOCSPX / Bearer / URL có mật khẩu (L-SEC) — ca âm không bắt', () => {
     for (const s of [
       'the bearer of this note',
@@ -360,6 +534,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       google_oauth_client_secret: `GOCSPX-${fake(28, 'zX1cV2bN3m-_')}`,
       bearer_token: `Authorization: ${['Bear', 'er'].join('')} ${fake(24, 'abc.def~123+/=')}`,
       url_userinfo: `postgres://app:${fake(12, 'pAsS-w0rd')}@db.internal:5432/x`,
+      base64_secret_run: `secret ${b64(40)}`,
     };
     for (const p of CREDENTIAL_DETECTORS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
     expect(findCredentialLike({ Refresh_Token: 'bất kỳ' })).toEqual({ patternId: 'credential_field_name' });
@@ -411,6 +586,22 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
     'UUID lặp': '3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11 '.repeat(Math.floor(MB / 37)),
     ':// lặp': '://'.repeat(Math.floor(MB / 3)),
     '://a: + 1 MiB không @': `://a:${'b'.repeat(MB)}`,
+    '://: + 1 MiB @ (authority dài, có mật khẩu)': `://a:${'@'.repeat(MB)}`,
+    '://@ lặp': '://@'.repeat(Math.floor(MB / 4)),
+    ':// + 1 MiB TAB/LF': `://${'\t\n'.repeat(MB / 2)}`,
+    ':/:/ lặp (gần ://)': ':/:/'.repeat(Math.floor(MB / 4)),
+    'a: lặp': 'a:'.repeat(MB / 2),
+    '://a: lặp': '://a:'.repeat(Math.floor(MB / 5)),
+    '://a:@ lặp (mỗi authority có @)': ' ://a@'.repeat(Math.floor(MB / 6)),
+    'httpS:ftp:wss: lặp': 'httpS:ftp:wss:'.repeat(Math.floor(MB / 14)),
+    'https: lặp (authority lồng nhau)': 'https:'.repeat(Math.floor(MB / 6)),
+    'https:a:@ lặp': 'https:a:@'.repeat(Math.floor(MB / 9)),
+    'https: + 1 MiB gạch': `https:${'/'.repeat(MB)}`,
+    'x// lặp': 'x://'.repeat(Math.floor(MB / 4)),
+    'TAB lặp giữa scheme': 'ht\ttps:'.repeat(Math.floor(MB / 8)),
+    'base64 1 MiB (+ / thưa, ít đổi lớp)': `${'aaaaAAAA1111/'.repeat(Math.floor(MB / 13))}`,
+    'base64 đoạn 39 lặp': `${'Ab1+'.repeat(9)}Ab1 `.repeat(Math.floor(MB / 40)),
+    'refresh-_-token lặp': 'refresh-_-_-_-'.repeat(Math.floor(MB / 14)),
     '://u:p lặp (không @)': '://u:pppppppppp '.repeat(Math.floor(MB / 16)),
     'Bearer lặp': 'Bearer '.repeat(Math.floor(MB / 7)),
     'bearer + 1 MiB tab': `bearer${'\t'.repeat(MB)}`,
