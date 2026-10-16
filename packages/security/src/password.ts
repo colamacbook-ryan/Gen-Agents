@@ -105,8 +105,10 @@ class Argon2Worker {
       if (!p) return;
       this.pending.delete(m.id);
       if (this.pending.size === 0) w.unref();
-      if (m.ok) p.resolve(m.hash);
-      else p.reject(new Error(`argon2id lỗi: ${m.error}`));
+      if (m.ok) {
+        hasherRuns++;
+        p.resolve(m.hash);
+      } else p.reject(new Error(`argon2id lỗi: ${m.error}`));
     });
     const fail = (err: Error) => {
       if (this.worker === w) this.worker = null;
@@ -212,12 +214,33 @@ export function needsRehash(phc: string): boolean {
 }
 
 let dummyPhc: Promise<string> | null = null;
+let hasherRuns = 0;
 
-/** Tốn đúng một lần băm như kiểm thật — dùng khi tên đăng nhập không tồn tại (không lộ "sai user hay sai pass" qua thời gian). */
+/**
+ * Chuỗi băm "giả" cho tên đăng nhập không tồn tại. Gọi lúc khởi động (AuthService) để lần đăng nhập đầu với user lạ không
+ * tốn thêm một lần băm. Lỗi ⇒ KHÔNG giữ promise bị reject (lần sau tính lại) — giữ lại thì mọi lần đăng nhập user lạ sẽ
+ * thất bại ngay không băm ⇒ thời gian lệch hẳn user thật (lộ user) và bước chống dò user hỏng luôn (review MEDIUM).
+ */
+export function prepareDummyHash(): Promise<string> {
+  if (!dummyPhc) {
+    const p = hashPassword(randomBytes(24).toString('base64url'));
+    dummyPhc = p;
+    p.catch(() => {
+      if (dummyPhc === p) dummyPhc = null;
+    });
+  }
+  return dummyPhc;
+}
+
+/** Tốn đúng một lần kiểm (như mật khẩu thật) — dùng khi tên đăng nhập không tồn tại; luôn trả false. */
 export async function verifyAgainstDummy(password: string): Promise<false> {
-  dummyPhc ??= hashPassword(randomBytes(24).toString('base64url'));
-  await verifyPassword(password, await dummyPhc);
+  await verifyPassword(password, await prepareDummyHash());
   return false;
+}
+
+/** Số lần băm argon2id đã chạy xong (chẩn đoán + test "đường user lạ tốn đúng một lần kiểm"). */
+export function passwordHasherRuns(): number {
+  return hasherRuns;
 }
 
 // ---------------------------------------------------------------- mật khẩu lần đầu (STD-06, FS Ch.0)

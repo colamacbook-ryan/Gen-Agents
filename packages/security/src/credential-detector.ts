@@ -28,15 +28,10 @@
 // Hiệu năng: vòng lặp JS theo từng ký tự đắt (máy 4 CPU dùng chung) ⇒ chỉ MỘT vòng lặp như vậy (luật entropy); mọi bộ khác
 // lọc trước bằng includes / indexOf gốc của V8 rồi mới chạy regex có tiền tố chữ cố định.
 
+import { CREDENTIAL_KEY_NAMES, CREDENTIAL_PATTERN_IDS, type CredentialPatternId } from '@ga/contracts';
+
 /** Trần độ dài chuỗi được quét (1 Mi ký tự). Dài hơn ⇒ `too_large` ⇒ người gọi chặn / che toàn bộ. */
 export const SCAN_MAX_CHARS = 1_048_576;
-
-/** Sự kiện audit khi chặn (CNS-169): ghi tool, Role, id mẫu — KHÔNG ghi payload; mức cảnh báo owner; không phạt. */
-export const CREDENTIAL_BLOCKED = {
-  auditEvent: 'credential.blocked',
-  severity: 'warning',
-  denialCode: 'credential_like_payload',
-} as const;
 
 export interface CredentialSpan {
   start: number;
@@ -205,9 +200,14 @@ const awsAccessKey: Detector = {
   strong: true,
   pre: (v) => v.s.includes('AKIA') || v.s.includes('ASIA'),
   find(v, emit) {
-    // ranh giới hai đầu nằm trong regex (lookaround MỘT ký tự, không quantifier) ⇒ chuỗi "AKIAAKIA…" không sinh ứng viên
-    const re = /(?<![0-9A-Za-z])A(?:KI|SI)A[0-9A-Z]{16}(?![0-9A-Za-z])/g;
-    for (let m = re.exec(v.s); m; m = re.exec(v.s)) if (emit(m.index, m.index + 20, this.id)) return true;
+    // ranh giới TRƯỚC trong regex (lookbehind MỘT ký tự, không quantifier; rộng hơn `\b` của tham chiếu vì cho cả '_').
+    // KHÔNG đòi ranh giới SAU: tham chiếu `\b(?:AKIA|ASIA)[0-9A-Z]{16}` bắt cả khi chữ / số dính liền phía sau.
+    const re = /(?<![0-9A-Za-z])A(?:KI|SI)A[0-9A-Z]{16}/g;
+    for (let m = re.exec(v.s); m; m = re.exec(v.s)) {
+      const end = m.index + 20 + v.run(m.index + 20);
+      if (emit(m.index, end, this.id)) return true;
+      re.lastIndex = end;
+    }
     return false;
   },
 };
@@ -310,23 +310,31 @@ const pemPrivateKey: Detector = {
 
 // ---------------------------------------------------------------- cặp khoá–giá trị, Bearer, userinfo URL
 /** Tên khoá credential trong VĂN BẢN. Chỉ literal + tuỳ chọn có trần ⇒ không backtrack. */
-const FIELD_NAME_SRC =
-  'refresh[_-]?token|(?:access|id|auth|session)[_-]?token|client[_-]?secret|private[_-]?key|(?:x[_-]?)?api[_-]?key|secret[_-]?key|passw(?:or)?d';
-/** Mọi tên khoá (kể cả authorization) chứa ít nhất một chuỗi này (không phân biệt hoa thường) — lọc trước. */
-const FIELD_HINT_RE = /token|secret|key|passw|authorization/i;
+/**
+ * MỘT nguồn luật: tên khoá = `CREDENTIAL_KEY_NAMES` của contracts (mỗi `_` / `-` cho phép `_`, `-` hoặc không gì — bắt cả
+ * `refreshToken`, `refresh-token`) + phần thêm RIÊNG của security (`SECURITY_EXTRA_FIELD_SRC`). Thêm tên ở contracts ⇒ bộ
+ * này tự phủ (test đối chiếu lấy chính danh sách contracts làm corpus).
+ */
+const SECURITY_EXTRA_FIELD_SRC = ['passw(?:or)?d', 'set[_-]?cookie', 'cookie', 'bearer', 'auth[_-]?code'];
+const FIELD_NAME_SRC = [
+  ...CREDENTIAL_KEY_NAMES.map((n) => n.split(/[_-]/).map(escapeRe).join('[_-]?')),
+  ...SECURITY_EXTRA_FIELD_SRC,
+].join('|');
+/** Lọc trước có / không: mọi tên khoá (contracts + phần thêm + authorization) đều chứa một trong các mảnh này. */
+const FIELD_HINT_RE = /token|secret|key|passw|authorization|cookie|bearer|code/i;
 const VALUE_MIN = 8;
 /**
- * Tên khoá của detector tham chiếu `credential_assignment` (contracts, L0 — Gen 2026-10-16):
- * `(refresh_token|access_token|id_token|client_secret|private_key)["']?\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{8,}` /i.
- * Các tên này khớp ở MỌI vị trí (kể cả giữa từ); tên mở rộng khác (password, api_key…) cần ranh giới trước.
+ * Tên khoá của detector tham chiếu `credential_assignment` (contracts `CREDENTIAL_KEY_NAMES`, Gen 2026-10-16):
+ * `(<tên>)["']?\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{8}` /i. Các tên này khớp ở MỌI vị trí (kể cả giữa từ) như tham chiếu;
+ * tên mở rộng khác (password, biến thể camel / gạch nối…) cần ranh giới trước.
  */
-const REFERENCE_FIELD_NAMES = new Set(['refresh_token', 'access_token', 'id_token', 'client_secret', 'private_key']);
+const REFERENCE_FIELD_NAMES: ReadonlySet<string> = new Set(CREDENTIAL_KEY_NAMES);
 /** (\" | " | ')? + \s* + [:=] + \s* + (\" | " | ')? — hai \s* tách nhau bởi literal, không lồng. */
 const SEP_SRC = String.raw`\\?["']?\s*[:=]\s*\\?["']?`;
 /** ≥ 8 ký tự giá trị (đúng lớp ký tự của VALUE_RE). */
 const VALUE8_SRC = String.raw`[^\s"'${'`'}\\,;&<>{}()[\]]{8}`;
 /** Nhánh 1: tên khoá + giá trị. Nhánh 2: Authorization (+ từ lược đồ "Basic " / "Bearer " tuỳ chọn) + giá trị. */
-const REFERENCE_FIELD_SRC = [...REFERENCE_FIELD_NAMES].join('|');
+const REFERENCE_FIELD_SRC = [...REFERENCE_FIELD_NAMES].map(escapeRe).join('|');
 /** Ranh giới trước tên mở rộng nằm trong regex (lookbehind MỘT ký tự, không quantifier) ⇒ ứng viên hụt ranh giới không tốn vòng JS. */
 const NOT_ALNUM_BEFORE = '(?<![0-9A-Za-z])';
 const FIELD_RE_SRC = `(${REFERENCE_FIELD_SRC})${SEP_SRC}${VALUE8_SRC}|${NOT_ALNUM_BEFORE}(${FIELD_NAME_SRC})${SEP_SRC}${VALUE8_SRC}|${NOT_ALNUM_BEFORE}(authorization)${SEP_SRC}(?:[A-Za-z]{1,10} )?${VALUE8_SRC}`;
@@ -340,7 +348,7 @@ const SCHEME_RE = /[A-Za-z]{1,10} /y;
  * Che: chỉ phần giá trị (giữ JSON của dòng log hợp lệ).
  */
 const credentialField: Detector = {
-  id: 'credential_field',
+  id: 'credential_assignment',
   strong: true,
   pre: (v) => FIELD_HINT_RE.test(v.s),
   find(v, emit) {
@@ -350,7 +358,7 @@ const credentialField: Detector = {
     for (let m = ref.exec(s); m; m = ref.exec(s)) {
       const vs = valueStart(s, m.index + m[0].length, false);
       const e = stickyEnd(VALUE_RE, s, vs);
-      if (e > vs ? emit(vs, e, this.id) : emit(m.index, m.index + 13, this.id)) return true;
+      if (e > vs ? emit(vs, e, 'refresh_token_field') : emit(m.index, m.index + 13, 'refresh_token_field')) return true;
       ref.lastIndex = Math.max(ref.lastIndex, e);
     }
     // (2) tên khoá credential + giá trị ≥ 8 ký tự NGAY TRONG regex (\s* tách bởi literal, không lồng) ⇒ JS chỉ chạy trên
@@ -396,6 +404,41 @@ function valueStart(s: string, i: number, skipScheme: boolean): number {
   return i;
 }
 
+/**
+ * Gán biến môi trường bí mật: `<TÊN>_(SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)` + [:=] + ≥ 1 ký tự không trắng (kiểu `.env`,
+ * `export GITHUB_PAT=…`, YAML `API_KEY: …`). L0 đang thêm `env_secret_assignment` vào contracts (UPPER_SNAKE): bộ này đòi
+ * hậu tố VIẾT HOA (như tham chiếu), tên phía trước bất kỳ, giá trị chỉ cần 1 ký tự ⇒ ⊇ tham chiếu UPPER_SNAKE mà không chặn
+ * câu văn kiểu `primary_key: id`. Nếu bản thật của L0 không phân biệt hoa thường, test đối chiếu (B) sẽ đỏ khi gộp.
+ * Regex bắt đầu bằng hậu tố literal `_SECRET`… ⇒ tuyến tính.
+ */
+const ENV_SECRET_RE = /_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\\?["']?\s*[:=]\s*\S/g;
+
+const envSecretAssignment: Detector = {
+  id: 'env_secret_assignment',
+  strong: true,
+  pre: (v) => /_(?:SECRET|TOKEN|PASSW|KEY|PAT)/.test(v.s),
+  find(v, emit) {
+    const s = v.s;
+    const re = new RegExp(ENV_SECRET_RE.source, 'g');
+    for (let m = re.exec(s); m; m = re.exec(s)) {
+      const vs = valueStart(s, m.index + m[0].length - 1, false);
+      const e = stickyEnd(VALUE_RE, s, vs);
+      // giá trị rỗng (chỉ có dấu nháy) ⇒ vẫn là khớp; che phần hậu tố tên (không nuốt dấu nháy của JSON)
+      const hit =
+        e > vs ? emit(vs, e, this.id) : emit(m.index + 1, m.index + 1 + suffixLength(s, m.index + 1), this.id);
+      if (hit) return true;
+      re.lastIndex = Math.max(re.lastIndex, e);
+    }
+    return false;
+  },
+};
+
+function suffixLength(s: string, at: number): number {
+  let k = at;
+  while (k < s.length && s.charCodeAt(k) >= 65 && s.charCodeAt(k) <= 90) k++;
+  return k - at;
+}
+
 const BEARER_TOKEN_RE = /[0-9A-Za-z_.~+/=-]*/y;
 
 /** `Bearer <token ≥ 16>` (header HTTP trong log / payload). */
@@ -436,8 +479,9 @@ const urlUserinfo: Detector = {
       if (at < 0) return false;
       const i = stickyEnd(USERINFO_RE, s, at + 3);
       if (s.charCodeAt(i) === 64) {
+        // userinfo = s[at+3 .. i); có ':' ⇒ phần sau ':' là mật khẩu (kể cả tên đăng nhập rỗng: `https://:pw@host`)
         const colon = s.indexOf(':', at + 3);
-        if (colon > at + 3 && colon < i - 1 && emit(colon + 1, i, this.id)) return true;
+        if (colon >= at + 3 && colon < i - 1 && emit(colon + 1, i, this.id)) return true;
       }
       from = Math.max(at + 3, i);
     }
@@ -469,7 +513,7 @@ const canary: Detector = {
  * [0-9a-fA-F-] ⇒ hex thuần / UUID (kể cả hex trộn hoa thường) không bao giờ khớp. Vòng lặp JS DUY NHẤT theo từng ký tự.
  */
 const highEntropy: Detector = {
-  id: 'high_entropy',
+  id: 'high_entropy_run',
   strong: false,
   pre: () => true,
   find(v, emit) {
@@ -486,16 +530,44 @@ export const DETECTORS: readonly Detector[] = [
   telegramBotToken,
   pemPrivateKey,
   credentialField,
+  envSecretAssignment,
   bearerToken,
   urlUserinfo,
   canary,
   highEntropy,
 ];
 
-/** Mọi id mẫu có thể trả về (id của luật tiền tố + các bộ khác). */
+/** Mọi id mẫu có thể trả về (id của luật tiền tố + các bộ khác; `refresh_token_field` do bộ gán credential phát). */
 export const DETECTOR_IDS: readonly string[] = [
-  ...new Set(DETECTORS.flatMap((d) => (d === knownPrefixes ? PREFIX_RULES.map((r) => r.id) : [d.id]))),
+  ...new Set(
+    DETECTORS.flatMap((d) =>
+      d === knownPrefixes
+        ? PREFIX_RULES.map((r) => r.id)
+        : d === credentialField
+          ? ['refresh_token_field', 'credential_assignment']
+          : [d.id],
+    ),
+  ),
 ];
+
+/**
+ * Id mẫu ghi vào audit `credential.blocked` phải thuộc `CREDENTIAL_PATTERN_IDS` của contracts. Id trùng giữ nguyên;
+ * `encoded:<id>` ⇒ id bên trong; id chỉ có ở bộ dùng chung ⇒ id gần nghĩa nhất (đề xuất L0 thêm vào contracts).
+ */
+const AUDIT_ID_FALLBACK: Readonly<Record<string, CredentialPatternId>> = {
+  npm_token: 'generic_sk_key',
+  huggingface_token: 'generic_sk_key',
+  google_oauth_client_secret: 'generic_sk_key',
+  bearer_token: 'credential_assignment',
+  url_userinfo: 'credential_assignment',
+  encoded_marker_flood: 'high_entropy_run',
+};
+
+export function auditPatternId(id: string): CredentialPatternId {
+  if (id.startsWith('encoded:')) return auditPatternId(id.slice('encoded:'.length));
+  if ((CREDENTIAL_PATTERN_IDS as readonly string[]).includes(id)) return id as CredentialPatternId;
+  return AUDIT_ID_FALLBACK[id] ?? 'high_entropy_run';
+}
 
 function runDetectorsOn(v: View, emit: Emit, strongOnly = false): boolean {
   for (const d of DETECTORS) if ((!strongOnly || d.strong) && d.pre(v) && d.find(v, emit)) return true;

@@ -6,7 +6,7 @@
 //       hex (hex thuần / UUID / chỉ một kiểu chữ). Khi contracts cập nhật theo CNS-169, ngoại lệ này tự hết tác dụng;
 //   (C) hex thuần / UUID: bộ của @ga/security KHÔNG BAO GIỜ bắt.
 // Corpus: biên có hệ thống + ngẫu nhiên (PRNG hạt giống cố định), mọi chuỗi nằm trong trần quét.
-import { CREDENTIAL_DETECTORS } from '@ga/contracts';
+import { CREDENTIAL_DETECTORS, CREDENTIAL_KEY_NAMES } from '@ga/contracts';
 import { describe, expect, it } from 'vitest';
 import { detectCredential } from '../src/index.ts';
 
@@ -24,8 +24,14 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: 'refresh_token_field', re: /["']?refresh_token["']?\s*[:=]/i },
   {
     id: 'credential_assignment',
-    re: /(refresh_token|access_token|id_token|client_secret|private_key)["']?\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{8,}/i,
+    re: new RegExp(
+      `(?:${CREDENTIAL_KEY_NAMES.map((n) => n.replace('-', '\\-')).join('|')})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8,}`,
+      'i',
+    ),
   },
+  { id: 'aws_access_key_id', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}/ },
+  /** Dự đoán `env_secret_assignment` của L0 (UPPER_SNAKE …_SECRET/TOKEN/PASSWORD/KEY/PAT=) — bản thật vào contracts thì (B) phủ. */
+  { id: 'env_secret_assignment', re: /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|KEY|PAT)\s*=\s*\S/ },
   { id: 'canary', re: /GA-CANARY-[0-9a-f-]{8,}/i },
   {
     id: 'high_entropy',
@@ -139,7 +145,8 @@ function corpus(): string[] {
   }
   // gán credential theo tên khoá (tham chiếu credential_assignment): tên × hoa/thường × ký tự đứng trước × dấu gán × độ dài giá trị
   const VALUE = 'ABCabc0123._~+/=-';
-  const names = ['refresh_token', 'access_token', 'id_token', 'client_secret', 'private_key'];
+  // TOÀN BỘ danh sách tên khoá của contracts — thêm tên ở contracts thì corpus tự phủ
+  const names = [...CREDENTIAL_KEY_NAMES];
   const seps = [':', '=', ' : ', '": "', "'='", '=\t', '":"'];
   for (const name of names) {
     for (const sep of seps) {
@@ -147,6 +154,23 @@ function corpus(): string[] {
         const before = pick(['', ' ', 'x', '_', '"', '{"', 'INFO got {"', 'a1']);
         const body = run(n, VALUE);
         out.push(`${before}${flipCase(name)}${sep}${body}`, `INFO ${JSON.stringify({ [name]: body })} end`);
+      }
+    }
+  }
+  // AKIA / ASIA: ký tự trước (đầu chuỗi / ranh giới / chữ) × đuôi dính liền (chữ, số, không gì) — review MEDIUM
+  for (const p of ['AKIA', 'ASIA']) {
+    for (const before of ['', ' ', '_', '-', 'x', '1', '"']) {
+      for (const after of ['', ' ', 'X', '9', 'abc', '_']) {
+        out.push(`${before}${p}${run(16, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')}${after}`);
+        out.push(`${before}${p}${run(15, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')}${after}`);
+      }
+    }
+  }
+  // gán biến môi trường bí mật: tên UPPER_SNAKE (+ chữ thường) × hậu tố × dấu gán × giá trị 0–3 ký tự
+  for (const suffix of ['SECRET', 'TOKEN', 'PASSWORD', 'KEY', 'PAT', 'secret', 'token']) {
+    for (const name of ['DB', 'GITHUB', 'MY_APP', 'X1', 'aws_secret_ACCESS']) {
+      for (const sep of ['=', ' = ', ':', '="']) {
+        out.push(`${pick(['', 'export ', ' '])}${name}_${suffix}${sep}${run(int(0, 3), VALUE)}`);
       }
     }
   }

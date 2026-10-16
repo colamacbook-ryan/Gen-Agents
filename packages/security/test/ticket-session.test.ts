@@ -27,7 +27,8 @@ import { FakeClock } from './helpers.ts';
 const INPUT = {
   acc: 'EN-0001',
   container: 'ga-sys-7K2Q',
-  argvLogin: ['login-cmd', 'auth', 'login'],
+  engineSlug: 'engine-a',
+  authMethod: 'subscription' as const,
   guiSessionHash: 'a'.repeat(64),
 };
 
@@ -87,12 +88,17 @@ describe('vé terminal', () => {
     expect(verifyTermTicket(ticket, key, clock, cache).ok).toBe(true);
   });
 
-  it('ca âm: sửa claims (tài khoản / argv / exp) mà không có khoá ⇒ bad_signature', () => {
+  it('ca âm: sửa claims (tài khoản / engine / cách đăng nhập / exp) mà không có khoá ⇒ bad_signature', () => {
     const key = randomBytes(32);
     const clock = new FakeClock();
     const { ticket, claims } = issueTermTicket(INPUT, key, clock);
     const sig = ticket.split('.')[1] as string;
-    for (const change of [{ acc: 'EN-0002' }, { argvLogin: ['sh', '-c', 'id'] }, { exp: claims.exp + 3600 }]) {
+    for (const change of [
+      { acc: 'EN-0002' },
+      { engineSlug: 'engine-b' },
+      { authMethod: 'api_key' },
+      { exp: claims.exp + 3600 },
+    ]) {
       const payload = b64urlEncode(Buffer.from(JSON.stringify({ ...claims, ...change })));
       expect(verifyTermTicket(`${payload}.${sig}`, key, clock, new TicketReplayCache()).ok).toBe(false);
     }
@@ -102,23 +108,25 @@ describe('vé terminal', () => {
     const key = randomBytes(32);
     const clock = new FakeClock();
     const now = Math.floor(clock.now().getTime() / 1000);
-    const t = forge(key, { v: 1, ...INPUT, exp: now + 3600, nonce: 'n'.repeat(24) });
+    const t = forge(key, { v: 2, ...INPUT, exp: now + 3600, nonce: 'n'.repeat(24) });
     expect(verifyTermTicket(t, key, clock, new TicketReplayCache())).toEqual({
       ok: false,
       reason: 'lifetime_too_long',
     });
   });
 
-  it('ca âm: claims sai schema chặt (trường thừa, argv rỗng, hash sai dạng, JSON hỏng) dù chữ ký đúng', () => {
+  it('ca âm: claims sai schema chặt (trường thừa / argv, phiên bản cũ, slug / cách đăng nhập lạ, hash sai dạng, JSON hỏng) dù chữ ký đúng', () => {
     const key = randomBytes(32);
     const clock = new FakeClock();
     const exp = Math.floor(clock.now().getTime() / 1000) + 30;
-    const base = { v: 1, ...INPUT, exp, nonce: 'n'.repeat(24) };
+    const base = { v: 2, ...INPUT, exp, nonce: 'n'.repeat(24) };
     for (const c of [
       { ...base, shell: true },
-      { ...base, argvLogin: [] },
+      { ...base, argvLogin: ['sh', '-c', 'id'] },
+      { ...base, v: 1 },
+      { ...base, engineSlug: 'Engine A; rm' },
+      { ...base, authMethod: 'shell' },
       { ...base, guiSessionHash: 'xyz' },
-      { ...base, v: 2 },
       { ...base, nonce: 'short' },
       'không phải object',
     ]) {
@@ -147,7 +155,7 @@ describe('vé terminal', () => {
       reason: 'too_large',
     });
     expect(() => issueTermTicket(INPUT, randomBytes(16), clock)).toThrow(/32 byte/);
-    expect(() => issueTermTicket({ ...INPUT, argvLogin: ['x'.repeat(5000)] }, key, clock)).toThrow(/trần/);
+    expect(() => issueTermTicket({ ...INPUT, acc: 'EN-x' }, key, clock)).toThrow();
   });
 
   it('bộ nhớ chống phát lại đầy ⇒ từ chối vé mới (fail-closed); vé hết hạn được dọn để nhường chỗ', () => {

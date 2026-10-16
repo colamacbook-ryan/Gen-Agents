@@ -12,6 +12,8 @@ import {
   PASSWORD_RULES,
   PasswordHasherBusyError,
   PasswordHashFormatError,
+  passwordHasherRuns,
+  prepareDummyHash,
   validateNewPassword,
   verifyAgainstDummy,
   verifyPassword,
@@ -108,6 +110,15 @@ describe('argon2id', () => {
 
   it('verifyAgainstDummy luôn false (dùng cho tên đăng nhập không tồn tại)', async () => {
     expect(await verifyAgainstDummy('bất kỳ')).toBe(false);
+  });
+
+  it('đường user lạ tốn ĐÚNG một lần kiểm argon2id (dummy đã sẵn)', async () => {
+    await prepareDummyHash();
+    for (let i = 0; i < 3; i++) {
+      const before = passwordHasherRuns();
+      expect(await verifyAgainstDummy(`thử ${i}`)).toBe(false);
+      expect(passwordHasherRuns() - before).toBe(1);
+    }
   });
 });
 

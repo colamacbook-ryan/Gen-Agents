@@ -82,9 +82,11 @@ export const SAMPLES: Record<string, string> = {
     'PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END ',
     'PRIVATE KEY-----',
   ),
-  credential_field: j('"refresh', '_token": "', '1//', '0abc"'),
+  refresh_token_field: j('"refresh', '_token": "', '1//', '0abc"'),
+  credential_assignment: j('INFO got {"client', '_secret":"', 'abcd1234._~+/="}'),
+  env_secret_assignment: j('export MY_SERVICE', '_TOKEN=', 'x1'),
   bearer_token: j('curl -H "Bear', 'er ', 'abc.def-ghi_jkl~mno+pq/rs="'),
   url_userinfo: j('https://deploy:', 'Hunter2-Pass', '@git.example.com/repo.git'),
   canary: CANARY,
-  high_entropy: body(40, 'Zq8XwLmN3vBtRk7HpYc2'),
+  high_entropy_run: body(40, 'Zq8XwLmN3vBtRk7HpYc2'),
 };

@@ -1,9 +1,9 @@
 // Chặn payload ra có nội dung giống credential (CNS-133, CNS-169) — mọi tool có dữ liệu đi ra / ghi bền, tin Telegram, export.
 // Thứ tự BẮT BUỘC: (1) chặn kích thước (không quét gì nếu vượt trần) → (2) quét MỌI khoá + MỌI chuỗi giá trị, không có tool /
-// trường nào được miễn. Kết quả `denied` mang id mẫu + SHA-256 đoạn khớp (audit chỉ lưu hash, không lưu payload).
-import { createHash } from 'node:crypto';
-import { TOOL_PAYLOAD_LIMITS } from '@ga/contracts';
-import { CREDENTIAL_BLOCKED, scanText } from './credential-detector.ts';
+// trường nào được miễn. Kết quả `denied` mang id mẫu — KHÔNG mang payload / đoạn khớp / hash (contracts CREDENTIAL_BLOCKED:
+// audit chỉ {patternId, tool}). Lần chặn ⇒ audit `credential.blocked`, cảnh báo owner, KHÔNG phạt (CNS-169).
+import { CREDENTIAL_KEY_NAMES, type CredentialPatternId, TOOL_PAYLOAD_LIMITS } from '@ga/contracts';
+import { auditPatternId, scanText } from './credential-detector.ts';
 
 export interface PayloadLimits {
   maxStringChars: number;
@@ -13,41 +13,47 @@ export interface PayloadLimits {
 }
 
 /**
- * Tên khoá mang credential — so sau khi chuẩn hoá (chữ thường, bỏ mọi ký tự ngoài a–z0–9) ⇒ `refresh_token`, `refreshToken`,
- * `Refresh-Token` là một. Bao `CREDENTIAL_KEY_RE` của contracts (refresh/access/id_token, client_secret, private_key).
+ * Tên khoá mang credential (MỘT nguồn luật): `CREDENTIAL_KEY_NAMES` của contracts + `SECURITY_EXTRA_KEY_NAMES`, so sau khi
+ * chuẩn hoá ⇒ bao `CREDENTIAL_KEY_RE` của contracts (kể cả các biến thể viết hoa / camel / gạch nối).
  */
-export const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set([
-  'refreshtoken',
-  'accesstoken',
-  'idtoken',
-  'authtoken',
-  'sessiontoken',
-  'oauthtoken',
-  'token',
-  'clientsecret',
-  'secret',
-  'secretkey',
-  'privatekey',
-  'apikey',
-  'xapikey',
+/** Chuẩn hoá tên khoá để so: chữ thường, bỏ mọi ký tự ngoài a–z0–9 (`Refresh-Token` = `refresh_token` = `refreshToken`). */
+export const normalizeKeyName = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Phần thêm RIÊNG của security (ngoài contracts): tên chung chung chỉ chặn khi là KHOÁ object, không chặn câu văn. */
+export const SECURITY_EXTRA_KEY_NAMES = [
   'password',
   'passwd',
+  'secret',
+  'token',
+  'oauth_token',
   'authorization',
-  'proxyauthorization',
+  'proxy-authorization',
   'bearer',
   'cookie',
-  'setcookie',
-  'authcode',
-]);
+  'set-cookie',
+  'auth_code',
+] as const;
+
+export const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set(
+  [...CREDENTIAL_KEY_NAMES, ...SECURITY_EXTRA_KEY_NAMES].map(normalizeKeyName),
+);
 
 export function isSensitiveKey(key: string): boolean {
-  return SENSITIVE_KEY_NAMES.has(key.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  return SENSITIVE_KEY_NAMES.has(normalizeKeyName(key));
 }
 
 export type PayloadScreenResult =
   | { status: 'ok' }
   | { status: 'denied'; code: 'payload_too_large'; reason: string }
-  | { status: 'denied'; code: typeof CREDENTIAL_BLOCKED.denialCode; patternId: string; matchSha256: string };
+  | {
+      status: 'denied';
+      code: 'credential_like_payload';
+      /** id mẫu chính xác của bộ dùng chung (để log nội bộ) */
+      patternId: string;
+      /** id cho audit `credential.blocked` (thuộc CREDENTIAL_PATTERN_IDS của contracts) — gateway gọi
+       *  `credentialBlockedAudit(tool, auditPatternId)` của contracts. Không có payload / đoạn khớp / hash. */
+      auditPatternId: CredentialPatternId;
+    };
 
 /** Đo payload mà không đi quá trần — dừng ngay khi vượt (không duyệt hết mảng 1 triệu phần tử). null = trong trần. */
 export function payloadOverLimit(value: unknown, limits: PayloadLimits = TOOL_PAYLOAD_LIMITS): string | null {
@@ -83,18 +89,15 @@ export function payloadOverLimit(value: unknown, limits: PayloadLimits = TOOL_PA
   return null;
 }
 
-const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
-
 function denyText(s: string, limits: PayloadLimits): PayloadScreenResult | null {
   const r = scanText(s, { maxChars: limits.maxStringChars, firstOnly: true });
   if (r.status === 'clean') return null;
   if (r.status === 'too_large') return { status: 'denied', code: 'payload_too_large', reason: 'chuỗi quá dài' };
-  const sp = r.spans[0];
   return {
     status: 'denied',
-    code: CREDENTIAL_BLOCKED.denialCode,
+    code: 'credential_like_payload',
     patternId: r.patternId,
-    matchSha256: sha256(sp ? s.slice(sp.start, sp.end) : s),
+    auditPatternId: auditPatternId(r.patternId),
   };
 }
 
@@ -118,9 +121,9 @@ export function screenPayload(value: unknown, limits: PayloadLimits = TOOL_PAYLO
         if (isSensitiveKey(k)) {
           return {
             status: 'denied',
-            code: CREDENTIAL_BLOCKED.denialCode,
+            code: 'credential_like_payload',
             patternId: 'credential_field_name',
-            matchSha256: sha256(k),
+            auditPatternId: 'credential_field_name',
           };
         }
         const d = denyText(k, limits);
@@ -130,27 +133,4 @@ export function screenPayload(value: unknown, limits: PayloadLimits = TOOL_PAYLO
     }
   }
   return { status: 'ok' };
-}
-
-/** Metadata audit `credential.blocked` (CNS-169): tool, Role, id mẫu, hash đoạn khớp — KHÔNG có payload. */
-export function credentialBlockedAudit(input: {
-  tool: string;
-  roleId: string | null;
-  result: Extract<PayloadScreenResult, { patternId: string }>;
-}): {
-  event: typeof CREDENTIAL_BLOCKED.auditEvent;
-  severity: typeof CREDENTIAL_BLOCKED.severity;
-  tool: string;
-  roleId: string | null;
-  patternId: string;
-  matchSha256: string;
-} {
-  return {
-    event: CREDENTIAL_BLOCKED.auditEvent,
-    severity: CREDENTIAL_BLOCKED.severity,
-    tool: input.tool,
-    roleId: input.roleId,
-    patternId: input.result.patternId,
-    matchSha256: input.result.matchSha256,
-  };
 }

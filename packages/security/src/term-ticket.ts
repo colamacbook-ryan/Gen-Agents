@@ -40,23 +40,24 @@ function mac(key: Uint8Array, payloadB64: string): Buffer {
 
 /** ga-app: ký vé cho một phiên PTY. Vé không lưu ở đâu. Trả vé + claims (để ghi audit metadata, không ghi vé). */
 export function issueTermTicket(
-  input: Pick<TermTicketClaims, 'acc' | 'container' | 'argvLogin' | 'guiSessionHash'>,
+  input: Pick<TermTicketClaims, 'acc' | 'container' | 'engineSlug' | 'authMethod' | 'guiSessionHash'>,
   key: Uint8Array,
   clock: Clock,
 ): { ticket: string; claims: TermTicketClaims } {
   assertTicketKey(key);
   const claims = TermTicketClaimsSchema.parse({
-    v: 1,
+    v: 2,
     acc: input.acc,
     container: input.container,
-    argvLogin: input.argvLogin,
+    engineSlug: input.engineSlug,
+    authMethod: input.authMethod,
     guiSessionHash: input.guiSessionHash,
     exp: Math.floor(clock.now().getTime() / 1000) + PTY.ticketTtlSeconds,
     nonce: b64urlEncode(randomBytes(18)),
   });
   const payload = b64urlEncode(Buffer.from(JSON.stringify(claims), 'utf8'));
   const ticket = `${payload}.${b64urlEncode(mac(key, payload))}`;
-  if (ticket.length > MAX_TICKET_CHARS) throw new RangeError('vé vượt trần độ dài (argv đăng nhập quá dài)');
+  if (ticket.length > MAX_TICKET_CHARS) throw new RangeError('vé vượt trần độ dài');
   return { ticket, claims };
 }
 
