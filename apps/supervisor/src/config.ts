@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { PTY } from '@ga/contracts';
+import { KeyMaterialError, loadKeyFile, RAW_KEY_ENV_NAMES } from '@ga/security';
 
 // Cấu hình ga-supervisor. Biến môi trường chỉ chứa giá trị KHÔNG bí mật (đường tệp, tên mạng, ảnh…). Bí mật (khoá RPC,
 // khoá vé terminal) đọc từ TỆP secret (compose `secrets:`), không bao giờ từ env — env đọc được qua Docker API (CNS-143).
@@ -8,7 +8,7 @@ import { PTY } from '@ga/contracts';
 export interface SupervisorConfig {
   listenHost: string;
   listenPort: number;
-  /** 32 byte (tệp: 64 hex hoặc base64 của 32 byte — cùng định dạng với @ga/security parseKeyText). */
+  /** 32 byte, đọc bằng @ga/security loadKeyFile (tệp: 64 hex hoặc base64 của 32 byte). */
   supervisorKey: Buffer;
   termTicketKey: Buffer;
   /** URL MCP gateway trên mạng ga-roles — đặt vào env GA_GATEWAY_URL của exec lượt (contracts execEnv). */
@@ -38,36 +38,20 @@ export class ConfigError extends Error {
 export const DIGEST_IMAGE_RE = /^(?:[a-z0-9][a-z0-9._/:-]{0,200}@sha256:[0-9a-f]{64}|sha256:[0-9a-f]{64})$/;
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const PROXY_RE = /^http:\/\/[A-Za-z0-9.-]{1,253}:[0-9]{1,5}$/;
-const SECRET_ENV = [
-  'GA_SUPERVISOR_KEY',
-  'GA_TERM_TICKET_KEY',
-  'GA_UPDATER_KEY',
-  'GA_EGRESS_KEY',
-  'GENAGENTS_MASTER_KEY',
-];
+/** Tên biến mang khoá THÔ (danh sách chung của @ga/security). Có MẶT trong env (kể cả rỗng) ⇒ từ chối khởi động. */
+const SECRET_ENV: readonly string[] = RAW_KEY_ENV_NAMES;
 
 /**
- * Đọc khoá 32 byte từ tệp secret: dòng đầu là 64 ký tự hex, hoặc base64 / base64url của đúng 32 byte (cùng quy ước với
- * @ga/security `parseKeyText` của L-SEC — ga-app ký, supervisor kiểm bằng cùng byte). Lỗi không kèm nội dung.
- * TODO(L-SEC): thay bằng `loadKeyFile` của @ga/security khi gói đó vào nhánh.
+ * Đọc khoá 32 byte từ tệp secret bằng `loadKeyFile` của @ga/security (một nguồn với ga-app: tệp thường, ≤ 4 KiB, không mở
+ * quyền cho "others", đúng một dòng 64 hex / base64 của 32 byte, không phải một byte lặp). Lỗi không kèm nội dung khoá.
  */
 export function readKeyFile(path: string, what: string): Buffer {
-  let raw: string;
   try {
-    raw = readFileSync(path, 'utf8');
-  } catch {
-    throw new ConfigError(`không đọc được tệp secret ${what}`);
+    return loadKeyFile(path, what);
+  } catch (e) {
+    if (e instanceof KeyMaterialError) throw new ConfigError(`tệp secret ${e.message}`);
+    throw e;
   }
-  const t = (raw.split(/\r?\n/)[0] ?? '').trim();
-  let key: Buffer | null = null;
-  if (/^[0-9a-fA-F]{64}$/.test(t)) key = Buffer.from(t, 'hex');
-  else if (/^[A-Za-z0-9+/_-]{43}={0,1}$/.test(t)) {
-    const b = Buffer.from(t.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-    if (b.length === 32) key = b;
-  }
-  if (!key)
-    throw new ConfigError(`tệp secret ${what} sai dạng (64 hex hoặc base64 của 32 byte) — nội dung không in ra`);
-  return key;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): SupervisorConfig {

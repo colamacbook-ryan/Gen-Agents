@@ -2,13 +2,14 @@ import { randomBytes } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { buildTermWebSocketInit, ExecFrame, PTY, SUPERVISOR_RPC } from '@ga/contracts';
+import { issueTermTicket } from '@ga/security';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { signRpc, signTicketForTest } from '../src/auth.ts';
+import { signRpc } from '../src/auth.ts';
 import { silentLogger } from '../src/log.ts';
 import { LOGIN_CLOSE_WINSIZE } from '../src/pty.ts';
 import { createSupervisorServer } from '../src/server.ts';
-import { SYS, setup } from './helpers.ts';
+import { SYS, setup, signRawTicket } from './helpers.ts';
 
 // HTTP của supervisor: RPC ký HMAC + relay PTY trên /term (runtime giả).
 
@@ -156,22 +157,19 @@ async function ptyBoot(maxDuration = 600) {
   await b.svc.ensureContainer({ consumer: SYS, template: 'sys.v1', authVolumes: ['ga-auth-en-0001'] });
   await b.svc.start('ga-sys-AB12');
   b.rt.onExec = () => {}; // phiên login chạy tới khi bị đóng
-  const now = Math.floor(b.clock.now().getTime() / 1000);
-  const ticket = (over: Record<string, unknown> = {}) =>
-    signTicketForTest(
+  // vé hợp lệ = đúng hàm ga-app dùng (issueTermTicket của @ga/security); `exp` quá khứ ⇒ phát với đồng hồ lùi 61 s
+  const ticket = (over: { acc?: string; container?: string; expired?: boolean } = {}) =>
+    issueTermTicket(
       {
-        v: 2,
-        acc: 'EN-0001',
-        container: 'ga-sys-AB12',
+        acc: over.acc ?? 'EN-0001',
+        container: over.container ?? 'ga-sys-AB12',
         engineSlug: 'demo',
         authMethod: 'subscription',
         guiSessionHash: 'a'.repeat(64),
-        exp: now + 60,
-        nonce: randomBytes(16).toString('base64url'),
-        ...over,
       },
       b.termKey,
-    );
+      over.expired ? { now: () => new Date(b.clock.now().getTime() - 61_000) } : b.clock,
+    ).ticket;
   const open = (t: string, url?: string) => {
     const init = buildTermWebSocketInit(b.base, t);
     const ws = new WebSocket(url ?? init.url, init.protocols);
@@ -274,14 +272,10 @@ describe('PTY /term — vé trong subprotocol, exec ga-runner login, đóng theo
     await expect(b.open(t)).rejects.toThrow('HTTP 401');
   });
   it.each([
-    [
-      'vé hết hạn',
-      (b: Awaited<ReturnType<typeof ptyBoot>>) => b.ticket({ exp: Math.floor(b.clock.now().getTime() / 1000) - 1 }),
-      'HTTP 401',
-    ],
+    ['vé hết hạn', (b: Awaited<ReturnType<typeof ptyBoot>>) => b.ticket({ expired: true }), 'HTTP 401'],
     [
       'vé ký khoá khác',
-      (_b: Awaited<ReturnType<typeof ptyBoot>>) => signTicketForTest({ v: 2 }, randomBytes(32)),
+      (_b: Awaited<ReturnType<typeof ptyBoot>>) => signRawTicket({ v: 2 }, randomBytes(32)),
       'HTTP 401',
     ],
     [

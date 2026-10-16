@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { request } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildConsumerContainer, type SupervisorError, signTicketForTest } from '../../../apps/supervisor/src/index.ts';
+import { buildConsumerContainer, type SupervisorError } from '../../../apps/supervisor/src/index.ts';
 import {
   buildTermWebSocketInit,
   EngineInstallStatusResponse,
@@ -12,6 +12,7 @@ import {
   parseRunnerStdout,
 } from '../../../packages/contracts/src/index.ts';
 import { adapterFor } from '../../../packages/engines/src/index.ts';
+import { issueTermTicket } from '../../../packages/security/src/index.ts';
 import {
   buildImages,
   COMPOSE,
@@ -72,20 +73,19 @@ const protocol = (fs: ExecFrame[]) => {
   return parseRunnerStdout(s.endsWith('\n') ? s.slice(0, -1).split('\n') : s ? s.split('\n') : []);
 };
 
-function ticket(over: Record<string, unknown> = {}) {
-  const t = signTicketForTest(
+/** Vé PTY phát bằng ĐÚNG hàm của ga-app (@ga/security issueTermTicket); `expired` ⇒ phát với đồng hồ lùi 61 s. */
+function ticket(over: { acc?: string; engineSlug?: string; expired?: boolean } = {}) {
+  const shift = over.expired ? 61_000 : 0;
+  const { ticket: t } = issueTermTicket(
     {
-      v: 2,
-      acc: 'EN-9001',
+      acc: over.acc ?? 'EN-9001',
       container: SYS,
-      engineSlug: AGY,
+      engineSlug: over.engineSlug ?? AGY,
       authMethod: 'subscription',
       guiSessionHash: 'a'.repeat(64),
-      exp: Math.floor(Date.now() / 1000) + 60,
-      nonce: randomBytes(16).toString('base64url'),
-      ...over,
     },
     sup.termKey,
+    { now: () => new Date(Date.now() - shift) },
   );
   usedTickets.push(t);
   return t;
@@ -115,7 +115,7 @@ function openTerm(t: string): Promise<Term> {
 }
 
 /** Trạng thái HTTP của bắt tay /term (để thấy 401 / 403 / 400). */
-function upgradeStatus(t: string | null, path = PTY.path): Promise<number> {
+function upgradeStatus(t: string | null, path: string = PTY.path): Promise<number> {
   const u = new URL(sup.base);
   return new Promise((resolve, reject) => {
     const req = request({
@@ -394,7 +394,7 @@ describe.sequential('IT runtime — Docker thật', () => {
 
   it('vé phát lại / hết hạn / tài khoản không mount / vé trong URL ⇒ bị từ chối', async () => {
     expect(await upgradeStatus(usedTickets[0] as string)).toBe(401); // phát lại
-    expect(await upgradeStatus(ticket({ exp: Math.floor(Date.now() / 1000) - 1 }))).toBe(401);
+    expect(await upgradeStatus(ticket({ expired: true }))).toBe(401);
     expect(await upgradeStatus(ticket({ acc: 'EN-9003' }))).toBe(403);
     expect(await upgradeStatus(null, `${PTY.path}?ticket=${ticket()}`)).toBe(400);
     expect(await upgradeStatus(null)).toBe(401);

@@ -44,6 +44,9 @@ importers:
       '@ga/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ga/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       dockerode:
         specifier: 5.0.1
         version: 5.0.1

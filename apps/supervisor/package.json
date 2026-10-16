@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ga/contracts": "workspace:*",
+    "@ga/security": "workspace:*",
     "dockerode": "5.0.1",
     "ws": "8.18.3",
     "zod": "4.6.7"

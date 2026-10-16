@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { Clock } from '@ga/contracts';
 import { silentLogger } from '../src/log.ts';
 import { PtyRelay } from '../src/pty.ts';
@@ -61,4 +61,13 @@ export function setup(over: Partial<TemplateEnv> = {}, maxDurationSeconds = 600)
   );
   const pty = new PtyRelay(svc, { termKey, allowedOrigins: [], maxDurationSeconds, clock, log: silentLogger });
   return { rt, broker, svc, pty, supervisorKey, termKey, clock, env };
+}
+
+/**
+ * CHỈ cho ca âm: ký vé với claims TUỲ Ý (issueTermTicket của @ga/security chỉ ký claims hợp lệ). Vé hợp lệ trong test luôn
+ * dùng issueTermTicket — chứng minh supervisor nhận đúng vé ga-app phát.
+ */
+export function signRawTicket(claims: unknown, key: Buffer): string {
+  const payload = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
+  return `${payload}.${createHmac('sha256', key).update('ga-term.v1.').update(payload).digest('base64url')}`;
 }

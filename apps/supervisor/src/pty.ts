@@ -11,8 +11,8 @@ import {
   type PtyCloseReason,
   type TermTicketClaims,
 } from '@ga/contracts';
+import { TicketReplayCache, verifyTermTicket } from '@ga/security';
 import { type WebSocket, WebSocketServer } from 'ws';
-import { OneTimeCache, verifyTicket } from './auth.ts';
 import { SupervisorError } from './errors.ts';
 import type { Logger } from './log.ts';
 import type { ExecSession } from './runtime.ts';
@@ -64,7 +64,7 @@ export interface PtyOptions {
 export class PtyRelay {
   private readonly svc: SupervisorService;
   private readonly opt: PtyOptions;
-  private readonly nonces = new OneTimeCache(10_000);
+  private readonly nonces = new TicketReplayCache(10_000);
   private readonly sessions = new Map<string, Session>();
   /** Khoá đang dựng exec (giữ chỗ đồng bộ ⇒ hai vé cùng (container, tài khoản) không mở hai phiên). */
   private readonly pending = new Set<string>();
@@ -101,7 +101,7 @@ export class PtyRelay {
     }
     const ticket = extractTermTicket(req.headers['sec-websocket-protocol'] ?? null);
     if (!ticket) return this.reject(socket, 401, 'no_ticket');
-    const v = verifyTicket(ticket, this.opt.termKey, this.opt.clock, this.nonces);
+    const v = verifyTermTicket(ticket, this.opt.termKey, this.opt.clock, this.nonces);
     if (!v.ok) return this.reject(socket, 401, v.reason);
     const claims = v.claims;
     const key = `${claims.container}/${claims.acc}`;

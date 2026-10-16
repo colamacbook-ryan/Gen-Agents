@@ -1,5 +1,5 @@
 // Bề mặt của @ga/supervisor cho testing/ (IT) — app khác KHÔNG import gói này (ranh giới §D.2).
-export { OneTimeCache, signRpc, signTicketForTest, verifyRpc, verifyTicket } from './auth.ts';
+export { OneTimeCache, signRpc, verifyRpc } from './auth.ts';
 export { type ConfigError, loadConfig, readKeyFile, type SupervisorConfig } from './config.ts';
 export { DockerRuntime, dockerFromHost } from './docker.ts';
 export { SupervisorError } from './errors.ts';
