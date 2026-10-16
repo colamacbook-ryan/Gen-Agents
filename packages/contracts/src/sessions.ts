@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TokenUsage, TURN_OUTCOMES, TurnClassification, type TurnOutcome } from './engine.ts';
+import { QuotaSignal, TokenUsage, TURN_OUTCOMES, TurnClassification, type TurnOutcome } from './engine.ts';
 
 // Hợp đồng dịch vụ phiên (CNS-151): L-GW cung cấp, L-SYS / L-WORK gọi — đóng băng ở M0 để không phải chờ code.
 // Một lượt = một hàng `sessions` (SS-). Không resume native: ngữ cảnh mỗi lượt do compiler dựng từ DB (CNS-132).
@@ -40,23 +40,56 @@ export const NATIVE_MEMORY_STATES = ['off', 'imported', 'discarded', 'unknown'] 
 
 /** sessions.phase (DB v2.3.0): planning trước sự kiện công cụ đầu tiên, acting sau đó. Không tách được ⇒ null (avatar hiện 'run'). */
 export const SESSION_PHASES = ['planning', 'acting'] as const;
+export type SessionPhase = (typeof SESSION_PHASES)[number];
+
+/**
+ * Độ chắc của câu trả lời Role (= CHECK chat_messages.certainty; chỉ author_kind = 'role'). Nguồn: Role tự khai qua tool
+ * `report_task.certainty`; ⑥-06: gateway ghi giá trị đó vào `chat_messages.certainty` của tin trả lời `final` của lượt
+ * (view avatar 'unsure' đọc ở đó, DB §5.21) và trả trong TurnResult.certainty. Không khai ⇒ null (không suy đoán).
+ */
+export const CERTAINTY_LEVELS = ['sure', 'unsure'] as const;
+export type Certainty = (typeof CERTAINTY_LEVELS)[number];
+
+/**
+ * Phiên ĐO (trigger = 'baseline', CNS-178; DB engine_accounts_overhead_*, v_* đo Cấp thẻ):
+ *   - overhead_bare  : CLI trần (không cấu hình MCP / tool gateway) trên ĐÚNG tài khoản;
+ *   - overhead_shell : vỏ adapter + tool gateway trên cùng tài khoản — overhead = shell.tokens_input − bare.tokens_input;
+ *   - prompt_worst   : nạp bản biên dịch `context_key = 'worst'` (compiledPromptId) trên tài khoản chính của Role.
+ * Phiên đo chạy đúng tài khoản chỉ định: KHÔNG chọn binding khác, KHÔNG failover (lỗi ⇒ phiên lỗi, đo lại sau).
+ */
+export const MEASURE_KINDS = ['overhead_bare', 'overhead_shell', 'prompt_worst'] as const;
+export type MeasureKind = (typeof MEASURE_KINDS)[number];
 
 const Ulid = z.string().length(26);
 
-export const TurnRequest = z.strictObject({
-  workspaceId: Ulid,
-  agentKind: z.enum(AGENT_KINDS),
-  trigger: z.enum(SESSION_TRIGGERS),
-  /** Bắt buộc khi agentKind = 'role'. */
-  roleId: Ulid.nullable(),
-  taskId: Ulid.nullable(),
-  threadId: Ulid.nullable(),
-  /** Tin nhắn kích hoạt lượt (chat / Telegram) nếu có — compiler đọc từ DB, không nhận văn bản thô ở đây. */
-  sourceMessageId: Ulid.nullable(),
-  /** Chống chạy trùng khi job được thử lại. */
-  idempotencyKey: z.string().min(1).max(200),
-  timeoutMs: z.number().int().positive().max(3_600_000).nullable(),
-});
+export const TurnMeasure = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('overhead_bare'), engineAccountId: Ulid }),
+  z.strictObject({ kind: z.literal('overhead_shell'), engineAccountId: Ulid }),
+  z.strictObject({ kind: z.literal('prompt_worst'), engineAccountId: Ulid, compiledPromptId: Ulid }),
+]);
+export type TurnMeasure = z.infer<typeof TurnMeasure>;
+
+export const TurnRequest = z
+  .strictObject({
+    workspaceId: Ulid,
+    agentKind: z.enum(AGENT_KINDS),
+    trigger: z.enum(SESSION_TRIGGERS),
+    /** Bắt buộc khi agentKind = 'role'. */
+    roleId: Ulid.nullable(),
+    taskId: Ulid.nullable(),
+    threadId: Ulid.nullable(),
+    /** Tin nhắn kích hoạt lượt (chat / Telegram) nếu có — compiler đọc từ DB, không nhận văn bản thô ở đây. */
+    sourceMessageId: Ulid.nullable(),
+    /** Chống chạy trùng khi job được thử lại. */
+    idempotencyKey: z.string().min(1).max(200),
+    timeoutMs: z.number().int().positive().max(3_600_000).nullable(),
+    /** Chỉ cho trigger 'baseline' (và bắt buộc khi đó): đo trên tài khoản / biến thể prompt chỉ định. */
+    measure: TurnMeasure.nullable(),
+  })
+  .refine((r) => (r.trigger === 'baseline') === (r.measure !== null), {
+    message: "measure bắt buộc khi trigger = 'baseline' và chỉ khi đó",
+    path: ['measure'],
+  });
 export type TurnRequest = z.infer<typeof TurnRequest>;
 
 /** Lý do runTurn từ chối TRƯỚC khi tạo phiên (§B.5 bước 2). Với tác tử hệ thống, 'recovery_mode' ⇒ job chờ, xả khi thoát O4 (G-22). */
@@ -69,6 +102,8 @@ export const TURN_REJECTIONS = [
   'engine_not_installed',
   'no_binding',
   'duplicate',
+  /** CLI không có cơ chế giới hạn công cụ đã kiểm ⇒ không chạy lượt (fail-closed; = ENGINE_UNRESTRICTED_REASON). */
+  'engine_unrestricted',
 ] as const;
 export type TurnRejection = (typeof TURN_REJECTIONS)[number];
 
@@ -101,6 +136,8 @@ export const TurnEvent = z.discriminatedUnion('type', [
     deniedCode: z.string().nullable(),
   }),
   z.strictObject({ type: z.literal('usage'), usage: TokenUsage }),
+  /** Quota gói của tài khoản đang chạy (CLI tự báo trong luồng) — L-GW cập nhật trạng thái tài khoản / UI. */
+  z.strictObject({ type: z.literal('quota'), engineAccountId: Ulid, quota: QuotaSignal }),
   z.strictObject({
     type: z.literal('failover'),
     fromAccountId: Ulid,
@@ -121,6 +158,10 @@ export const TurnResult = z.strictObject({
   durationMs: z.number().int().nonnegative(),
   /** Văn bản trả lời cuối (đã qua bộ lọc che bí mật). */
   text: z.string(),
+  /** Role tự khai qua report_task (= chat_messages.certainty của tin final); tác tử khác / không khai ⇒ null. */
+  certainty: z.enum(CERTAINTY_LEVELS).nullable(),
+  /** Pha cuối đã ghi (sessions.phase); không tách được ⇒ null. */
+  phase: z.enum(SESSION_PHASES).nullable(),
 });
 export type TurnResult = z.infer<typeof TurnResult>;
 

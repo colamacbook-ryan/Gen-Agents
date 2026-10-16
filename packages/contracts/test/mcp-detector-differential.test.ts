@@ -33,6 +33,10 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp | ((s: string) => boolea
   { id: 'aws_access_key_id', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}/ },
   { id: 'telegram_bot_token', re: /\b\d{8,10}:[0-9A-Za-z_-]{35,}/ },
   { id: 'credential_assignment', re: new RegExp(`(?:${NAMES})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8,}`, 'i') },
+  {
+    id: 'env_secret_assignment',
+    re: /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\s*[:=]\s*["']?[^\s"']{8,}/,
+  },
   { id: 'high_entropy_run', re: highEntropyRef },
 ];
 const refHit = (p: (typeof REFERENCE)[number], s: string) => (typeof p.re === 'function' ? p.re(s) : p.re.test(s));
@@ -137,6 +141,20 @@ function corpus(): string[] {
       }
     }
   }
+  // gán kiểu .env: tên UPPER_SNAKE (+ biến thể chữ thường / thiếu '_') × hậu tố × nháy × khoảng trắng × giá trị 6–10 ký tự
+  const SUFFIX = ['SECRET', 'TOKEN', 'PASSWORD', 'PASSWD', 'KEY', 'PAT', 'KEYS', 'TOKENS', 'Key'];
+  for (const suffix of SUFFIX) {
+    for (const head of ['JWT', 'DATADOG_API', 'A', 'X9', 'my', '_X', 'GITHUB']) {
+      for (const sep of ['=', ':', ' = ', '\t:\t']) {
+        for (const q of ['', '"', "'"]) {
+          for (let n = 6; n <= 10; n++) {
+            const value = run(n, rnd() < 0.7 ? LOWER_HEX : `${TOKEN}!@#$%`);
+            out.push(`${run(int(0, 2), PRINTABLE)}${head}_${suffix}${sep}${q}${value}${q}`);
+          }
+        }
+      }
+    }
+  }
   // đoạn entropy: hex hoa / thường / trộn, UUID, chuỗi token ngẫu nhiên dài 28–40
   for (let n = 28; n <= 40; n++) {
     out.push(
@@ -206,6 +224,9 @@ function corpus(): string[] {
     'AKIA',
     ':',
     'sk_live_',
+    '_SECRET=',
+    'API_KEY: ',
+    'GITHUB_TOKEN=',
   ];
   for (let k = 0; k < 6000; k++) {
     let s = '';

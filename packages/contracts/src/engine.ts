@@ -342,6 +342,26 @@ export type EngineInstallStatus = z.infer<typeof EngineInstallStatus>;
 /** Lý do O4 khi CLI của Core agent chưa cài (= v_core_agent_status.reason, DATABASE v2.3.1; chữ cho owner lấy từ view / i18n). */
 export const ENGINE_NOT_INSTALLED_REASON = 'engine_not_installed' as const;
 
+/**
+ * Lý do O4 / từ chối lượt khi CLI KHÔNG có cơ chế giới hạn công cụ đã kiểm (adapter không dựng plan lượt — fail-closed,
+ * L-ENG `toolRestriction`; Gen duyệt). [Cần lane DB: thêm vào v_core_agent_status.reason — DB đã vendor chưa có.]
+ */
+export const ENGINE_UNRESTRICTED_REASON = 'engine_unrestricted' as const;
+
+/** Kiến trúc máy theo `process.arch` của Node mà bản phát hành hỗ trợ. */
+export const ENGINE_ARCHES = ['x64', 'arm64'] as const;
+export type EngineArch = (typeof ENGINE_ARCHES)[number];
+/** libc của image runtime (Debian bookworm = glibc). */
+export const ENGINE_LIBCS = ['glibc', 'musl'] as const;
+
+/** Một nền tảng cài được: kiến trúc + libc + khoá nền tảng của hãng (tên trong manifest / URL). */
+export const InstallPlatform = z.strictObject({
+  arch: z.enum(ENGINE_ARCHES),
+  libc: z.enum(ENGINE_LIBCS),
+  key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+});
+export type InstallPlatform = z.infer<typeof InstallPlatform>;
+
 /** Nguồn cài chính chủ (CNS-137). Image không chứa CLI của hãng; ga-engine-install tải vào volume ga-engines (mount chỉ đọc). */
 export const InstallSpec = z.strictObject({
   source: z.literal('official'),
@@ -355,8 +375,22 @@ export const InstallSpec = z.strictObject({
   selfUpdate: z.enum(['disabled', 'enabled', 'unknown']),
   /** Domain egress cần mở cho lần cài (allowlist ga-egress). */
   egressDomains: z.array(z.string().min(1)),
+  /** Nền tảng hãng phát hành (L-ENG đề xuất, Gen duyệt). Máy không khớp ⇒ engine_installs.failure_reason 'unsupported_arch'. */
+  platforms: z
+    .array(InstallPlatform)
+    .min(1)
+    .refine((ps) => new Set(ps.map((p) => `${p.arch}/${p.libc}`)).size === ps.length, 'trùng (arch, libc)'),
 });
 export type InstallSpec = z.infer<typeof InstallSpec>;
+
+/** Nền tảng cài cho máy hiện tại; null ⇒ không hỗ trợ (ghi failure_reason 'unsupported_arch', không thử tải). */
+export function installPlatformFor(
+  spec: Pick<InstallSpec, 'platforms'>,
+  arch: string,
+  libc: (typeof ENGINE_LIBCS)[number],
+): InstallPlatform | null {
+  return spec.platforms.find((p) => p.arch === arch && p.libc === libc) ?? null;
+}
 
 // ---------------------------------------------------------------- đăng nhập + kiểm đăng nhập (§B.6, §B.7)
 export const AUTH_METHODS = ['subscription', 'api_key', 'adc'] as const;
@@ -379,6 +413,26 @@ export interface LoginCheck {
 }
 
 // ---------------------------------------------------------------- capability registry (STD-10 §3)
+/** = CHECK `capabilities.kind` (DATABASE v2.3.x; parity @ga/db). Khoá CapabilityEntry = `<kind>:<item_key>`. */
+export const CAPABILITY_KINDS = [
+  'version',
+  'flag',
+  'subcommand',
+  'model',
+  'effort',
+  'mode',
+  'output_format',
+  'quota_window',
+  'login_method',
+  'instruction_file',
+  'hook',
+  'mcp',
+  'tool',
+  'feature',
+  'native_memory',
+] as const;
+export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
+
 export const CAPABILITY_CONFIDENCE = ['direct', 'indirect', 'static_catalog'] as const;
 export const CAPABILITY_AUTH_MODES = ['oauth', 'api_key', 'adc', 'none', 'unknown'] as const;
 
@@ -434,7 +488,26 @@ export const TokenUsage = z.strictObject({
 });
 export type TokenUsage = z.infer<typeof TokenUsage>;
 
-/** Một dòng stdout đã parse. Adapter trả null cho dòng không mang thông tin. */
+/**
+ * Cửa sổ quota gói mà CLI tự báo trong luồng (vd cửa sổ 5 giờ / 7 ngày). `other` = CLI báo loại khác (giữ nguyên chữ ở
+ * `detail` của adapter, không bịa ánh xạ).
+ */
+export const QUOTA_WINDOWS = ['five_hour', 'seven_day', 'other'] as const;
+export type QuotaWindow = (typeof QUOTA_WINDOWS)[number];
+/** allowed = còn; warning = sắp chạm trần; rejected = hết cửa sổ (resetAt bắt buộc nếu CLI báo). */
+export const QUOTA_STATUSES = ['allowed', 'warning', 'rejected'] as const;
+
+export const QuotaSignal = z.strictObject({
+  window: z.enum(QUOTA_WINDOWS),
+  status: z.enum(QUOTA_STATUSES),
+  /** Giờ reset (ts DB 24 ký tự) nếu CLI báo; không báo ⇒ null (không đoán). */
+  resetAt: z.string().length(24).nullable(),
+  /** % đã dùng nếu CLI báo, không thì null. */
+  utilizationPct: z.number().min(0).max(100).nullable(),
+});
+export type QuotaSignal = z.infer<typeof QuotaSignal>;
+
+/** Sự kiện đã parse từ một dòng stdout. Một dòng có thể sinh NHIỀU sự kiện (parseStreamLine trả mảng; rỗng = không có gì). */
 export const TurnStreamEvent = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('delta'), text: z.string() }),
   z.strictObject({
@@ -447,6 +520,8 @@ export const TurnStreamEvent = z.discriminatedUnion('type', [
   /** Model thực chạy nếu CLI tự báo (vd sự kiện khởi tạo) — nguồn cho G-08 / registry. */
   z.strictObject({ type: z.literal('model'), model: z.string().min(1) }),
   z.strictObject({ type: z.literal('error'), code: z.string().min(1), message: z.string() }),
+  /** Trạng thái quota gói CLI tự báo trong luồng của lượt (L-ENG đề xuất, Gen duyệt). */
+  z.strictObject({ type: z.literal('quota'), quota: QuotaSignal }),
 ]);
 export type TurnStreamEvent = z.infer<typeof TurnStreamEvent>;
 
@@ -542,6 +617,18 @@ export interface TurnPlanInput {
   systemPrompt: string | null;
   /** Tuyệt đối: tệp chứa systemPrompt, null khi không có. */
   systemPromptFile: string | null;
+  /** Phiên đo (CNS-178): 'overhead_bare' ⇒ KHÔNG cấu hình MCP / tool gateway (CLI trần); khác ⇒ như lượt thường. */
+  measure: 'overhead_bare' | 'overhead_shell' | 'prompt_worst' | null;
+  /** Trần thời gian lượt (= TurnBundle.timeoutMs). */
+  timeoutMs: number;
+  /** Cách đăng nhập của tài khoản (API key cần cấu hình riêng ở một số CLI) — = TurnBundle.authMethod. */
+  authMethod: AuthMethod;
+  /**
+   * Cờ CLI đã quét (capability registry `flag:*`, STD-10) của đúng phiên bản đang cài — = TurnBundle.detectedFlags.
+   * CHỈ dùng làm cổng (vd mọi cờ của cơ chế giới hạn công cụ phải có; thiếu ⇒ không dựng plan, engine_unrestricted);
+   * KHÔNG BAO GIỜ là nguồn của argv (argv chỉ từ flagTable của adapter).
+   */
+  detectedFlags: readonly string[];
   /** Lấy từ registry (STD-10), null = để CLI tự chọn. Đã qua MODEL_ID_RE / EFFORT_RE; adapter vẫn chỉ đặt làm GIÁ TRỊ của cờ khai. */
   model: string | null;
   effort: string | null;
@@ -590,7 +677,8 @@ export interface EngineAdapter {
   /** Quét khả năng: runner (`ga-runner probe`) gọi trong container (cùng chính sách HOME tmpfs + auth-gc). */
   capabilityScan(input: CapabilityScanInput & ProbePlanInput): readonly ProbePlan[];
   parseCapabilities(outcomes: readonly ProbeOutcome[]): CapabilityEntry[];
-  parseStreamLine(line: string): TurnStreamEvent | null;
+  /** Mọi sự kiện của một dòng stdout (một dòng có thể chứa nhiều sự kiện); dòng không mang thông tin ⇒ []. */
+  parseStreamLine(line: string): readonly TurnStreamEvent[];
   classify(
     exit: Pick<ExecResult, 'exitCode' | 'signal' | 'timedOut'>,
     stdout: string,
