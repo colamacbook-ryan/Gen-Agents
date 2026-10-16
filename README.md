@@ -18,7 +18,7 @@ pnpm test
 
 | Lệnh | Làm gì |
 |---|---|
-| `pnpm lint` | Biome + luật riêng của repo (`scripts/lint-rules.mjs`: cấm `OR REPLACE`, tên CLI/model ngoài adapter, tên owner, env `*SESSION*`/`*_OAUTH_TOKEN`, `console.log` ở apps, dockerode ngoài supervisor, I/O trong transaction, ghi DB ngoài `conn.write(actor, fn)`, regex nguy cơ ReDoS, component trùng tên, ranh giới import) |
+| `pnpm lint` | Biome + luật riêng của repo (`scripts/lint-rules.mjs`: cấm `OR REPLACE`, tên CLI/model ngoài adapter, tên owner, env `*SESSION*`/`*_OAUTH_TOKEN`, `console.log` ở apps, dockerode ngoài supervisor, I/O trong transaction, ghi DB ngoài `conn.write(actor, fn)`, regex nguy cơ ReDoS, component trùng tên, ranh giới import, ký tự vô hình / bidi / fullwidth, …; danh sách: `node scripts/lint-rules.mjs --list`) |
 | `pnpm lint:rules --selftest` | mỗi luật phải bắt đúng tệp mồi của nó |
 | `pnpm typecheck` | `tsc -b` (TS project references) |
 | `pnpm test` | Vitest: contracts, hợp đồng kết nối DB, runner migration, parity, selftest lint / license |
@@ -27,8 +27,21 @@ pnpm test
 | `pnpm db:sync -- --rev <sha>` | vendor DB spec từ Second-Brain theo commit (không đọc working tree); `--check` kiểm sha |
 | `pnpm db:gen` | sinh migration (baseline + `R__triggers` + `R__views`) và kiểu Kysely từ DB spec; `--check` cho CI |
 | `pnpm license:check` | cổng license (đọc từ tệp LICENSE) + asset; `-- --write` sinh lại `THIRD-PARTY.md`; `--selftest` |
-| `pnpm sec:scan` | gitleaks quét lịch sử git |
+| `pnpm sec:scan` | gitleaks quét lịch sử git (CI); `-- --staged` quét nội dung đã stage (cổng commit) |
 | `pnpm dev:dockerd` · `pnpm docker:netcheck` | khởi `dockerd` trên máy cloud nếu chưa chạy · kiểm mạng `internal` + container hai mạng |
+
+## Cổng commit
+
+Mọi commit chỉ tạo khi các lệnh kiểm đạt (không ghi "OK" khi chưa chạy):
+
+```bash
+set -o pipefail
+git add <tệp>
+pnpm lint && pnpm typecheck && pnpm test && pnpm sec:scan -- --staged && git commit
+```
+
+Fixture ca dương của bộ lọc credential phải dựng lúc chạy (vd ghép chuỗi / hàm sinh), không để chuỗi giống credential
+nguyên văn trong mã nguồn; `sec:scan -- --staged` bắt trước khi vào lịch sử.
 
 ## Cấu trúc (M0)
 

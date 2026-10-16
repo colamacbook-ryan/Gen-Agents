@@ -196,7 +196,7 @@ describe('runner — rebuild 9 bước (bảng có view + trigger phụ thuộc)
       'INSERT INTO positions (id, workspace_id, display_id, display_seq, created_by, title, title_template, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
     conn.write(TENANT_ACTOR, (w) => {
       w.run(INS, [
-        '01JPOS00000000000000000001',
+        '01JP0S00000000000000000001',
         TENANT_WS,
         'PS-0001',
         1,
@@ -205,10 +205,10 @@ describe('runner — rebuild 9 bước (bảng có view + trigger phụ thuộc)
         'Trợ lý của {owner_name}',
         1,
       ]);
-      w.run(INS, ['01JPOS00000000000000000002', TENANT_WS, 'PS-0002', 2, TENANT_ACTOR, 'Kế toán', null, 0]);
+      w.run(INS, ['01JP0S00000000000000000002', TENANT_WS, 'PS-0002', 2, TENANT_ACTOR, 'Kế toán', null, 0]);
     });
     conn.write(SYS_ACTOR, (w) =>
-      w.run(INS, ['01JPOS00000000000000000003', SYS_WS, 'PS-0001', 1, SYS_ACTOR, 'Hệ thống', null, 0]),
+      w.run(INS, ['01JP0S00000000000000000003', SYS_WS, 'PS-0001', 1, SYS_ACTOR, 'Hệ thống', null, 0]),
     );
   });
   afterEach(() => {
