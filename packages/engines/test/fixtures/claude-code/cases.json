@@ -1,5 +1,5 @@
 {
-  "_doc": "Ca kiểm adapter theo slug. Tệp *.txt/*.out/*.jsonl: output THẬT của Spike 1b (claude 2.1.299; đã thay id phiên, rút trường dài / đường dẫn). Ca có \"assumed\": dạng lỗi giả định (chưa kiểm, M6) — chuyển sang CLI giả chung (testing/fakes, L-FAKE) khi có.",
+  "_doc": "Ca kiểm adapter theo slug. Tệp *.txt/*.out/*.jsonl: output THẬT của Spike 1b (claude 2.1.299; đã thay id phiên, rút trường dài / đường dẫn). Ca có \"assumed\": dạng lỗi giả định (chưa kiểm, M6) — chuyển sang CLI giả chung (testing/fakes, L-FAKE) khi có. Tệp \"fake:<tên>\" = dữ liệu Spike 1b trong CLI giả chung (testing/fakes/<binary>/dumps/), không chép lại ở đây.",
   "adapter": {
     "authAllowlist": [".claude/.credentials.json"],
     "nativeStatePaths": [".claude/projects", ".claude/history.jsonl", ".claude.json"],
@@ -7,7 +7,7 @@
       "phase": "stream",
       "certainty": "unmeasured"
     },
-    "helpFile": "help.txt",
+    "helpFile": "fake:help.txt",
     "flagsObservedOutsideHelp": [],
     "loginArgvSubscriptionTail": ["auth", "login"],
     "systemPrompt": {
@@ -612,11 +612,11 @@
       "outcomes": [
         {
           "exitCode": 0,
-          "stdoutFile": "version.txt"
+          "stdoutFile": "fake:version.txt"
         },
         {
           "exitCode": 0,
-          "stdoutFile": "help.txt"
+          "stdoutFile": "fake:help.txt"
         }
       ],
       "values": {
@@ -656,11 +656,11 @@
       "outcomes": [
         {
           "exitCode": 0,
-          "stdoutFile": "version.txt"
+          "stdoutFile": "fake:version.txt"
         },
         {
           "exitCode": 0,
-          "stdoutFile": "help.txt"
+          "stdoutFile": "fake:help.txt"
         },
         {
           "exitCode": 0,
@@ -700,7 +700,7 @@
         },
         {
           "exitCode": 0,
-          "stdoutFile": "help.txt"
+          "stdoutFile": "fake:help.txt"
         }
       ],
       "values": {
@@ -714,5 +714,36 @@
         "probeStatus": "partial"
       }
     }
-  ]
+  ],
+  "fakeScenarios": {
+    "ok": {
+      "outcome": "ok",
+      "resetAt": null
+    },
+    "quota_exhausted": {
+      "outcome": "quota_exhausted",
+      "resetAt": "2026-10-16T19:00:00.000Z"
+    },
+    "account_suspended": {
+      "outcome": "account_suspended",
+      "resetAt": null
+    },
+    "login_expired": {
+      "outcome": "login_expired",
+      "resetAt": null
+    },
+    "outage": {
+      "outcome": "outage",
+      "resetAt": null
+    },
+    "network_down": {
+      "outcome": "outage",
+      "resetAt": null
+    },
+    "malformed_json": {
+      "outcome": "transient",
+      "resetAt": null
+    }
+  },
+  "_doc_fake": "fakeScenarios: kịch bản của CLI giả chung (testing/fakes, GA_FAKE_SCENARIO) ⇒ kết quả phân loại mong đợi. Kịch bản quota_exhausted chạy với resetAt 2026-10-16T19:00:00Z."
 }

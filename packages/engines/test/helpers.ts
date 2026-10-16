@@ -3,13 +3,23 @@ import { join } from 'node:path';
 import type { ExecResult, ProbeOutcome, TurnStreamEvent } from '@ga/contracts';
 import { BUILTIN_ADAPTERS, type EngineAdapterExt } from '../src/index.ts';
 
-// Fixture tối thiểu của riêng lane (output thật Spike 1b + ca giả định), đặt theo slug để mã test không phải nhắc tên CLI
-// (lint `no-model-cli-names` áp cả cho test trong packages/). TODO(L-FAKE): khi testing/fakes có CLI giả chung, thay
-// các ca "assumed" bằng output của CLI giả và giữ output thật Spike 1b làm ca đối chiếu.
+// Fixture theo slug (mã test không nhắc tên CLI — lint `no-model-cli-names` áp cả cho test trong packages/):
+//   - `fake:<tệp>`: dữ liệu thật Spike 1b đã có trong CLI giả chung (testing/fakes/<binary>/dumps/) — không chép lại;
+//   - tệp riêng còn lại: output thật Spike 1b mà CLI giả cố ý không chép (stream-json có id phiên, lỗi agy có URL OAuth —
+//     đã rút / thay id ở đây) + ca giả định có đánh dấu.
+// Hành vi chạy (đăng nhập, quét, kịch bản lỗi, stream) kiểm trên CLI giả chung ở test/fakes.test.ts.
 
 export const FIXTURES = join(import.meta.dirname, 'fixtures');
 
+/** Dữ liệu thật Spike 1b mà CLI giả chung đã chép (byte-for-byte, đã rà PII): `fake:<tệp>` ⇒ testing/fakes/<binary>/dumps/. */
+const FAKE_DUMPS = join(import.meta.dirname, '..', '..', '..', 'testing', 'fakes');
+
 export function fixture(slug: string, file: string): string {
+  if (file.startsWith('fake:')) {
+    const adapter = BUILTIN_ADAPTERS.find((a) => a.slug === slug);
+    if (adapter === undefined) throw new Error(`slug lạ: ${slug}`);
+    return readFileSync(join(FAKE_DUMPS, adapter.install.binaryName, 'dumps', file.slice('fake:'.length)), 'utf8');
+  }
   return readFileSync(join(FIXTURES, slug, file), 'utf8');
 }
 
@@ -62,6 +72,7 @@ export interface Cases {
     expected: { status: string; accountHint: string | null };
     probe: { loginStatus: string; probeStatus: string };
   }>;
+  fakeScenarios: Record<string, { outcome: string; resetAt: string | null }>;
   capabilities: Array<{
     name: string;
     authMode: 'oauth' | 'api_key' | 'adc' | 'none' | 'unknown';

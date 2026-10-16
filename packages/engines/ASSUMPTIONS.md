@@ -71,6 +71,23 @@ trạng thái lỗi và chỉ trên thông điệp lỗi + stderr — không dò
 tool_result). `resetAt` chỉ từ `rate_limit_event` status `rejected` (claude); agy luôn null. Test âm: câu trả lời chứa
 "rate limit exceeded, resets at 2099…" ⇒ ok, `resetAt` null.
 
+## Đối chiếu với CLI giả chung (testing/fakes/ASSUMPTIONS.md, L-FAKE)
+
+| Adapter | CLI giả | Trạng thái thống nhất |
+|---|---|---|
+| AGY-STREAM-01 | AG-STREAM-1 | **thống nhất** — adapter dùng đúng schema của CLI giả (test/fakes.test.ts chạy kịch bản `ok` qua parser) |
+| AGY-STREAM-02 | AG-JSON-1 | thống nhất |
+| AGY-MCP-01 | AG-MCP-1 | **cùng tệp** (`$HOME/.gemini/antigravity-cli/mcp_servers.json`, dạng phẳng như `mcp add`) nhưng **khác transport**: adapter ghi máy chủ `stdio` = cầu `ga-runner mcp-bridge` (GEN-02); CLI giả hiện chỉ gọi máy chủ `http` (có `url`) ⇒ cần L-FAKE nhận cầu (tách `--url` / `--ticket-file` từ args) — chờ Gen chốt |
+| CC-T01…T03, CC-A01/A02 | CL-NATIVE-1 | thống nhất (`.claude/.credentials.json`, `projects/…`, `history.jsonl`) |
+| (cấu hình MCP claude) | CL-MCP-1 | **khác transport** như trên: adapter `--mcp-config` = `{mcpServers:{ga:{type:"stdio",command:"ga-runner",args:["mcp-bridge",…]}}}`; CLI giả đọc `type:"http"` + `ticketFile` — chờ Gen chốt |
+| AGY-T03 | (chưa có) | CLI giả cần khai cờ `--allowed-tools` (help / năng lực) để lượt agy chạy được trong IT; hiện test bỏ cờ này khi gọi CLI giả chỉ để kiểm parser |
+| CC-L01 | CL-AUTH-STATUS-1 | thống nhất (JSON, exit 1 khi chưa đăng nhập; parser đọc JSON in đẹp) |
+| CC-L02 | CL-AUTH-STATUS-1 (`email`) | thống nhất (che khi có) |
+| AGY-L01 / AG-IDENT-1 | `Signed in as <email>` ở stderr | adapter **không** đọc dòng này (dạng in thật chưa biết) ⇒ account_hint null |
+| CC-E02/E03 | CL-QUOTA-1, CL-ERR-QUOTA | thống nhất: giờ reset chỉ từ `rate_limit_event` rejected; chữ "resets HH:MM" không đọc |
+| AGY-E06 | AG-ERR-QUOTA | adapter không đọc "(quota resets at …)" trong `short_error` ⇒ resetAt null (không tin chữ) |
+| AGY-E12 | AG-ERR-NET | thống nhất ⇒ outage |
+
 ## Chung (không riêng hãng)
 
 | ID | Giả định | Ai cần làm |
