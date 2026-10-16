@@ -36,10 +36,12 @@ pnpm test
 Mọi commit chỉ tạo khi các lệnh kiểm đạt (không ghi "OK" khi chưa chạy):
 
 ```bash
-set -o pipefail
-git add <tệp>
-pnpm lint && pnpm typecheck && pnpm test && pnpm sec:scan -- --staged && git commit
+scripts/gate-commit.sh -F <tệp thông điệp> <tệp>...   # = git add đúng các tệp đó → lint → typecheck → test → sec:scan --staged → commit
 ```
+
+Index có tệp đã stage ngoài danh sách (checkout dùng chung) ⇒ script dừng; cổng đỏ ⇒ không commit.
+Kiểm test có bắt được lỗi không: `scripts/mutate.sh --replace <tệp> <cũ> <mới> [--cmd "<lệnh test>"]` (hoặc `--patch`) —
+chạy trong `git worktree` tạm, không đụng worktree đang làm việc; thoát 0 = bị bắt, 3 = sống.
 
 Fixture ca dương của bộ lọc credential phải dựng lúc chạy (vd ghép chuỗi / hàm sinh), không để chuỗi giống credential
 nguyên văn trong mã nguồn; `sec:scan -- --staged` bắt trước khi vào lịch sử.
