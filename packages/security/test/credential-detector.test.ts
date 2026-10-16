@@ -57,8 +57,6 @@ describe('ca âm từng luật (chỉ chính luật đó lẽ ra phải bắt �
       'Bạn đổi password: ở trang cài đặt',
       'token: ok',
       'xpassword=abcdefghijkl',
-      'access_token=short',
-      'client_secret: "1234567"',
       'api_key field is required',
       'access_token',
     ],
@@ -227,10 +225,11 @@ describe('gán credential theo tên khoá trên DÒNG THÔ (Gen 2026-10-16, revi
     expect(detectCredential(`x \\\\\\\\u0072efresh_token: ${v}`)).toBe('refresh_token_field');
     expect(detectCredential(`pct %2572efresh_token%253D${v}`)).toBe('refresh_token_field');
   });
-  it('ca âm (a)/(b): giá trị < 8 ký tự, tên mở rộng thiếu ranh giới, \\u giải ra chữ khác, không có dấu gán', () => {
+  it('ca âm (a)/(b): tên mở rộng thiếu ranh giới, \\u giải ra chữ khác, không có dấu gán', () => {
+    // giá trị < 8 ký tự với tên credential của contracts (`access_token=short`) NAY bị bắt bởi credential_field_name
+    expect(detectCredential('access_token=short')).toBe('credential_field_name');
+    expect(detectCredential('client_secret: "1234567"')).toBe('credential_field_name');
     for (const s of [
-      'access_token=short',
-      'client_secret: "1234567"',
       'xpassword=abcdefghijkl',
       '\\u0073efresh_token=abcdefghijk',
       'refresh_token is documented here',
@@ -681,6 +680,65 @@ describe('khoá object: chuẩn hoá CHẶT (review MEDIUM — hồi quy khi ch�
   it('khoá thường không bị coi là nhạy cảm', () => {
     for (const k of ['token count', 'keyboard', 'api', 'secretary', 'my.key.id', 'passport']) {
       expect(isSensitiveKey(k), k).toBe(false);
+    }
+  });
+});
+
+describe('phép gán khoá credential, giá trị NGẮN (credential_field_name — runner bỏ rào riêng, L-RT 2026-10-16)', () => {
+  const nest = (s: string, layers: number) => {
+    let out = s;
+    for (let i = 0; i < layers; i++) out = JSON.stringify({ msg: out });
+    return out;
+  };
+  const KEYS = ['refresh_token', 'access_token', 'id_token', 'client_secret', 'private_key', 'api_key', 'api_token'];
+  it('khoá JSON có nháy, `name=…`, `name: …`, giá trị 1 ký tự; JSON lồng 0–3 lớp ⇒ bắt', () => {
+    for (const key of KEYS) {
+      for (let layers = 0; layers <= 3; layers++) {
+        const line = nest(JSON.stringify({ [key]: 'v' }), layers);
+        expect(detectCredential(line), `${key} @ ${layers} lớp: ${line}`).not.toBeNull();
+      }
+      for (const line of [`${key}=v`, `${key}: v`, `'${key}': 'v'`, `x.${key}=ab`, `${key.toUpperCase()}: 1`]) {
+        expect(detectCredential(line), line).not.toBeNull();
+      }
+    }
+  });
+  it('chữ trong tên khoá viết `\\uXXXX` (tổng ≤ 3 lớp giải) ⇒ bắt', () => {
+    for (let layers = 0; layers <= 2; layers++) {
+      for (const inner of ['{"\\u0061ccess_token":"v"}', '{"api\\u005fkey":"v"}', '{"\\u0049D_TOKEN":"v"}']) {
+        const line = nest(inner, layers);
+        expect(detectCredential(line), line).not.toBeNull();
+      }
+    }
+  });
+  it('che đúng giá trị (giá trị có nháy ⇒ tới nháy đóng, kể cả có dấu cách), JSON vẫn hợp lệ', () => {
+    expect(redactText('INFO {"access_token":"x.y z"}')).toBe(
+      'INFO {"access_token":"[REDACTED:credential_field_name]"}',
+    );
+    expect(redactText("{'client_secret': 'ab'}")).toBe("{'client_secret': '[REDACTED:credential_field_name]'}");
+    expect(redactText('api_key=v&x=1')).toBe('api_key=[REDACTED:credential_field_name]&x=1');
+    const line = redactLogLine(JSON.stringify({ msg: JSON.stringify({ id_token: 'a b' }) }));
+    expect(JSON.parse(JSON.parse(line).msg)).toEqual({ id_token: '[REDACTED:credential_field_name]' });
+  });
+  it('ca âm: không có giá trị, khoá chỉ CHỨA tên credential, chỉ nhắc tên, null / true / false', () => {
+    for (const line of [
+      '{"api_key":""}',
+      "{'api_key': ''}",
+      'api_key:',
+      'api_key: ,',
+      'apikeys: 3',
+      'x_api_key_count 4',
+      'MAX_TOKEN=4096',
+      'MAX_TOKENS=4096',
+      'my_access_token=x',
+      'access_token_count: 2',
+      '{"access_token": null}',
+      '{"id_token":false}',
+      'Rotate your refresh_token regularly',
+      'docs: access_token and id_token are described here',
+      '{"field":"refresh_token"}',
+      'task-runner ask-me',
+    ]) {
+      expect(detectCredential(line), line).toBeNull();
     }
   });
 });

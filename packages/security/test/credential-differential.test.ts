@@ -31,6 +31,17 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp }> = [
       'i',
     ),
   },
+  /**
+   * Khoá = đúng một tên credential (ranh giới hai phía) + dấu gán + giá trị NGẮN bất kỳ ≥ 1 ký tự (L-RT 2026-10-16): nháy
+   * mở rồi một ký tự không phải nháy, hoặc một ký tự không phải khoảng trắng / phân cách; trừ null / true / false.
+   */
+  {
+    id: 'credential_key_assignment',
+    re: new RegExp(
+      `(?<![A-Za-z0-9_-])(?:${CREDENTIAL_KEY_NAMES.map((n) => n.split(/[_-]/).join('[_-]*')).join('|')})(?![A-Za-z0-9_-])["']?\\s*[:=]\\s*(?!(?:null|true|false)(?![A-Za-z0-9_]))(?:"[^"]|'[^']|[^\\s"',;}\\])])`,
+      'i',
+    ),
+  },
   { id: 'aws_access_key_id', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}/ },
   /** = contracts `env_secret_assignment` (c4285e8). */
   {
@@ -167,6 +178,15 @@ function corpus(): string[] {
         out.push(`${before}${flipCase(name)}${sep}${body}`, `INFO ${JSON.stringify({ [name]: body })} end`);
         out.push(`${before}${flipCase(spell(name))}${sep}${body}`);
       }
+    }
+  }
+  // khoá credential + giá trị NGẮN (0–7 ký tự) ở các dạng khoá rõ ràng + ca âm (khoá dài hơn tên, không giá trị, literal JSON)
+  for (const name of CREDENTIAL_KEY_NAMES) {
+    for (let n = 0; n <= 7; n++) {
+      const v = run(n, VALUE);
+      const k = flipCase(spell(name));
+      out.push(`{"${k}":"${v}"}`, `${k}=${v}`, `${k}: ${v}`, `'${k}': '${v}'`, `log {\\"${k}\\":\\"${v}\\"}`);
+      out.push(`MAX_${k}=${v}`, `${k}_count: ${v}`, `${k}s=${v}`, `{"${k}": null}`, `${k}: , ${v}`);
     }
   }
   // AKIA / ASIA: ký tự trước (đầu chuỗi / ranh giới / chữ) × đuôi dính liền (chữ, số, không gì) — review MEDIUM

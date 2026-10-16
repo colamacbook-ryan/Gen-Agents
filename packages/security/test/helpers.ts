@@ -89,6 +89,7 @@ export const SAMPLES: Record<string, string> = {
   url_userinfo: j('https://deploy:', 'Hunter2-Pass', '@git.example.com/repo.git'),
   canary: CANARY,
   high_entropy_run: body(40, 'Zq8XwLmN3vBtRk7HpYc2'),
+  credential_field_name: j('INFO {"access', '_token":"x.y z"}'),
   base64_secret_run: j(body(20, 'Zq8XwLmN3vBtRk7HpYc2'), '/', body(20, 'Ab3Cd4Ef5Gh6Jk7Mn8Pq'), '+', 'x9/Q='),
 };
 

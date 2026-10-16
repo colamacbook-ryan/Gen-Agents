@@ -6,14 +6,23 @@
 import { mergeSpans, SCAN_MAX_CHARS, scanText } from './credential-detector.ts';
 import { isSensitiveKey } from './payload.ts';
 
-const mark = (id: string) => `[REDACTED:${id.replace(/[^a-z0-9_:]/gi, '_')}]`;
+const MARKS = new Map<string, string>();
+/** Chuỗi thay cho một id mẫu (nhớ theo id — chuỗi có hàng trăm nghìn đoạn che không chạy lại regex mỗi đoạn). */
+const mark = (id: string): string => {
+  let m = MARKS.get(id);
+  if (m === undefined) {
+    m = `[REDACTED:${id.replace(/[^a-z0-9_:]/gi, '_')}]`;
+    if (MARKS.size < 256) MARKS.set(id, m);
+  }
+  return m;
+};
 
 /** Che mọi đoạn giống credential trong một chuỗi. Quá trần quét ⇒ che toàn bộ (mặc định chặn). */
 export function redactText(text: string, opts: { maxChars?: number } = {}): string {
   const r = scanText(text, { maxChars: opts.maxChars ?? SCAN_MAX_CHARS });
   if (r.status === 'clean') return text;
   if (r.status === 'too_large') return `[REDACTED:too_large len=${r.length}]`;
-  let out = '';
+  const out: string[] = [];
   let pos = 0;
   for (const sp of mergeSpans(r.spans)) {
     let end = sp.end;
@@ -22,10 +31,11 @@ export function redactText(text: string, opts: { maxChars?: number } = {}): stri
     while (end - bs - 1 >= sp.start && text.charCodeAt(end - bs - 1) === 92) bs++;
     if (bs % 2 === 1) end--;
     if (sp.start < pos || end <= sp.start) continue;
-    out += text.slice(pos, sp.start) + mark(sp.patternId);
+    out.push(text.slice(pos, sp.start), mark(sp.patternId));
     pos = end;
   }
-  return out + text.slice(pos);
+  out.push(text.slice(pos));
+  return out.join('');
 }
 
 /** Hook `streamWrite` của pino: che trên dòng log đã tuần tự hoá. Dòng quá trần ⇒ thay bằng một dòng JSON báo đã che. */

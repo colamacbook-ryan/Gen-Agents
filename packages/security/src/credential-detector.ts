@@ -28,7 +28,12 @@
 // Hiệu năng: vòng lặp JS theo từng ký tự đắt (máy 4 CPU dùng chung) ⇒ chỉ MỘT vòng lặp như vậy (luật entropy); mọi bộ khác
 // lọc trước bằng includes / indexOf gốc của V8 rồi mới chạy regex có tiền tố chữ cố định.
 
-import { CREDENTIAL_KEY_NAMES, CREDENTIAL_PATTERN_IDS, type CredentialPatternId } from '@ga/contracts';
+import {
+  CREDENTIAL_KEY_NAMES,
+  CREDENTIAL_PATTERN_IDS,
+  type CredentialPatternId,
+  isCredentialKeyName,
+} from '@ga/contracts';
 
 /** Trần độ dài chuỗi được quét (1 Mi ký tự). Dài hơn ⇒ `too_large` ⇒ người gọi chặn / che toàn bộ. */
 export const SCAN_MAX_CHARS = 1_048_576;
@@ -406,6 +411,53 @@ const credentialField: Detector = {
   },
 };
 
+/** Khoá = đúng một tên credential (ranh giới hai phía) + dấu gán; nhóm 1 = khoá. Lookaround một ký tự, không quantifier. */
+const KEY_ASSIGN_RE_SRC = `(?<![A-Za-z0-9_-])(${REFERENCE_FIELD_SRC})(?![A-Za-z0-9_-])${SEP_SRC}`;
+/** Giá trị có nháy: tới nháy đóng cùng loại (trần 4096). */
+const DQ_VALUE_RE = /[^"]{0,4096}/y;
+const SQ_VALUE_RE = /[^']{0,4096}/y;
+/** Giá trị literal JSON không phải bí mật. */
+const JSON_LITERAL_RE = /(?:null|true|false)(?![A-Za-z0-9_])/y;
+
+/**
+ * Phép gán mà KHOÁ là đúng một tên credential theo `isCredentialKeyName` của contracts (cả khoá — `MAX_TOKEN`,
+ * `my_access_token`, `apikeys` không tính), giá trị dài BẤT KỲ, kể cả < 8 ký tự (L-RT 2026-10-16: runner bỏ rào riêng
+ * `credentialKeyAssignment`, chỉ còn một nguồn). Dạng khoá rõ ràng: `"name": "…"` / `'name': '…'` (kể cả `\"` của JSON
+ * lồng), `name=…`, `name: …`. Chữ trong tên viết `\uXXXX` ⇒ bước giải (≤ 3 lớp) đưa về các dạng này. Không có giá trị
+ * (`"api_key": ""`, `api_key:` cuối dòng, `api_key: ,`) hay giá trị là `null` / `true` / `false` ⇒ không bắt.
+ * Che: giá trị có nháy ⇒ tới nháy đóng; không nháy ⇒ đoạn VALUE_RE; giá trị mở đầu bằng `{` `[` `\` … ⇒ chỉ báo (đoạn che
+ * rỗng, giữ JSON hợp lệ). Ứng viên regex bắt đầu bằng tên literal; mỗi giá trị quét một lần (lastIndex nhảy qua) ⇒ tuyến tính.
+ */
+const credentialKeyAssignment: Detector = {
+  id: 'credential_field_name',
+  strong: true,
+  pre: (v) => /token|secret|key/i.test(v.s),
+  find(v, emit) {
+    const s = v.s;
+    const re = new RegExp(KEY_ASSIGN_RE_SRC, 'gi');
+    for (let m = re.exec(s); m; m = re.exec(s)) {
+      if (!isCredentialKeyName(m[1] as string)) continue;
+      const vs = m.index + m[0].length;
+      const q = s.charCodeAt(vs - 1);
+      let e: number;
+      if (q === 34 || q === 39) {
+        // giá trị có nháy: rỗng (nháy đóng ngay, hoặc `\"` đóng của JSON lồng) ⇒ không phải phép gán có giá trị
+        e = stickyEnd(q === 34 ? DQ_VALUE_RE : SQ_VALUE_RE, s, vs);
+        if (e > vs && s.charCodeAt(e - 1) === 92) e--;
+        if (e <= vs) continue;
+      } else {
+        const c = s.charCodeAt(vs);
+        if (vs >= s.length || isSpace(c) || c === 44 || c === 59 || c === 125 || c === 93 || c === 41) continue;
+        if (stickyEnd(JSON_LITERAL_RE, s, vs) > vs) continue;
+        e = stickyEnd(VALUE_RE, s, vs);
+      }
+      if (emit(vs, e, this.id)) return true;
+      re.lastIndex = Math.max(re.lastIndex, e);
+    }
+    return false;
+  },
+};
+
 /** Vị trí ngay sau dấu [:=] theo sau tên khoá (bỏ \ " ' và khoảng trắng); -1 nếu không có. */
 function sepAfter(s: string, i: number): number {
   if (s.charCodeAt(i) === 92) i++;
@@ -693,6 +745,7 @@ export const DETECTORS: readonly Detector[] = [
   telegramBotToken,
   pemPrivateKey,
   credentialField,
+  credentialKeyAssignment,
   envSecretAssignment,
   bearerToken,
   urlUserinfo,
