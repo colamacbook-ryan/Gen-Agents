@@ -436,32 +436,65 @@ function isJsSpace(c: number): boolean {
   );
 }
 
+/** Scheme đặc biệt của WHATWG URL có userinfo (`file` không có userinfo ⇒ không cần). */
+const SPECIAL_URL_SCHEMES: ReadonlySet<string> = new Set(['http', 'https', 'ws', 'wss', 'ftp']);
+/** Ứng viên `scheme:` — lookbehind MỘT ký tự ⇒ chỉ thử ở đầu đoạn ký tự scheme, mỗi đoạn quét một lần (tuyến tính). */
+const URL_SCHEME_RE = /(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*:/g;
+
 /**
- * Mật khẩu trong URL `scheme://user:password@host` — tách authority NHƯ parser URL (security review, parser-differential:
- * bản regex cũ loại `"'<>` và có trần 1024 ⇒ mật khẩu chứa `"` / `<` hay userinfo dài lọt, trong khi `new URL()` vẫn coi
- * là userinfo). Sau mỗi `://`: authority kéo tới ký tự đầu tiên trong `/ ? #` hoặc khoảng trắng (TAB / LF / CR bị parser URL
- * bỏ qua ⇒ đi xuyên qua); có `@` và đoạn trước `@` CUỐI CÙNG chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng). Một lượt duyệt mỗi
- * authority, các authority không chồng nhau ⇒ tuyến tính (kích thước đã chặn trước khi quét).
+ * Mật khẩu trong URL — tách NHƯ parser WHATWG (hai vòng security review parser-differential, Gen xác nhận):
+ *   1. bỏ mọi TAB / LF / CR (parser URL bỏ trước khi parse; trần kích thước đã đặt trước bước này);
+ *   2. mỗi ứng viên `scheme:` (không phân biệt hoa thường):
+ *      - scheme đặc biệt (http, https, ws, wss, ftp): bỏ qua mọi chuỗi `[/\\]*` (kể cả rỗng); authority kết thúc ở ký tự
+ *        đầu tiên trong `/ \\ ? #`;
+ *      - scheme khác: chỉ khi ngay sau là `//`; authority kết thúc ở `/ ? #`;
+ *   3. authority có `@` và đoạn trước `@` CUỐI chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng).
+ * Lệch có chủ đích với WHATWG: khoảng trắng còn lại (space, NBSP…) cũng kết thúc authority — parser URL percent-encode
+ * khoảng trắng trong userinfo, nhưng quét VĂN BẢN mà không dừng ở khoảng trắng thì câu thường kiểu "http: lỗi: xem a@b" bị
+ * chặn nhầm; URL trong văn bản không chứa khoảng trắng thô (corpus đối chiếu new URL() vì vậy không chèn khoảng trắng).
+ * Tuyến tính: bảng tiền tố / hậu tố tính một lần (vị trí dừng kế tiếp, ':' đầu tiên từ i, '@' cuối trước p) ⇒ mỗi ứng viên
+ * O(1), kể cả khi các authority lồng nhau (`https:https:…`).
  */
-function hasUrlUserinfo(s: string): boolean {
-  let from = 0;
-  for (;;) {
-    const at = s.indexOf('://', from);
-    if (at < 0) return false;
-    let firstColon = -1;
-    let lastAt = -1;
-    let i = at + 3;
-    for (; i < s.length; i++) {
-      const c = s.charCodeAt(i);
-      if (c === 9 || c === 10 || c === 13) continue;
-      if (c === 47 || c === 63 || c === 35 || isJsSpace(c)) break;
-      if (c === 58 && firstColon < 0) firstColon = i;
-      else if (c === 64) lastAt = i;
-    }
-    if (lastAt >= 0 && firstColon >= 0 && firstColon < lastAt) return true;
-    // `://` kế tiếp nằm SAU authority này (authority không chứa '/'), trừ khi nó bắt đầu ngay tại ký tự dừng
-    from = Math.max(at + 1, i - 1);
+function hasUrlUserinfo(raw: string): boolean {
+  if (!raw.includes('@') || !raw.includes(':')) return false;
+  const s = /[\t\n\r]/.test(raw) ? raw.replace(/[\t\n\r]/g, '') : raw;
+  const n = s.length;
+  // stopOther[i] / stopSpecial[i] = vị trí dừng đầu tiên ≥ i; colonFrom[i] = ':' đầu tiên ≥ i; atBefore[p] = '@' cuối < p
+  const stopOther = new Int32Array(n + 1);
+  const stopSpecial = new Int32Array(n + 1);
+  const colonFrom = new Int32Array(n + 1);
+  const atBefore = new Int32Array(n + 1);
+  stopOther[n] = n;
+  stopSpecial[n] = n;
+  colonFrom[n] = -1;
+  for (let i = n - 1; i >= 0; i--) {
+    const c = s.charCodeAt(i);
+    const stop = c === 47 || c === 63 || c === 35 || isJsSpace(c);
+    stopOther[i] = stop ? i : (stopOther[i + 1] as number);
+    stopSpecial[i] = stop || c === 92 ? i : (stopSpecial[i + 1] as number);
+    colonFrom[i] = c === 58 ? i : (colonFrom[i + 1] as number);
   }
+  atBefore[0] = -1;
+  for (let p = 1; p <= n; p++) atBefore[p] = s.charCodeAt(p - 1) === 64 ? p - 1 : (atBefore[p - 1] as number);
+
+  const re = URL_SCHEME_RE;
+  re.lastIndex = 0;
+  for (let m = re.exec(s); m !== null; m = re.exec(s)) {
+    const special = SPECIAL_URL_SCHEMES.has(m[0].slice(0, -1).toLowerCase());
+    let i = m.index + m[0].length;
+    if (special) {
+      while (i < n && (s.charCodeAt(i) === 47 || s.charCodeAt(i) === 92)) i++;
+    } else if (s.charCodeAt(i) === 47 && s.charCodeAt(i + 1) === 47) {
+      i += 2;
+    } else {
+      continue;
+    }
+    const end = (special ? stopSpecial : stopOther)[i] as number;
+    const lastAt = atBefore[end] as number;
+    const firstColon = colonFrom[i] as number;
+    if (lastAt >= i && firstColon >= i && firstColon < lastAt) return true;
+  }
+  return false;
 }
 
 /** Tiền tố của canary do CLI giả ghi: `GA-CANARY-<uuid>` — bằng chứng chắc duy nhất (chỉ có trong test). */
