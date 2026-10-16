@@ -1171,8 +1171,52 @@ function foldUnicodeSpaces(s: string): string {
   return x;
 }
 
-function collect(raw: string, firstOnly: boolean): CredentialSpan[] {
+/** NFKC nở một ký tự thành tối đa 18 (U+FDFA) ⇒ dòng 1 MiB có thể thành ~18 MiB (security review MEDIUM, DoS). */
+const NFKC_MAX_EXPANSION = 18;
+/** Khối chuẩn hoá NFKC khi không chắc kết quả nằm trong trần (dừng sớm ngay khi vượt trần). */
+const NFKC_CHUNK = 65_536;
+/**
+ * Ranh giới cắt an toàn cho NFKC: ký tự starter (ccc = 0) không bao giờ là thành phần thứ hai của một tổ hợp chuẩn ⇒ cắt
+ * TRƯỚC nó, chuẩn hoá từng khối rồi nối = chuẩn hoá cả chuỗi. Chọn bảo thủ: U+0000–U+02FF (ASCII, Latin-1, Latin mở rộng
+ * A/B, IPA, chữ bổ trợ — đều ccc = 0), U+1E00–U+1EFF (Latin mở rộng bổ sung, tiếng Việt), U+4E00–U+9FFF (chữ Hán).
+ */
+const isNfkcBoundary = (c: number) => c < 0x300 || (c >= 0x1e00 && c <= 0x1eff) || (c >= 0x4e00 && c <= 0x9fff);
+
+/**
+ * NFKC của s nếu kết quả ≤ `max` ký tự, ngược lại null (⇒ `too_large`, không quét). Chắc chắn nằm trong trần
+ * (s.length + 17 × số ký tự ngoài ASCII ≤ max) ⇒ chuẩn hoá một lần; không thì chuẩn hoá theo khối ~64 Ki ký tự, cắt ở ranh
+ * giới an toàn, dừng ngay khi tổng vượt trần (không dựng chuỗi khổng lồ). Không có ranh giới an toàn trong 64 Ki ký tự kế
+ * tiếp ⇒ null (mặc định chặn).
+ */
+function nfkcWithinLimit(s: string, max: number): string | null {
+  let nonAscii = 0;
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) > 0x7f) nonAscii++;
+  if (s.length + (NFKC_MAX_EXPANSION - 1) * nonAscii <= max) return s.normalize('NFKC');
+  const parts: string[] = [];
+  let total = 0;
+  for (let i = 0; i < s.length; ) {
+    let j = Math.min(s.length, i + NFKC_CHUNK);
+    const limit = Math.min(s.length, j + NFKC_CHUNK);
+    while (j < limit && !isNfkcBoundary(s.charCodeAt(j))) j++;
+    if (j < s.length && !isNfkcBoundary(s.charCodeAt(j))) return null;
+    const part = s.slice(i, j).normalize('NFKC');
+    total += part.length;
+    if (total > max) return null;
+    parts.push(part);
+    i = j;
+  }
+  return parts.join('');
+}
+
+/** Quét một chuỗi đã chặn kích thước. null ⇒ bản NFKC vượt trần (`too_large`, không quét gì). */
+function collect(raw: string, firstOnly: boolean, max: number): CredentialSpan[] | null {
   const s = foldUnicodeSpaces(raw);
+  // NFKC tính TRƯỚC mọi lượt quét: vượt trần ⇒ too_large, không quét (như chuỗi gốc quá trần)
+  let nf: string | null = s;
+  if (NON_ASCII_RE.test(s)) {
+    nf = nfkcWithinLimit(s, max);
+    if (nf === null) return null;
+  }
   const spans: CredentialSpan[] = [];
   const emit: Emit = (start, end, patternId) => {
     spans.push({ start, end, patternId });
@@ -1205,26 +1249,18 @@ function collect(raw: string, firstOnly: boolean): CredentialSpan[] {
   }
 
   // NFKC (contracts testWithNfkc): ký tự tương thích — fullwidth ngoài trần 64 Ki của bước gập, chữ khoanh tròn, chữ in
-  // trên / dưới, chữ ghép… ⇒ quét thêm bản NFKC để PHÁT HIỆN. Vị trí không ánh xạ được (NFKC đổi độ dài) ⇒ bản NFKC có
-  // nhiều đoạn của một id hơn các lượt trước thì che CẢ chuỗi (mặc định chặn).
-  if (NON_ASCII_RE.test(s)) {
-    const nf = s.normalize('NFKC');
-    if (nf !== s) {
-      const before = new Map<string, number>();
-      for (const sp of spans) before.set(sp.patternId, (before.get(sp.patternId) ?? 0) + 1);
-      const seen = new Map<string, number>();
-      let extra: string | null = null;
-      runDetectors(nf, (_a, _b, id) => {
-        const c = (seen.get(id) ?? 0) + 1;
-        seen.set(id, c);
-        if (c <= (before.get(id) ?? 0)) return false;
-        extra = id;
-        return true;
-      });
-      if (extra !== null) {
-        spans.push({ start: 0, end: s.length, patternId: extra });
-        if (firstOnly) return spans;
-      }
+  // trên / dưới, chữ ghép… ⇒ quét thêm bản NFKC. Vị trí KHÔNG ánh xạ được (NFKC đổi độ dài) ⇒ bản NFKC khác chuỗi và có
+  // BẤT KỲ khớp nào thì che / chặn CẢ chuỗi (fail-closed, security review MEDIUM: suy "khớp mới" bằng đếm theo id lọt khi
+  // lượt trước đếm trùng một đoạn).
+  if (nf !== s) {
+    let nfHit: string | null = null;
+    runDetectors(nf, (_a, _b, id) => {
+      nfHit = id;
+      return true;
+    });
+    if (nfHit !== null) {
+      spans.push({ start: 0, end: s.length, patternId: nfHit });
+      if (firstOnly) return spans;
     }
   }
 
@@ -1250,7 +1286,8 @@ export function scanText(text: string, opts: { maxChars?: number; firstOnly?: bo
   const max = opts.maxChars ?? SCAN_MAX_CHARS;
   if (text.length > max) return { status: 'too_large', length: text.length };
   const firstOnly = opts.firstOnly ?? false;
-  const spans = collect(text, firstOnly);
+  const spans = collect(text, firstOnly, max);
+  if (spans === null) return { status: 'too_large', length: text.length };
   if (spans.length === 0) return { status: 'clean' };
   if (!firstOnly) spans.sort((a, b) => a.start - b.start || b.end - a.end);
   return { status: 'match', patternId: (spans[0] as CredentialSpan).patternId, spans };
