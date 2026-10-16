@@ -6,7 +6,6 @@ import {
   CREDENTIAL_KEY_NAMES,
   type CredentialPatternId,
   isCredentialKeyName,
-  normalizeCredentialName,
   TOOL_PAYLOAD_LIMITS,
 } from '@ga/contracts';
 import { auditPatternId, scanText } from './credential-detector.ts';
@@ -19,9 +18,20 @@ export interface PayloadLimits {
 }
 
 /**
- * Tên khoá mang credential — MỘT nguồn luật (contracts 0a2bfff): `isCredentialKeyName` của contracts (tên
- * `CREDENTIAL_KEY_NAMES` mọi kiểu viết) + `SECURITY_EXTRA_KEY_NAMES`, chuẩn hoá bằng chính `normalizeCredentialName` của
- * contracts (bỏ `_` / `-`, hạ chữ thường: `Refresh-Token` = `refresh_token` = `refreshToken` = `REFRESH__TOKEN`).
+ * Chuẩn hoá CHẶT tên khoá (security review MEDIUM, Gen xác nhận): NFKC (gập fullwidth…) + chữ thường + bỏ MỌI ký tự ngoài
+ * a–z0–9 ⇒ `api key`, `api.key`, `api:key`, `api_key ` (khoảng trắng cuối), `api_key` viết fullwidth (U+FF41…) đều = `apikey`.
+ * TẠM: L0 đang đưa đúng luật này vào `normalizeCredentialName` của contracts — khi merge về, bỏ hàm này, dùng của contracts
+ * (một nguồn).
+ */
+export const normalizeKeyStrict = (key: string): string =>
+  key
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+/**
+ * Tên khoá mang credential: `isCredentialKeyName` của contracts (tên `CREDENTIAL_KEY_NAMES` mọi kiểu viết) HOẶC tên trong
+ * `SENSITIVE_KEY_NAMES` (contracts + phần thêm của security) so sau `normalizeKeyStrict` — luật chặt bao luật contracts.
  */
 
 /** Phần thêm RIÊNG của security (ngoài contracts): tên chung chung chỉ chặn khi là KHOÁ object, không chặn câu văn. */
@@ -40,11 +50,11 @@ export const SECURITY_EXTRA_KEY_NAMES = [
 ] as const;
 
 export const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set(
-  [...CREDENTIAL_KEY_NAMES, ...SECURITY_EXTRA_KEY_NAMES].map(normalizeCredentialName),
+  [...CREDENTIAL_KEY_NAMES, ...SECURITY_EXTRA_KEY_NAMES].map(normalizeKeyStrict),
 );
 
 export function isSensitiveKey(key: string): boolean {
-  return isCredentialKeyName(key) || SENSITIVE_KEY_NAMES.has(normalizeCredentialName(key));
+  return isCredentialKeyName(key) || SENSITIVE_KEY_NAMES.has(normalizeKeyStrict(key));
 }
 
 export type PayloadScreenResult =

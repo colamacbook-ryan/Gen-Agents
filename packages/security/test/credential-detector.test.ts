@@ -649,3 +649,38 @@ describe('tên credential mọi kiểu viết + base64_secret_run (contracts 0a2
     expect(samples.filter((x) => detectCredential(x) !== null)).toEqual([]);
   });
 });
+
+describe('khoá object: chuẩn hoá CHẶT (review MEDIUM — hồi quy khi chỉ bỏ `_` / `-`)', () => {
+  const fullwidth = (s: string) => [...s].map((c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)).join('');
+  const NBSP = String.fromCharCode(0xa0);
+  const keys = [
+    'api key',
+    'api.key',
+    'api:key',
+    'api_key ',
+    ' api_key',
+    `api_key${NBSP}`,
+    'Refresh.Token',
+    'client secret',
+    'x:api:key',
+    'pass word',
+    fullwidth('api_key'),
+    fullwidth('password'),
+    `${fullwidth('Access')}_token`,
+  ];
+  it('khoá có dấu cách, `.`, `:`, khoảng trắng cuối, fullwidth ⇒ vẫn là khoá nhạy cảm', () => {
+    for (const k of keys) {
+      expect(isSensitiveKey(k), JSON.stringify(k)).toBe(true);
+      expect(screenPayload({ data: { [k]: 'x' } }), JSON.stringify(k)).toMatchObject({
+        code: 'credential_like_payload',
+        patternId: 'credential_field_name',
+      });
+      expect(JSON.stringify(redactValue({ [k]: 'v4lue-x' })), JSON.stringify(k)).not.toContain('v4lue-x');
+    }
+  });
+  it('khoá thường không bị coi là nhạy cảm', () => {
+    for (const k of ['token count', 'keyboard', 'api', 'secretary', 'my.key.id', 'passport']) {
+      expect(isSensitiveKey(k), k).toBe(false);
+    }
+  });
+});
