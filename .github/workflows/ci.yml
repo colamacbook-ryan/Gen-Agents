@@ -34,7 +34,7 @@ jobs:
       - run: pnpm license:check --selftest
 
   db:
-    name: DB · 94 ca Python + parity + mutation (--changed)
+    name: DB · bộ test Python + parity
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -50,8 +50,19 @@ jobs:
         run: python3 -c "import sys, sqlite3; print(sys.version.split()[0], 'sqlite', sqlite3.sqlite_version)"
       # db/spec khớp SYNC.json, migration + kiểu khớp db/spec, TỔNG N/N PASS, parity runner TS ≡ Python
       - run: pnpm db:test
+
+  # Tách job riêng: bộ test DB hiện chưa phủ mọi trigger (mẫu M0: nhiều trigger *_no_replace_u, *_no_delete sống) ⇒ job này
+  # đỏ cho tới khi lane DB thêm ca âm. Gen quyết có đặt nó là check bắt buộc không (hoặc dùng --baseline bánh cóc).
+  db-mutation:
+    name: DB · mutation (--changed, đỏ thật chỉ qua dòng FAIL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       # trigger có SQL khác nhánh đích; nhánh đích chưa có schema ⇒ coi mọi trigger là mới, giới hạn 40 (đêm chạy --all)
-      - run: pnpm db:mutation --changed --base "origin/${{ github.base_ref || 'main' }}" --max 40
+      - run: python3 -B -I db/spec/mutate.py --changed --base "origin/${{ github.base_ref || 'main' }}" --max 40
 
   secrets:
     name: gitleaks
