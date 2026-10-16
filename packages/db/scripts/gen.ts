@@ -1,5 +1,5 @@
 // pnpm db:gen [--check]
-// Từ DB spec đã vendor (db/spec/schema_v2_2.sql + SYNC.json) sinh:
+// Từ DB spec (db/spec/schema_v2_2.sql + manifest SYNC.json — nguồn = repo từ DB v2.3.4) sinh:
 //   packages/db/migrations/sqlite/0001_baseline.sql   — CHỈ bảng + index (+ bảng ảo FTS5)          [CNS-157]
 //   packages/db/migrations/sqlite/R__triggers.sql     — mọi trigger, đúng thứ tự tạo (thứ tự = thứ tự chạy)
 //   packages/db/migrations/sqlite/R__views.sql        — mọi view, đúng thứ tự tạo (view phụ thuộc view)
@@ -61,7 +61,7 @@ for (const r of master) {
   else if (r.type === 'view') views.push({ type: 'view', name: r.name, sql: r.sql });
 }
 
-const generatedBy = `GENERATED bởi \`pnpm db:gen\` từ db/spec/schema_v2_2.sql @ Second-Brain ${rev7} (DATABASE v${sync.database_version}) — KHÔNG SỬA TAY.`;
+const generatedBy = `GENERATED bởi \`pnpm db:gen\` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v${sync.database_version}) — KHÔNG SỬA TAY.`;
 const outputs = new Map<string, string>();
 
 outputs.set(

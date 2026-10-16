@@ -196,7 +196,7 @@ SELECT t.*,
             END AS card_block_reason
 FROM tot t;
 
--- Leaderboard ₲ (MVP theo Ryan/Polaris): hạng cạnh tranh (đồng hạng khi bằng số dư: 1,1,3), khoảng cách tới hạng trên, Δ7 ngày
+-- Leaderboard ₲ (MVP theo Polaris): hạng cạnh tranh (đồng hạng khi bằng số dư: 1,1,3), khoảng cách tới hạng trên, Δ7 ngày
 -- v2.2.1 (CNS-048): "₲ kiếm được 7 ngày" = Σ reward + honesty_reward trong 7 ngày (thu nhập từ việc; trừ phần đã bị đảo vì ghi nhầm);
 -- KHÔNG gồm cấp phát, KHÔNG gồm phạt. Δ7 = biến động ròng của số dư, gồm mọi thứ. Chỉ hiển thị — hạng vẫn theo số dư (PRODUCT-SPEC A9).
 CREATE VIEW v_leaderboard AS
@@ -227,7 +227,7 @@ SELECT k.workspace_id, k.role_id, k.wallet_id, k.display_id, k.name, k.condition
                             IN ('reward', 'honesty_reward')))), 0) AS earned_7d_minor
 FROM ranked k;
 
--- Polaris (bảng mục tiêu của từng Role, Ryan 2026-10-15): đích cố định từ gen truy cầu + vị thế hiện tại + cơ hội. Luật chơi ở compiler.
+-- Polaris (bảng mục tiêu của từng Role, quyết định 2026-10-15): đích cố định từ gen truy cầu + vị thế hiện tại + cơ hội. Luật chơi ở compiler.
 CREATE VIEW v_role_polaris AS
 SELECT r.workspace_id, r.id AS role_id, r.display_id, r.name,
        (SELECT f.value_json FROM dna_fields f JOIN dna_field_defs d ON d.id = f.def_id
@@ -480,7 +480,7 @@ WHERE sa.deleted_at IS NULL;
 --   mode 'ok'       = tài khoản Core agent sẵn sàng (= v_core_agent_accounts.is_ready = CORE_READY() của trigger);
 --   mode 'recovery' = đã khoá mà KHÔNG sẵn sàng ⇒ blocks_admin = 1: overlay chặn, không đóng được, overlay_text + nút "Xử lý ngay" (fix_target) và
 --                     "Xem log" (A8); AI Hệ thống tạm dừng — DB chặn phiên (sessions_core_agent_ready_*), job giữ 'queued'; DB chặn Role mới
---                     (roles_core_agent_ready_i); Role đang làm việc VẪN CHẠY bằng CLI của chính nó (Q-I7 [CHỐT — Ryan 2026-10-16]: "có, role vẫn chạy tiếp").
+--                     (roles_core_agent_ready_i); Role đang làm việc VẪN CHẠY bằng CLI của chính nó (Q-I7 [CHỐT 2026-10-16]).
 --   reason_text khớp chữ FS v2.4 (O4, tin Telegram §6.2): "đăng nhập hết hạn" · "sự cố từ hãng" · "hết quota" (UI nối dòng "mở lại lúc" riêng) · "tài khoản bị khoá"
 --                     · v2.2.9 "đang đăng nhập lại".
 --   incident_reason = lý do theo từ vựng failover_reason (login_expired / outage / quota_exhausted / account_suspended) khi khớp, NULL nếu khác.
@@ -496,7 +496,7 @@ WHERE sa.deleted_at IS NULL;
 --                  tính chờ đồng ý lại): "Core agent đang đăng nhập lại. Hoàn tất đăng nhập trước khi tiếp tục.";
 --     fix_hint     giữ, nay SUY RA = <màn của fix_target> || ': ' || owner_action (không còn bộ chữ riêng).
 --   Không có fallback tự động: không đổi tài khoản, không đổi loại CLI.
---   v2.2.10 (CONTRACT-r8c §A/§C — Q-R8a [CHỐT — Ryan 2026-10-16: "1,2,3 ok" (Q-R8a)]; cách làm [ĐỀ XUẤT — Gen vòng 8c]):
+--   v2.2.10 (CONTRACT-r8c §A/§C — Q-R8a [CHỐT 2026-10-16]; cách làm [ĐỀ XUẤT — Gen vòng 8c]):
 --     reason 'type_change_in_progress' "đang đổi loại Core agent" (owner vừa đổi loại lúc sự cố, tài khoản mới đang đăng nhập): is_incident 0,
 --       auto_recheck 0, fix_target a5.system, owner_action "Hoàn tất đăng nhập trong terminal", overlay_text "Core agent đang đổi loại CLI. Hoàn tất đăng
 --       nhập trước khi tiếp tục.", A0 warn; kiểm đạt ⇒ ok (mốc khoá lại = lần đạt đầu tiên của tài khoản mới).
@@ -593,7 +593,7 @@ FROM u;
 
 -- v2.2.8 (CONTRACT-r8 §C): danh sách "Loại Core agent" ở Onboarding bước 2 = engine core_capable = 1 (antigravity, claude-code, openclaw).
 --   selectable = adapter_status 'ready' (= điều kiện CORE_VALID của trigger settings_core_agent_*); loại chưa ready hiện mờ kèm badge ("sắp có").
---   is_default = mặc định registry 'antigravity' (Q-I5 [CHỐT — Ryan 2026-10-16]) — cùng hằng CORE_DEFAULT của schema_v2_2.py.
+--   is_default = mặc định registry 'antigravity' (Q-I5 [CHỐT 2026-10-16]) — cùng hằng CORE_DEFAULT của schema_v2_2.py.
 CREATE VIEW v_core_agent_options AS
 SELECT e.slug, e.name, e.vendor, e.cli_binary, e.adapter_status, e.priority_order, e.requires_consent,
        CASE WHEN e.adapter_status = 'ready' THEN 1 ELSE 0 END AS selectable,
@@ -861,7 +861,7 @@ FROM employee_cards c, json_each(c.checks_json) j
 WHERE c.deleted_at IS NULL;
 
 -- Onboarding v3 bước 5 "setup_checklist" (CNS-010): 7 mã cố định OB-01…OB-07, tính từ bảng thật; không bao giờ đọc password_hash
--- v2.2.5 (INT-20, Ryan 2026-10-15): AI Hệ thống chạy trên Core agent = setting system.core_agent_engine (ST-0017; thiếu ⇒ 'antigravity' — v2.2.8, Q-I5 [CHỐT — Ryan 2026-10-16]).
+-- v2.2.5 (INT-20, quyết định 2026-10-15): AI Hệ thống chạy trên Core agent = setting system.core_agent_engine (ST-0017; thiếu ⇒ 'antigravity' — v2.2.8, Q-I5 [CHỐT 2026-10-16]).
 --   Không còn bước "chọn engine Hệ thống". OB-04 = Core agent đã đăng nhập (đếm tài khoản SẴN SÀNG: binding hệ thống sống + bật,
 --   cùng loại Core agent, login_status logged_in, có probe 'ok' trong container AI Hệ thống): 0 ⇒ err, 1 ⇒ warn (chưa có failover), ≥2 ⇒ ok.
 --   v2.2.6 (CONTRACT-r6 A1): OB-04 chỉ HAI trạng thái — 0 sẵn sàng ⇒ err, ≥1 ⇒ ok; đúng 1 ⇒ check_detail trung tính "1 tài khoản · chưa có
@@ -946,7 +946,7 @@ FROM k;
 
 -- v2.2 (CNS-032/037): MỘT bảng mức phạt theo hạng, đọc từ settings economy.penalty.* (đơn vị basis point, như penalty_rate_bp)
 -- — mọi màn (modal "Trừ ₲", Cài đặt › Kinh tế, khối Polaris P2/P3, tab Ví) đọc view này; không màn nào giữ bộ số riêng.
--- Mặc định = setting registry trong code (seed ghi sẵn cùng số). Q-R7 [CHỐT — Ryan duyệt 2026-10-15] — mọi số vẫn chỉnh được (harness khoá).
+-- Mặc định = setting registry trong code (seed ghi sẵn cùng số). Q-R7 [CHỐT 2026-10-15] — mọi số vẫn chỉnh được (harness khoá).
 CREATE VIEW v_penalty_presets AS
 WITH s AS (
   SELECT w.id AS workspace_id,
@@ -974,7 +974,7 @@ SELECT workspace_id, 'harness_violation', 4, 'exact', harness_bp, json_array(har
        || CASE WHEN self_confessed = 1 THEN '; Role tự khai → hạng tự báo' ELSE '; Role tự khai vẫn áp mức này' END FROM s;
 
 -- v2.2 (CNS-035): lưới Trọng thương — mỗi lần vào trạng thái: việc tạm chờ, cam kết sắp đến hạn, tự xét lỗi (chạy lại được?),
--- bài học chờ duyệt, mức gợi ý hồi phục (setting). Hồi phục = bất kỳ khoản cấp > 0 (Ryan); gợi ý chỉ là số điền sẵn.
+-- bài học chờ duyệt, mức gợi ý hồi phục (setting). Hồi phục = bất kỳ khoản cấp > 0; gợi ý chỉ là số điền sẵn.
 CREATE VIEW v_role_wounds AS
 SELECT w.workspace_id, w.id AS role_wound_id, w.display_id, w.role_id, r.display_id AS role_display_id, r.name,
        w.started_at, w.ended_at, CASE WHEN w.ended_at IS NULL THEN 1 ELSE 0 END AS is_open,
@@ -1020,7 +1020,7 @@ FROM avatars a JOIN roles r ON r.id = a.role_id
 LEFT JOIN skin_assets s ON s.id = a.skin_asset_id
 WHERE a.source = 'library' AND r.deleted_at IS NULL;
 
--- v2.3.0 (CONTRACT-r9 §A — Kho nhân vật A11 [CHỐT — Ryan 2026-10-16: "ok kho làm ở mvp, xưởng để gđ2" (Q-I8)]; cột / luật [ĐỀ XUẤT — Gen vòng 9]):
+-- v2.3.0 (CONTRACT-r9 §A — Kho nhân vật A11 — Q-I8 [CHỐT 2026-10-16]; cột / luật [ĐỀ XUẤT — Gen vòng 9]):
 -- lưới Kho (Nhân sự › Kho nhân vật) — một hàng mỗi nhân vật thư viện còn sống (SN-), gồm cả đã tắt / đã rút (cột Trạng thái). is_selectable = chọn được
 -- (= SN_SELECTABLE của schema_v2_2.py: còn sống + active + đang bật) — tab Thư viện của modal Ảnh đại diện (A1) đọc CÙNG view, lọc is_selectable = 1.
 -- roles_using = số Role còn sống đang dùng nhân vật làm avatar hiện hành (cùng định nghĩa với skin_assets_in_use_d/_u); danh sách Role = v_skin_pack_usage

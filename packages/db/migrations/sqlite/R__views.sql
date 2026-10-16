@@ -1,5 +1,5 @@
 -- repeatable: views
--- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 70903fd (DATABASE v2.3.2) — KHÔNG SỬA TAY.
+-- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v2.3.4) — KHÔNG SỬA TAY.
 -- 31 view, theo thứ tự tạo (view sau có thể đọc view trước). Trigger KHÔNG được SELECT từ view.
 
 -- @ga:object view v_role_prompt_budget
