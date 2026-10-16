@@ -103,6 +103,12 @@ function protocol(out: Capture): { lines: Record<string, unknown>[]; report: Run
   };
 }
 const lastReport = (out: Capture) => protocol(out).report;
+/** Report thành công (không phải biến thể `error` của contracts 3af4e6a) — runner trả report lỗi ⇒ test đỏ. */
+function okReport(out: Capture) {
+  const r = lastReport(out);
+  if (r.command === 'error') throw new Error(`runner trả report lỗi: ${r.code}`);
+  return r;
+}
 const runDirEmpty = () => readdirSync(sb.roots.run).length === 0;
 
 describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter dựng', () => {
@@ -133,7 +139,7 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
     expect(stdout.data).not.toContain('GA-CANARY-');
     expect(stdout.data).not.toContain('lọt?');
     expect(lines).toContainEqual({ $ga: 'line_redacted', patternId: 'canary' });
-    const report = lastReport(stdout);
+    const report = okReport(stdout);
     expect(report).toMatchObject({ command: 'turn', turnId: TURN_ID, exit: { exitCode: 0 } });
     expect(report.authGc).toEqual({ removed: 1, nativeMemory: 'off' });
     expect(runDirEmpty()).toBe(true);
@@ -440,7 +446,7 @@ describe("GEN-04 — allowlist credential 'unknown' ⇒ không nối credential 
     rmSync(join(sb.roots.run, 'env-dump.json'));
     expect(dump.credBefore).toBeNull();
     expect(dump.values.some((v) => v.startsWith(sb.roots.auth))).toBe(false);
-    expect(lastReport(stdout).authGc).toEqual({ removed: 0, nativeMemory: 'unknown' });
+    expect(okReport(stdout).authGc).toEqual({ removed: 0, nativeMemory: 'unknown' });
     expect(readFileSync(join(sb.authDir, 'cred.json'), 'utf8')).toBe('v1');
     expect(existsSync(join(sb.authDir, '.junk'))).toBe(true);
   });
@@ -448,6 +454,6 @@ describe("GEN-04 — allowlist credential 'unknown' ⇒ không nối credential 
     const reg = registryOf([fakeAdapter({ authAllowlist: 'unknown' } as Partial<RunnerAdapter>)]);
     const { c, stdout } = ctx({ stdin: probeBundle('login_check'), env: { GA_PROBE_ID: PROBE_ID }, registry: reg });
     expect(await cmdProbe(c, 'login-check')).toBe(0);
-    expect(lastReport(stdout).authGc).toEqual({ removed: 0, nativeMemory: 'unknown' });
+    expect(okReport(stdout).authGc).toEqual({ removed: 0, nativeMemory: 'unknown' });
   });
 });
