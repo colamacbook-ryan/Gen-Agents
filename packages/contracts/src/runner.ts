@@ -51,6 +51,10 @@ export const MODEL_ID_MAX = 106;
 /** Mức effort: chữ thường bắt đầu, ≤ 16 ký tự. */
 export const EFFORT_RE = /^[a-z][a-z0-9_-]{0,15}$/;
 
+/** Tên cờ CLI quét được (capability `flag:*`): `-x` / `--long-flag`, ≤ 65 ký tự, không `=` / khoảng trắng. */
+export const DETECTED_FLAG_RE = /^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+export const DetectedFlags = z.array(z.string().max(65).regex(DETECTED_FLAG_RE)).max(256);
+
 export const TurnParams = z.strictObject({
   model: z.string().max(MODEL_ID_MAX).regex(MODEL_ID_RE).nullable(),
   effort: z.string().max(16).regex(EFFORT_RE).nullable(),
@@ -92,6 +96,13 @@ function buildRunnerBundles<Slug extends z.ZodType<string>>(engineSlug: Slug) {
     engineSlug,
     engineAccount: EngineAccount,
     params: TurnParams,
+    /** Cách đăng nhập của tài khoản (adapter cấu hình CLI theo đó). */
+    authMethod: z.enum(AUTH_METHODS),
+    /**
+     * Cờ đã quét của phiên bản CLI đang cài — CHỈ làm cổng (cơ chế giới hạn công cụ phải có đủ cờ), không bao giờ vào argv
+     * (argv chỉ từ flagTable; engineArgvViolations). Ngoại lệ có chủ đích duy nhất của luật "bundle không có mảng chuỗi".
+     */
+    detectedFlags: DetectedFlags,
     prompt: z
       .strictObject({ user: PromptFile, system: PromptFile.nullable() })
       .refine(

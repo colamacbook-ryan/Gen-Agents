@@ -8,6 +8,7 @@ import {
   AVATAR_STATES,
   CAPABILITY_AUTH_MODES,
   CAPABILITY_CONFIDENCE,
+  CAPABILITY_KINDS,
   CERTAINTY_LEVELS,
   DesiredState,
   ENGINE_INSTALL_FAILURE_REASONS,
@@ -68,6 +69,7 @@ describe('contracts ↔ DB', () => {
     expect(sorted(SESSION_PHASES)).toEqual(sorted(DB_ENUMS['sessions.phase']));
     // CNS-178: độ chắc của tin Role = CHECK chat_messages.certainty; phiên đo dùng trigger 'baseline'
     expect(sorted(CERTAINTY_LEVELS)).toEqual(sorted(DB_ENUMS['chat_messages.certainty']));
+    expect(sorted(CAPABILITY_KINDS)).toEqual(sorted(DB_ENUMS['capabilities.kind']));
     expect(DB_ENUMS['sessions.trigger']).toContain('baseline');
   });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TokenUsage, TURN_OUTCOMES, TurnClassification, type TurnOutcome } from './engine.ts';
+import { QuotaSignal, TokenUsage, TURN_OUTCOMES, TurnClassification, type TurnOutcome } from './engine.ts';
 
 // Hợp đồng dịch vụ phiên (CNS-151): L-GW cung cấp, L-SYS / L-WORK gọi — đóng băng ở M0 để không phải chờ code.
 // Một lượt = một hàng `sessions` (SS-). Không resume native: ngữ cảnh mỗi lượt do compiler dựng từ DB (CNS-132).
@@ -102,6 +102,8 @@ export const TURN_REJECTIONS = [
   'engine_not_installed',
   'no_binding',
   'duplicate',
+  /** CLI không có cơ chế giới hạn công cụ đã kiểm ⇒ không chạy lượt (fail-closed; = ENGINE_UNRESTRICTED_REASON). */
+  'engine_unrestricted',
 ] as const;
 export type TurnRejection = (typeof TURN_REJECTIONS)[number];
 
@@ -134,6 +136,8 @@ export const TurnEvent = z.discriminatedUnion('type', [
     deniedCode: z.string().nullable(),
   }),
   z.strictObject({ type: z.literal('usage'), usage: TokenUsage }),
+  /** Quota gói của tài khoản đang chạy (CLI tự báo trong luồng) — L-GW cập nhật trạng thái tài khoản / UI. */
+  z.strictObject({ type: z.literal('quota'), engineAccountId: Ulid, quota: QuotaSignal }),
   z.strictObject({
     type: z.literal('failover'),
     fromAccountId: Ulid,

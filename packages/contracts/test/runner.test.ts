@@ -45,6 +45,8 @@ import {
   TermTicketClaims,
   TURN_EXEC,
   TurnBundle,
+  type TurnPlanInput,
+  TurnStreamEvent,
 } from '../src/index.ts';
 
 const ULID = '01JABCDEFGHJKMNPQRSTVWXYZ0';
@@ -60,6 +62,8 @@ const turn = (over: Record<string, unknown> = {}) => ({
   engineSlug: 'alpha',
   engineAccount: 'EN-0002',
   params: { model: 'vendor-model-4.5', effort: 'high' },
+  authMethod: 'subscription',
+  detectedFlags: ['--model', '--effort', '-p'],
   prompt: { user: { path: 'user.md', content: 'xin chào' }, system: { path: 'system.md', content: 'quy tắc' } },
   timeoutMs: 600_000,
   measure: null,
@@ -183,6 +187,13 @@ describe('bundle = ý định có schema đóng', () => {
     }
     expect(TurnBundle.safeParse(turn({ params: { model: null, effort: null, flags: ['--x'] } })).success).toBe(false);
     expect(TurnBundle.safeParse(turn({ v: 1 })).success).toBe(false);
+    // detectedFlags: chỉ tên cờ hợp lệ, ≤ 256 phần tử; authMethod enum
+    for (const f of ['--x=1', 'a b', '--', 'model', '-', '--a;b', `--${'a'.repeat(64)}`]) {
+      expect(TurnBundle.safeParse(turn({ detectedFlags: [f] })).success, f).toBe(false);
+    }
+    expect(TurnBundle.safeParse(turn({ detectedFlags: Array.from({ length: 257 }, () => '--x') })).success).toBe(false);
+    expect(TurnBundle.safeParse(turn({ detectedFlags: [] })).success).toBe(true);
+    expect(TurnBundle.safeParse(turn({ authMethod: 'password' })).success).toBe(false);
     // phiên đo: enum đóng (CNS-178); thiếu trường measure ⇒ từ chối
     expect(TurnBundle.safeParse(turn({ measure: 'overhead_bare' })).success).toBe(true);
     expect(TurnBundle.safeParse(turn({ measure: '--bare' })).success).toBe(false);
@@ -523,6 +534,25 @@ describe('argv do runner dựng: argv[0] dưới /opt/engines/<slug>/, cấm she
     ).toBe(true);
   });
 
+  it('adapter: parseStreamLine trả mảng; TurnPlanInput có timeoutMs / authMethod / detectedFlags', () => {
+    expectTypeOf<ReturnType<EngineAdapter['parseStreamLine']>>().toEqualTypeOf<readonly TurnStreamEvent[]>();
+    expectTypeOf<TurnPlanInput['timeoutMs']>().toEqualTypeOf<number>();
+    expectTypeOf<TurnPlanInput['authMethod']>().toEqualTypeOf<'subscription' | 'api_key' | 'adc'>();
+    expectTypeOf<TurnPlanInput['detectedFlags']>().toEqualTypeOf<readonly string[]>();
+    expect(
+      TurnStreamEvent.safeParse({
+        type: 'quota',
+        quota: { window: 'five_hour', status: 'rejected', resetAt: TS, utilizationPct: null },
+      }).success,
+    ).toBe(true);
+    expect(
+      TurnStreamEvent.safeParse({
+        type: 'quota',
+        quota: { window: '5h', status: 'rejected', resetAt: null, utilizationPct: null },
+      }).success,
+    ).toBe(false);
+  });
+
   it('adapter khai bảng cờ; turnPlan / loginCheck / capabilityScan trả ProbePlan (chạy trong runner)', () => {
     expectTypeOf<EngineAdapter['flagTable']>().toEqualTypeOf<EngineFlagTable>();
     expectTypeOf<ReturnType<EngineAdapter['loginCheck']>['plan']>().toEqualTypeOf<ProbePlan>();
@@ -536,6 +566,24 @@ const defOf = (s: unknown): ZodDef => (s as { _zod: { def: ZodDef } })._zod.def;
 const COMMANDISH_KEY_RE =
   /^(?:argv\w*|cmd\w*|args|arguments|shell|program|binary|plans?|exec\w*|allowlist|authAllowlist)$/i;
 const LEAF_TYPES = new Set(['string', 'number', 'int', 'boolean', 'literal', 'enum', 'null', 'never', 'bigint']);
+/**
+ * Ngoại lệ CÓ CHỦ ĐÍCH (duyệt từng đường): mảng chuỗi chỉ được phép ở đây và phần tử phải là chuỗi có regex neo ^…$ + max.
+ * `detectedFlags`: cờ đã quét, chỉ làm cổng — không bao giờ vào argv (contracts engine.ts TurnPlanInput.detectedFlags).
+ */
+const ALLOWED_STRING_ARRAYS = new Set(['$.detectedFlags']);
+const isAnchoredStrictString = (s: unknown): boolean => {
+  const checks = (defOf(s).checks ?? []) as Array<{
+    _zod: { def: { check: string; format?: string; pattern?: RegExp } };
+  }>;
+  const re = checks.find((c) => c._zod.def.format === 'regex')?._zod.def.pattern;
+  return (
+    defOf(s).type === 'string' &&
+    re !== undefined &&
+    re.source.startsWith('^') &&
+    re.source.endsWith('$') &&
+    checks.some((c) => c._zod.def.check === 'max_length')
+  );
+};
 
 /**
  * Đường của mọi trường "mang lệnh": tên kiểu argv / cmd / args…, MẢNG CHUỖI ở bất kỳ đâu, record tự do (env). Kiểu zod
@@ -560,7 +608,9 @@ function commandLikeFields(schema: unknown, path = '$', seen = new Set<unknown>(
     case 'array': {
       let el = def.element;
       while (['nullable', 'optional', 'readonly', 'default'].includes(defOf(el).type)) el = defOf(el).innerType;
-      if (defOf(el).type === 'string') return [`${path}[] (mảng chuỗi)`];
+      if (defOf(el).type === 'string') {
+        return ALLOWED_STRING_ARRAYS.has(path) && isAnchoredStrictString(el) ? [] : [`${path}[] (mảng chuỗi)`];
+      }
       return walk(def.element, `${path}[]`);
     }
     case 'tuple':
@@ -641,6 +691,17 @@ describe('hợp đồng: không schema bundle / yêu cầu runner nào có argv 
       ),
     ).toEqual(['$[] (mảng chuỗi)', '$[] (mảng chuỗi)']);
     expect(() => commandLikeFields(z.date())).toThrow(/walker chưa hỗ trợ/);
+    // ngoại lệ detectedFlags chỉ đúng đường + đúng dạng: chuỗi tự do / regex không neo / đường khác ⇒ vẫn bị bắt
+    expect(commandLikeFields(z.strictObject({ detectedFlags: z.array(z.string()) }))).toEqual([
+      '$.detectedFlags[] (mảng chuỗi)',
+    ]);
+    expect(commandLikeFields(z.strictObject({ detectedFlags: z.array(z.string().max(9).regex(/--x/)) }))).toEqual([
+      '$.detectedFlags[] (mảng chuỗi)',
+    ]);
+    expect(commandLikeFields(z.strictObject({ flags: z.array(z.string().max(9).regex(/^--x$/)) }))).toEqual([
+      '$.flags[] (mảng chuỗi)',
+    ]);
+    expect(commandLikeFields(z.strictObject({ detectedFlags: z.array(z.string().max(9).regex(/^--x$/)) }))).toEqual([]);
   });
 });
 

@@ -4,6 +4,8 @@ import {
   CERTAINTY_LEVELS,
   type Certainty,
   DB_TIMESTAMP_RE,
+  ENGINE_ARCHES,
+  ENGINE_UNRESTRICTED_REASON,
   type EngineAdapter,
   EngineInstallStatus,
   EnvMap,
@@ -12,6 +14,8 @@ import {
   execStdinPayload,
   extractTermTicket,
   formatDisplayId,
+  InstallSpec,
+  installPlatformFor,
   isEntityPrefix,
   LOGIN_EXEC,
   loginExecEnv,
@@ -31,8 +35,10 @@ import {
   TermTicketClaims,
   ToolArgs,
   TURN_EXEC,
+  TURN_REJECTIONS,
   TurnPlan,
   type TurnPlanInput,
+  TurnRejectedError,
   TurnRequest,
   TurnResult,
   toDbTimestamp,
@@ -118,6 +124,33 @@ describe('engine — env tiêm vào container (CNS-142)', () => {
     expectTypeOf<ResumeKeys>().toEqualTypeOf<never>();
     expectTypeOf<EngineAdapter['nativeMemoryPolicy']>().toEqualTypeOf<'tmpfs-per-turn'>();
     expectTypeOf<EngineAdapter['authAllowlist']>().toEqualTypeOf<readonly string[] | 'unknown'>();
+  });
+  it('InstallSpec: platforms (arch × libc × khoá hãng) — không trùng; máy không khớp ⇒ null (unsupported_arch)', () => {
+    const spec = {
+      source: 'official',
+      origin: 'https://downloads.example.com/cli/manifest.json',
+      checksum: { algorithm: 'sha256', from: 'manifest' },
+      selfUpdate: 'unknown',
+      egressDomains: ['downloads.example.com'],
+      platforms: [
+        { arch: 'x64', libc: 'glibc', key: 'linux-x64' },
+        { arch: 'arm64', libc: 'glibc', key: 'linux-arm64' },
+      ],
+    };
+    const parsed = InstallSpec.parse(spec);
+    expect(installPlatformFor(parsed, 'arm64', 'glibc')?.key).toBe('linux-arm64');
+    expect(installPlatformFor(parsed, 'x64', 'musl')).toBeNull();
+    expect(installPlatformFor(parsed, 'ia32', 'glibc')).toBeNull();
+    expect(InstallSpec.safeParse({ ...spec, platforms: [] }).success).toBe(false);
+    expect(InstallSpec.safeParse({ ...spec, platforms: [spec.platforms[0], spec.platforms[0]] }).success).toBe(false);
+    expect(InstallSpec.safeParse({ ...spec, platforms: [{ arch: 'riscv64', libc: 'glibc', key: 'x' }] }).success).toBe(
+      false,
+    );
+    expect([...ENGINE_ARCHES]).toEqual(['x64', 'arm64']);
+  });
+  it('lý do từ chối lượt / O4: engine_unrestricted (CLI không có cơ chế giới hạn công cụ đã kiểm)', () => {
+    expect(TURN_REJECTIONS).toContain(ENGINE_UNRESTRICTED_REASON);
+    expect(new TurnRejectedError('engine_unrestricted').reason).toBe('engine_unrestricted');
   });
   it('trạng thái cài CLI có đủ 4 trạng thái + lý do lỗi', () => {
     expect(EngineInstallStatus.parse({ state: 'not_installed' })).toEqual({ state: 'not_installed' });
