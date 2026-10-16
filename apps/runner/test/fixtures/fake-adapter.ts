@@ -28,6 +28,7 @@ export function fakeAdapter(over: Partial<RunnerAdapter> = {}): RunnerAdapter {
       checksum: { algorithm: 'sha512', from: 'manifest' },
       selfUpdate: 'unknown',
       egressDomains: ['vendor.invalid'],
+      platforms: [{ arch: 'x64', libc: 'glibc', key: 'linux-x64' }],
     },
     flagTable: {
       subcommands: ['turn', 'print', 'raw', 'sleep', 'exit'],
@@ -41,7 +42,7 @@ export function fakeAdapter(over: Partial<RunnerAdapter> = {}): RunnerAdapter {
     }),
     capabilityScan: () => [cli([BIN, 'print', 'v1']), cli([BIN, 'print', 'help'])],
     parseCapabilities: () => [],
-    parseStreamLine: () => null,
+    parseStreamLine: () => [],
     classify: () => ({ outcome: 'ok', resetAt: null, detail: null }),
     turnPlan: (i: TurnPlanInput) =>
       cli([BIN, 'turn', ...(i.model ? ['--model', i.model] : [])], {
