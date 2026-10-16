@@ -1,17 +1,19 @@
-// CNS-133 / INT-06: lọc credential là DEFAULT-DENY. Mọi tool bị lọc trừ danh sách miễn nhỏ; tool miễn chỉ được có tham số
-// schema chặt. Review bảo mật M0 bắt `propose_edit` (newValue json) và `annotate` (note) lọt khỏi danh sách cho phép cũ.
+// CNS-133 / INT-06: lọc credential là DEFAULT-DENY, KHÔNG có ngoại lệ — mọi tool bị quét trước khi parse.
+// Review bảo mật M0 bắt hai lần: (1) `propose_edit` / `annotate` lọt khỏi danh sách cho phép thủ công;
+// (2) tool "chỉ nhận anchor" được miễn quét trong khi slug anchor 40 ký tự vẫn chở được token chữ thường / hex.
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  ANCHOR_GRID_TABLES,
+  ANCHOR_SCREENS,
   Anchor,
-  CREDENTIAL_FILTER_EXEMPT,
   CREDENTIAL_PATTERNS,
-  credentialFilterViolations,
   findCredentialLike,
   freeFormFields,
   MCP_TOOLS,
-  requiresCredentialFilter,
+  STRICT_SCHEMA_TOOLS,
   screenToolPayload,
+  strictSchemaViolations,
   ToolArgs,
 } from '../src/index.ts';
 
@@ -20,34 +22,112 @@ const FAKE_JWT = `eyJhbGciOiJIUzI1NiJ9.${'eyJzdWIiOiJ4In0'}.${'c2lnbmF0dXJlLXRlc
 const FAKE_ACCESS = `ya29.${'A0ARrdaM-test-only-0123456789'}`;
 const ANCHOR = 'grid:skills/row:SK-0004/col:C';
 
-describe('registry: default-deny', () => {
-  it('danh sách miễn hiện tại hợp lệ: mọi tool miễn chỉ có tham số schema chặt', () => {
-    expect(credentialFilterViolations(ToolArgs, CREDENTIAL_FILTER_EXEMPT)).toEqual([]);
+/** Biến thể token chữ thường (review lần 2): hex 40, base64url thường, sk-…, ya29.… */
+const LOWERCASE_TOKENS = {
+  hex40: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b',
+  base64urlLower: 'q9x2k7m4n1p8r5t3w6y0z2b4d6f8h0j2l4n6p8r0',
+  skLower: `sk-${'proj-abcdefghijklmnopqrstuvwx0123'}`,
+  ya29Lower: `ya29.${'a0arrdam-lowercase-only-0123456789'}`,
+};
+
+describe('mọi tool đều bị quét — không có ngoại lệ', () => {
+  it('canary ở trường bất kỳ (kể cả trường lạ ngoài schema) của MỌI tool + tên tool lạ ⇒ denied, không phải invalid', () => {
+    for (const tool of [...MCP_TOOLS, 'tool_moi_chua_khai']) {
+      const r = screenToolPayload(tool, { truong_la: CANARY });
+      expect(r.status, tool).toBe('denied');
+    }
   });
 
-  it('tool nào có trường tự do (string tự do / z.json / record / any) thì BẮT BUỘC bị lọc', () => {
+  it('tool schema chặt (navigate, tour) cũng bị quét', () => {
+    expect(screenToolPayload('navigate', { anchor: `panel:${LOWERCASE_TOKENS.hex40}` })).toMatchObject({
+      status: 'denied',
+      code: 'credential_like_payload',
+    });
+    expect(screenToolPayload('tour', { anchors: [ANCHOR, LOWERCASE_TOKENS.base64urlLower] }).status).toBe('denied');
+  });
+
+  it('token chữ thường / hex qua navigate, tour, highlight đều bị chặn', () => {
+    for (const [kind, tok] of Object.entries(LOWERCASE_TOKENS)) {
+      const cases: Array<[string, unknown]> = [
+        ['navigate', { anchor: `region:1,2,3,4@screen:${tok}` }],
+        ['navigate', { anchor: `panel:${tok}` }],
+        ['tour', { anchors: [ANCHOR, `grid:${tok}/row:SK-0001`] }],
+        ['highlight', { anchor: ANCHOR, label: tok }],
+        ['highlight', { anchor: ANCHOR, label: `xem ${tok} nhé` }],
+      ];
+      for (const [tool, args] of cases) {
+        expect(screenToolPayload(tool, args).status, `${kind} qua ${tool}`).toBe('denied');
+      }
+    }
+  });
+
+  it('đối chứng thuận: anchor hợp lệ + nội dung sạch vẫn qua', () => {
+    expect(screenToolPayload('navigate', { anchor: 'region:10,20,300,40@screen:a11' }).status).toBe('ok');
+    expect(screenToolPayload('navigate', { anchor: ANCHOR }).status).toBe('ok');
+    expect(
+      screenToolPayload('tour', { anchors: [ANCHOR, 'panel:formula-bar', 'role:RL-0001', 'msg:MSG-0142'] }).status,
+    ).toBe('ok');
+    expect(screenToolPayload('highlight', { anchor: ANCHOR, label: 'Chỗ cần sửa' }).status).toBe('ok');
+    expect(screenToolPayload('annotate', { anchor: ANCHOR, note: 'Câu này dài quá', n: 1 }).status).toBe('ok');
+    expect(screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: { text: 'ngắn hơn' } }).status).toBe('ok');
+    // ULID (26 ký tự) và display_id không bị coi là token
+    expect(
+      screenToolPayload('report_task', {
+        taskId: '01JABCDEFGHJKMNPQRSTVWXYZ0',
+        status: 'done',
+        summary: 'Xong TK-0462',
+        certainty: null,
+      }).status,
+    ).toBe('ok');
+  });
+});
+
+describe('anchor: ngữ pháp đóng từ registry', () => {
+  it('bảng / màn / panel ngoài registry, prefix lệch bảng, slug tự do ⇒ schema từ chối', () => {
+    for (const a of [
+      'region:1,2,3,4@screen:dao-tao',
+      'region:1,2,3,4@screen:a12',
+      'panel:khong-co',
+      'grid:khong_co/row:SK-0001',
+      'grid:skills/row:RL-0001',
+      'grid:skills/row:SK-123456789',
+      'row:ZZ-0001',
+      CANARY,
+      FAKE_JWT,
+    ]) {
+      expect(Anchor.safeParse(a).success, a).toBe(false);
+    }
+  });
+  it('mọi bảng lưới và mọi màn trong registry đều tạo được anchor hợp lệ', () => {
+    expect(ANCHOR_GRID_TABLES).toContain('skills');
+    for (const s of ANCHOR_SCREENS) expect(Anchor.safeParse(`region:0,0,1,1@screen:${s}`).success, s).toBe(true);
+    expect(Anchor.safeParse('grid:audit_log/row:AU-00007/col:B').success).toBe(true);
+  });
+});
+
+describe('schema chặt (lớp phòng thủ thứ hai, không phải miễn quét)', () => {
+  it('STRICT_SCHEMA_TOOLS hiện tại không có trường tự do', () => {
+    expect(strictSchemaViolations(ToolArgs, STRICT_SCHEMA_TOOLS)).toEqual([]);
+  });
+
+  it('tool có string tự do / z.json / record / any không được khai là schema chặt', () => {
     const free = MCP_TOOLS.filter((t) => freeFormFields(ToolArgs[t]).length > 0);
     expect(free).toEqual(
       expect.arrayContaining(['propose_edit', 'annotate', 'highlight', 'send_telegram', 'remember', 'set_field']),
     );
-    for (const t of free) expect(requiresCredentialFilter(t), t).toBe(true);
+    for (const t of free) expect(STRICT_SCHEMA_TOOLS as readonly string[], t).not.toContain(t);
   });
 
-  it('tool mới / tên lạ mặc định bị lọc', () => {
-    expect(requiresCredentialFilter('tool_moi_chua_khai')).toBe(true);
-    expect(requiresCredentialFilter('')).toBe(true);
-  });
-
-  it('thêm tool có trường tự do vào danh sách miễn ⇒ đỏ (đối chứng âm cho cổng kiểm)', () => {
+  it('thêm tool có trường tự do vào danh sách schema chặt ⇒ đỏ (đối chứng âm)', () => {
     const registry = { ...ToolArgs, leak: z.strictObject({ anchor: Anchor, text: z.string().max(200) }) };
-    expect(credentialFilterViolations(registry, [...CREDENTIAL_FILTER_EXEMPT, 'leak'])).toEqual([
+    expect(strictSchemaViolations(registry, [...STRICT_SCHEMA_TOOLS, 'leak'])).toEqual([
       { tool: 'leak', fields: ['$.text'] },
     ]);
-    expect(credentialFilterViolations(ToolArgs, ['propose_edit'])).toEqual([
+    expect(strictSchemaViolations(ToolArgs, ['propose_edit'])).toEqual([
       { tool: 'propose_edit', fields: ['$.newValue'] },
     ]);
-    expect(credentialFilterViolations(ToolArgs, ['annotate'])).toEqual([{ tool: 'annotate', fields: ['$.note'] }]);
-    expect(credentialFilterViolations(ToolArgs, ['khong_ton_tai'])[0]?.tool).toBe('khong_ton_tai');
+    expect(strictSchemaViolations(ToolArgs, ['annotate'])).toEqual([{ tool: 'annotate', fields: ['$.note'] }]);
+    expect(strictSchemaViolations(ToolArgs, ['khong_ton_tai'])[0]?.tool).toBe('khong_ton_tai');
   });
 
   it('bộ phân loại: z.json / record / any / chuỗi không neo đều là tự do; regex neo + max là chặt', () => {
@@ -76,63 +156,25 @@ describe('registry: default-deny', () => {
   });
 });
 
-describe('anchor chặt không chở được credential', () => {
-  it('anchor hợp lệ theo STD-08 §1', () => {
-    for (const a of [
-      ANCHOR,
-      'panel:formula-bar',
-      'role:RL-0001',
-      'msg:MSG-0142',
-      'file:AT-0007',
-      'region:10,20,300,40@screen:dao-tao',
+describe('screenToolPayload — ca âm propose_edit / annotate', () => {
+  it('propose_edit mang canary / JWT / token lồng / khoá refresh_token ⇒ denied', () => {
+    for (const newValue of [
+      CANARY,
+      FAKE_JWT,
+      { a: [{ b: FAKE_ACCESS }] },
+      { refresh_token: 'x' },
+      LOWERCASE_TOKENS.hex40,
     ]) {
-      expect(Anchor.safeParse(a).success, a).toBe(true);
-    }
-  });
-  it('canary / JWT / token trong anchor bị schema từ chối', () => {
-    for (const a of [CANARY, FAKE_JWT, FAKE_ACCESS, `panel:${CANARY}`, `grid:skills/row:SK-0004/col:${FAKE_ACCESS}`]) {
-      expect(Anchor.safeParse(a).success, a).toBe(false);
-    }
-  });
-});
-
-describe('screenToolPayload — ca âm', () => {
-  it('propose_edit mang canary / JWT / token (kể cả lồng trong json) bị chặn', () => {
-    for (const newValue of [CANARY, FAKE_JWT, { a: [{ b: FAKE_ACCESS }] }, { refresh_token: 'x' }]) {
       const r = screenToolPayload('propose_edit', { anchor: ANCHOR, newValue });
       expect(r.status, JSON.stringify(newValue)).toBe('denied');
       if (r.status === 'denied') expect(r.code).toBe('credential_like_payload');
     }
   });
-  it('annotate mang canary trong note bị chặn', () => {
+  it('annotate mang canary trong note ⇒ denied', () => {
     const r = screenToolPayload('annotate', { anchor: ANCHOR, note: `xem nè ${CANARY}`, n: 1 });
     expect(r).toEqual({ status: 'denied', code: 'credential_like_payload', patternId: 'canary' });
   });
-  it('mọi tool không miễn: canary bị chặn; trường lạ ngoài schema cũng bị quét (quét payload thô trước khi parse)', () => {
-    const samples: Record<string, unknown> = {
-      recall: { query: CANARY },
-      remember: { content: CANARY, kind: 'fact', scope: 'position' },
-      set_field: { field: 'x', value: { nested: CANARY } },
-      report_task: { taskId: null, status: 'done', summary: CANARY, certainty: null },
-      send_telegram: { chatRef: 'c', text: CANARY },
-      propose_change: { title: 't', items: [CANARY] },
-      highlight: { anchor: ANCHOR, label: CANARY },
-      annotate: { anchor: ANCHOR, note: CANARY, n: 1 },
-      propose_edit: { anchor: ANCHOR, newValue: CANARY },
-      navigate: { anchor: ANCHOR, extra: CANARY },
-    };
-    for (const [tool, args] of Object.entries(samples)) {
-      const r = screenToolPayload(tool, args);
-      expect(r.status, tool).not.toBe('ok');
-    }
-    expect(screenToolPayload('tool_moi', { x: CANARY }).status).toBe('denied');
-  });
-  it('đối chứng thuận: payload sạch đi qua', () => {
-    expect(screenToolPayload('annotate', { anchor: ANCHOR, note: 'Câu này dài quá', n: 1 }).status).toBe('ok');
-    expect(screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: { text: 'ngắn hơn' } }).status).toBe('ok');
-    expect(screenToolPayload('navigate', { anchor: ANCHOR }).status).toBe('ok');
-  });
-  it('mỗi mẫu credential tự bắt được mẫu của nó', () => {
+  it('mỗi mẫu credential tự bắt được mẫu của nó; câu thường không bị bắt', () => {
     const samples: Record<string, string> = {
       jwt: FAKE_JWT,
       google_oauth_access_token: FAKE_ACCESS,
@@ -142,9 +184,12 @@ describe('screenToolPayload — ca âm', () => {
       pem_private_key: '-----BEGIN PRIVATE KEY-----',
       refresh_token_field: '{"refresh_token": "…"}',
       canary: CANARY,
+      generic_sk_key: LOWERCASE_TOKENS.skLower,
+      long_token_run: LOWERCASE_TOKENS.hex40,
     };
     for (const p of CREDENTIAL_PATTERNS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
     expect(findCredentialLike({ Refresh_Token: 'bất kỳ' })).toEqual({ patternId: 'credential_field_name' });
-    expect(findCredentialLike({ note: 'nói về refresh token nói chung' })).toBeNull();
+    expect(findCredentialLike({ note: 'nói về refresh token nói chung, mã TK-0462, RL-0001' })).toBeNull();
+    expect(findCredentialLike('01JABCDEFGHJKMNPQRSTVWXYZ0')).toBeNull();
   });
 });

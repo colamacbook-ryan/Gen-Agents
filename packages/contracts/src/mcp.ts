@@ -1,29 +1,90 @@
 import { z } from 'zod';
+import { ENTITY_TYPES, type EntityPrefix } from './ids.ts';
 
 // Hợp đồng MCP gateway (BUILD-PLAN §B.4 `gateway/`, STD-08 §3–§5; CNS-133).
 //
-// LUẬT LỌC CREDENTIAL LÀ DEFAULT-DENY (CNS-133, INT-06):
-//   - MỌI tool (kể cả tên tool chưa có trong registry) đi qua bộ lọc credential trước khi thực thi / ghi bền / gửi ra.
-//     Khớp mẫu credential hoặc canary ⇒ `denied` mã `credential_like_payload`; audit chỉ lưu hash đoạn khớp.
-//   - Miễn lọc CHỈ cho tool trong `CREDENTIAL_FILTER_EXEMPT`, và chỉ khi MỌI tham số có schema chặt (enum / số / chuỗi
-//     ràng buộc bởi regex neo ^…$ + độ dài tối đa — vd Anchor chỉ chứa display_id / slug thường). Không có chuỗi tự do,
-//     z.json(), record, any. Test contracts `credentialFilterViolations` duyệt mọi tool: tool miễn mà có trường tự do ⇒ đỏ.
-//   - Tool mới mặc định bị lọc; muốn miễn phải sửa danh sách miễn qua PR "contract" và qua test đó.
+// LUẬT LỌC CREDENTIAL LÀ DEFAULT-DENY, KHÔNG CÓ NGOẠI LỆ (CNS-133, INT-06):
+//   - `screenToolPayload` quét payload THÔ của MỌI tool (kể cả tên tool lạ) bằng bộ phát hiện credential TRƯỚC khi parse,
+//     thực thi, ghi bền hay gửi ra. Khớp ⇒ `denied` mã `credential_like_payload`; audit chỉ lưu hash đoạn khớp.
+//     Không tool nào được bỏ qua bước quét (review bảo mật M0 bắt hai lần: danh sách cho phép thủ công, rồi miễn quét
+//     cho tool "chỉ nhận anchor" trong khi slug anchor vẫn chở được token chữ thường / hex).
+//   - Riêng biệt với quét: `STRICT_SCHEMA_TOOLS` là các tool mà MỌI tham số có schema chặt (enum / số / chuỗi neo ^…$ từ
+//     registry cố định). Đó chỉ là cam kết về schema (lớp phòng thủ thứ hai), KHÔNG phải miễn quét.
+//   - Anchor chỉ nhận tên bảng / màn / panel trong registry cố định của contracts + display_id có prefix đã đăng ký.
 // Bộ phát hiện dùng chung thật (che log + chặn payload, gồm biến thể) thuộc packages/security (L-SEC, M1) và PHẢI phủ ít nhất
 // `CREDENTIAL_PATTERNS` dưới đây; `screenToolPayload` là cổng tham chiếu v0 mà gateway (L-GW) giữ nguyên ngữ nghĩa.
 
 // ---------------------------------------------------------------- anchor + payload Ghim (STD-08 §1, §3)
-const DISPLAY_ID = '[A-Z]{2,3}-\\d{4,8}';
-const SLUG = '[a-z][a-z0-9_-]{0,39}';
+/** Mã màn hình (FRONTEND-SPEC) cho anchor vùng `region:…@screen:<mã>`. Thêm màn = PR "contract". */
+export const ANCHOR_SCREENS = [
+  'g1',
+  'g2',
+  'a0',
+  'a1',
+  'a2',
+  'a3',
+  'a4',
+  'a5',
+  'a6',
+  'a7',
+  'a8',
+  'a9',
+  'a10',
+  'a11',
+  'o1',
+  'o2',
+  'o3',
+  'o4',
+] as const;
+
+/** Panel có anchor riêng (STD-08 §1, vd `panel:formula-bar`). [ĐỀ XUẤT — L0] — thêm panel = PR "contract". */
+export const ANCHOR_PANELS = [
+  'formula-bar',
+  'query-box',
+  'context-bar',
+  'composer',
+  'chat',
+  'inspector',
+  'changeset-tray',
+  'log-stream',
+  'tree',
+  'terminal',
+  'token-meter',
+  'notifications',
+  'palette',
+] as const;
+
+/** Lưới có anchor = bảng có display_id (ENTITY_TYPES); hàng = display_id cùng prefix của bảng đó. */
+export const ANCHOR_GRID_TABLES = [...new Set(Object.values(ENTITY_TYPES))].sort();
+
+const alt = (xs: readonly string[]) => xs.map((x) => x.replace(/[-]/g, '\\-')).join('|');
+const PREFIX_ALT = alt(Object.keys(ENTITY_TYPES).sort((a, b) => b.length - a.length));
+const DISPLAY_ID = `(?:${PREFIX_ALT})-\\d{4,8}`;
+
 /**
- * Anchor ổn định gắn ID dữ liệu thật (STD-08 §1). Ngữ pháp chặt — chỉ display_id, slug chữ thường, chữ cột, số vùng:
- *   grid:<bảng>/row:<DISPLAY_ID>[/col:<CỘT>] · panel:<slug> · role|msg|file|row:<DISPLAY_ID> · region:x,y,w,h@screen:<slug>
- * Nên một anchor không chở được credential nguyên vẹn (token có chữ hoa/thường lẫn lộn, dấu chấm, chuỗi dài).
+ * Anchor ổn định gắn ID dữ liệu thật (STD-08 §1). Ngữ pháp ĐÓNG — không có slug tự do:
+ *   grid:<bảng ENTITY_TYPES>/row:<display_id cùng prefix>[/col:<A–ZZZ>] · panel:<ANCHOR_PANELS>
+ *   role:RL-… · msg:MSG-… · file:AT-… · row:<display_id> · region:x,y,w,h@screen:<ANCHOR_SCREENS>
+ * Phần số dài nhất là 8 chữ số (display_seq) — không chở được chuỗi số / hex / token.
  */
 export const ANCHOR_RE = new RegExp(
-  `^(?:grid:${SLUG}/row:${DISPLAY_ID}(?:/col:[A-Z]{1,3})?|panel:${SLUG}|(?:role|msg|file|row):${DISPLAY_ID}|region:\\d{1,5},\\d{1,5},\\d{1,5},\\d{1,5}@screen:${SLUG})$`,
+  `^(?:grid:(?:${alt(ANCHOR_GRID_TABLES)})/row:${DISPLAY_ID}(?:/col:[A-Z]{1,3})?|panel:(?:${alt(ANCHOR_PANELS)})` +
+    `|role:RL-\\d{4,8}|msg:MSG-\\d{4,8}|file:AT-\\d{4,8}|row:${DISPLAY_ID}` +
+    `|region:\\d{1,5},\\d{1,5},\\d{1,5},\\d{1,5}@screen:(?:${alt(ANCHOR_SCREENS)}))$`,
 );
-export const Anchor = z.string().max(120).regex(ANCHOR_RE, 'anchor không đúng ngữ pháp STD-08 §1');
+
+/** Lưới `grid:<bảng>/row:<PREFIX-…>`: prefix của hàng phải là prefix của chính bảng đó. */
+function gridRowMatchesTable(anchor: string): boolean {
+  const m = /^grid:([a-z_]+)\/row:([A-Z]{2,3})-/.exec(anchor);
+  if (!m) return true;
+  return ENTITY_TYPES[m[2] as EntityPrefix] === m[1];
+}
+
+export const Anchor = z
+  .string()
+  .max(120)
+  .regex(ANCHOR_RE, 'anchor không đúng ngữ pháp STD-08 §1 (bảng / màn / panel phải thuộc registry)')
+  .refine(gridRowMatchesTable, 'anchor lưới: prefix của hàng không thuộc bảng của lưới');
 
 export const PinnedAnchor = z.strictObject({
   anchor: Anchor,
@@ -100,15 +161,10 @@ export const ToolArgs = {
 } as const satisfies Record<McpToolName, z.ZodType>;
 
 /**
- * Tool ĐƯỢC MIỄN lọc credential (danh sách nhỏ, khai rõ). Điều kiện: mọi tham số có schema chặt — xem
- * `credentialFilterViolations`. `highlight` (label tự do), `annotate` (note), `propose_edit` (newValue json) KHÔNG được miễn.
+ * Tool có MỌI tham số theo schema chặt (lớp phòng thủ thứ hai). KHÔNG phải miễn quét: `screenToolPayload` vẫn quét mọi tool.
+ * Test contracts: tool trong danh sách này mà có trường tự do (string tự do / z.json / record / any) ⇒ đỏ.
  */
-export const CREDENTIAL_FILTER_EXEMPT = ['navigate', 'tour'] as const satisfies readonly McpToolName[];
-
-/** Default-deny: mọi tên tool — kể cả tên lạ ngoài registry — đều phải lọc, trừ khi nằm trong danh sách miễn. */
-export function requiresCredentialFilter(tool: string): boolean {
-  return !(CREDENTIAL_FILTER_EXEMPT as readonly string[]).includes(tool);
-}
+export const STRICT_SCHEMA_TOOLS = ['navigate', 'tour'] as const satisfies readonly McpToolName[];
 
 // ---------------------------------------------------------------- kiểm schema: trường tự do
 type ZodDef = { type: string; [k: string]: unknown };
@@ -169,13 +225,13 @@ export function freeFormFields(schema: z.ZodType, path = '$'): string[] {
   }
 }
 
-/** Tool miễn lọc mà có trường tự do ⇒ vi phạm. Gateway nên gọi lúc khởi động và từ chối chạy nếu khác rỗng. */
-export function credentialFilterViolations(
+/** Tool khai là "schema chặt" mà có trường tự do ⇒ vi phạm. Gateway gọi lúc khởi động, khác rỗng thì từ chối chạy. */
+export function strictSchemaViolations(
   registry: Record<string, z.ZodType>,
-  exempt: readonly string[],
+  tools: readonly string[],
 ): Array<{ tool: string; fields: string[] }> {
   const out: Array<{ tool: string; fields: string[] }> = [];
-  for (const tool of exempt) {
+  for (const tool of tools) {
     const schema = registry[tool];
     if (!schema) {
       out.push({ tool, fields: ['(không có trong registry)'] });
@@ -198,6 +254,16 @@ export const CREDENTIAL_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: 'pem_private_key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   { id: 'refresh_token_field', re: /["']?refresh_token["']?\s*[:=]/i },
   { id: 'canary', re: /GA-CANARY-[0-9a-f-]{8,}/i },
+  /** Khoá kiểu `sk-…` của các hãng (không riêng một hãng). */
+  { id: 'generic_sk_key', re: /\bsk-[0-9A-Za-z_-]{20,}/ },
+  /**
+   * Chuỗi liền ≥ 32 ký tự base64url / hex có cả chữ lẫn số: token chữ thường, hex 40 của token, base64url.
+   * ULID (26) và display_id không chạm ngưỡng; UUID có gạch nối (36) BỊ bắt — chấp nhận (không phải ID của hệ).
+   */
+  {
+    id: 'long_token_run',
+    re: /(?=[0-9A-Za-z_-]{32,})(?=[0-9A-Za-z_-]*\d)(?=[0-9A-Za-z_-]*[A-Za-z])[0-9A-Za-z_-]{32,}/,
+  },
 ];
 
 /** Tên khoá JSON mang credential: payload có khoá này (bất kể giá trị) ⇒ chặn. */
@@ -233,14 +299,13 @@ export type ScreenResult =
   | { status: 'invalid'; reason: string };
 
 /**
- * Cổng tham chiếu cho mọi lời gọi tool: (1) lọc credential trên payload THÔ (trước khi parse, để không trường nào bị bỏ qua)
- * cho mọi tool không được miễn; (2) parse đúng schema. Tool lạ ⇒ lọc rồi `invalid`.
+ * Cổng tham chiếu cho mọi lời gọi tool: (1) quét credential trên payload THÔ của MỌI tool (trước khi parse, để không trường
+ * nào — kể cả trường lạ — bị bỏ qua); (2) parse đúng schema. Tool lạ ⇒ quét rồi `invalid`.
  */
 export function screenToolPayload(tool: string, rawArgs: unknown): ScreenResult {
-  if (requiresCredentialFilter(tool)) {
-    const hit = findCredentialLike(rawArgs);
-    if (hit) return { status: 'denied', code: 'credential_like_payload', patternId: hit.patternId };
-  }
+  // luôn quét — không có tool nào, không có cờ nào bỏ qua được bước này
+  const hit = findCredentialLike(tool) ?? findCredentialLike(rawArgs);
+  if (hit) return { status: 'denied', code: 'credential_like_payload', patternId: hit.patternId };
   if (!(MCP_TOOLS as readonly string[]).includes(tool)) return { status: 'invalid', reason: `tool lạ: ${tool}` };
   const parsed = ToolArgs[tool as McpToolName].safeParse(rawArgs);
   if (!parsed.success) return { status: 'invalid', reason: parsed.error.issues.map((i) => i.message).join('; ') };
