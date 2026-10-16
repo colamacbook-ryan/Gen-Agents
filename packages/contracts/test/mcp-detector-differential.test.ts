@@ -31,6 +31,11 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp | ((s: string) => boolea
   { id: 'slack_token', re: /\bxox[abpre]-[0-9A-Za-z_-]{10,}/ },
   { id: 'gitlab_token', re: /\bglpat-[0-9A-Za-z_-]{20,}/ },
   { id: 'aws_access_key_id', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}/ },
+  { id: 'npm_token', re: /(?<![0-9A-Za-z])npm_[0-9A-Za-z_-]{30,}/ },
+  { id: 'huggingface_token', re: /(?<![0-9A-Za-z])hf_[0-9A-Za-z_-]{30,}/ },
+  { id: 'google_oauth_client_secret', re: /(?<![0-9A-Za-z])GOCSPX-[0-9A-Za-z_-]{20,}/ },
+  { id: 'bearer_token', re: /(?<![0-9A-Za-z])bearer[ \t]{1,16}[0-9A-Za-z_.~+/=-]{16,}/i },
+  { id: 'url_userinfo', re: /:\/\/[^\s/?#@"'<>:]{0,1024}:[^\s/?#@"'<>]{1,1024}@/ },
   { id: 'telegram_bot_token', re: /\b\d{8,10}:[0-9A-Za-z_-]{35,}/ },
   { id: 'credential_assignment', re: new RegExp(`(?:${NAMES})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8,}`, 'i') },
   {
@@ -59,7 +64,7 @@ const int = (lo: number, hi: number) => lo + Math.floor(rnd() * (hi - lo + 1));
 const TOKEN = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
 const LOWER_HEX = '0123456789abcdef';
 const PRINTABLE = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('');
-const SPACES = [' ', '\t', '\n', '\r', '\v', '\f', ' ', ' ', '　', '﻿'];
+const SPACES = [' ', '\t', '\n', '\r', '\v', '\f', '\u00a0', '\u2003', '\u3000', '\ufeff'];
 const run = (n: number, alphabet = TOKEN) => Array.from({ length: n }, () => pick([...alphabet])).join('');
 const flipCase = (s: string) => [...s].map((c) => (rnd() < 0.5 ? c.toUpperCase() : c.toLowerCase())).join('');
 
@@ -111,6 +116,28 @@ function corpus(): string[] {
         const body = p.toLowerCase().includes('canary') ? run(n, `${LOWER_HEX}-`) : run(n);
         out.push(`${run(int(0, 3), PRINTABLE)}${p}${body}${run(int(0, 3), PRINTABLE)}`);
       }
+    }
+  }
+  // tiền tố L-SEC: npm_ / hf_ / GOCSPX- quanh ngưỡng, ký tự trước ngẫu nhiên (kiểm ranh giới lookbehind)
+  for (const [p, min] of [
+    ['npm_', 30],
+    ['hf_', 30],
+    ['GOCSPX-', 20],
+  ] as const) {
+    for (let n = min - 3; n <= min + 3; n++) {
+      for (let k = 0; k < 12; k++) out.push(`${run(int(0, 2), PRINTABLE)}${p}${run(n)}${run(int(0, 2), PRINTABLE)}`);
+    }
+  }
+  // Bearer: hoa / thường × 1–20 khoảng trắng / tab × token 13–19
+  for (let ws = 1; ws <= 20; ws += 3) {
+    for (let n = 13; n <= 19; n++) {
+      out.push(`${run(int(0, 2), PRINTABLE)}${flipCase('bearer')}${run(ws, ' \t')}${run(n, `${TOKEN}.~+/=`)}`);
+    }
+  }
+  // URL userinfo: user rỗng / có, ':' có / không, mật khẩu 0–4 ký tự, '@' có / không
+  for (const user of ['', 'u', 'app', 'a:b']) {
+    for (const pw of ['', 'p', 'pw12']) {
+      for (const at of ['@', '', '/@']) out.push(`${pick(['https', 'postgres', 'x'])}://${user}:${pw}${at}host/x`);
     }
   }
   // AWS: AKIA / ASIA + 14–18 ký tự [0-9A-Z] (đôi khi lẫn chữ thường), ký tự trước ngẫu nhiên

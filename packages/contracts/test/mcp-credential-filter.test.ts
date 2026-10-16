@@ -290,7 +290,12 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     expect(odd.audit.tool).toBe('unknown');
     expect(JSON.stringify(odd.audit)).not.toContain('ghp_');
     // id mẫu đồng bộ với bộ phát hiện + sự kiện SSE cho owner parse được
-    expect(CREDENTIAL_PATTERN_IDS.slice(0, CREDENTIAL_DETECTORS.length)).toEqual(CREDENTIAL_DETECTORS.map((d) => d.id));
+    expect([...CREDENTIAL_PATTERN_IDS]).toEqual([
+      ...CREDENTIAL_DETECTORS.map((d) => d.id),
+      'encoded_marker_flood',
+      'credential_field_name',
+      'too_deep',
+    ]);
     expect(
       SseEvent.safeParse({
         id: '1',
@@ -304,6 +309,86 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
         auditDisplayId: 'AU-00001',
       }).success,
     ).toBe(true);
+  });
+
+  it('url_userinfo tách authority như parser URL: mật khẩu chứa " \' < > @, userinfo dài, username rỗng', () => {
+    const pw = (x: string) => `${x}${fake(6, 'Pw9x')}`;
+    for (const s of [
+      `https://u:${pw('"')}@h/x`,
+      `https://u:${pw("'")}@h`,
+      `https://u:${pw('<')}@h`,
+      `https://u:${pw('>')}@h`,
+      `https://u:${pw('a@b')}@h`,
+      `https://${'u'.repeat(2500)}:${'p'.repeat(2500)}@h/`,
+      `https://:${pw('')}@h`,
+      `log: ftp://deploy:${pw('')}@files.internal:21/up`,
+      `https://u:p\t${pw('')}@h`,
+    ]) {
+      expect(findCredentialLike(s)?.patternId, s.slice(0, 60)).toBe('url_userinfo');
+    }
+    for (const s of [
+      'https://u@h',
+      'mailto:a@b',
+      'a:b@c',
+      'https://h:8080/x@y',
+      'https://u@h:8080',
+      'https://h/a:b@c',
+    ]) {
+      expect(findCredentialLike(s), s).toBeNull();
+    }
+  });
+
+  it('url_userinfo ⊇ new URL(): mọi chuỗi URL hợp lệ có password khác rỗng đều bị bắt (corpus ngẫu nhiên tất định)', () => {
+    // Khoảng trắng (trừ TAB / LF / CR mà parser URL bỏ qua) kết thúc authority khi quét văn bản — corpus không chèn khoảng
+    // trắng vào userinfo (URL có khoảng trắng thô không đứng nguyên trong văn bản chạy).
+    let seed = 20261016;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed / 4294967296;
+    };
+    const ALPHA = 'abcXYZ019:@"\'<>%!$&()*+,;=~._-\t\n[]';
+    const pick = (n: number) => Array.from({ length: n }, () => ALPHA[Math.floor(rnd() * ALPHA.length)]).join('');
+    let withPassword = 0;
+    const misses: string[] = [];
+    for (let k = 0; k < 20_000; k++) {
+      const scheme = ['https', 'http', 'ftp', 'postgres', 'x-y', 'ws'][Math.floor(rnd() * 6)];
+      const s = `${scheme}://${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${['', '/p', '?q=1', '#f', ':8080/x'][Math.floor(rnd() * 5)]}`;
+      let u: URL;
+      try {
+        u = new URL(s);
+      } catch {
+        continue;
+      }
+      if (u.password === '') continue;
+      withPassword++;
+      if (findCredentialLike(s) === null || findCredentialLike(`xem ${s} nhé`) === null) misses.push(JSON.stringify(s));
+    }
+    expect(withPassword).toBeGreaterThan(500);
+    expect(misses.slice(0, 5)).toEqual([]);
+  });
+
+  it('npm / hf / GOCSPX / Bearer / URL có mật khẩu (L-SEC) — ca âm không bắt', () => {
+    for (const s of [
+      'the bearer of this note',
+      'Bearer short',
+      'https://example.com/a@b',
+      'git@github.com:org/repo.git',
+      'mailto:user@example.com',
+      'https://user@example.com/x',
+      // ranh giới trước: chữ / số liền trước tiền tố ⇒ không phải token (giá trị chữ thường để không chạm high_entropy_run)
+      `xnpm_${fake(36, 'abc123')}`,
+      `ahf_${fake(34, 'abc123')}`,
+      'npm_install',
+    ]) {
+      expect(findCredentialLike(s), s).toBeNull();
+    }
+    for (const s of [
+      `https://:${fake(10, 'pw12')}@host/x`,
+      `see ${['bear', 'er'].join('')}\t${fake(16, 'tok123')}`,
+      `"npm_${fake(30, 'k9')}"`,
+    ]) {
+      expect(findCredentialLike(s), s).not.toBeNull();
+    }
   });
 
   it('mỗi mẫu credential tự bắt được mẫu của nó; câu thường không bị bắt', () => {
@@ -326,6 +411,11 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       credential_assignment: kv(['access', 'token'], '=', fake(13, 'abcdefgh12345')),
       env_secret_assignment: kv(['JWT', 'SECRET'], '=', fake(64)),
       high_entropy_run: BLOCKED_TOKENS.highEntropy,
+      npm_token: `npm_${fake(36, 'aB3dE5gH7j')}`,
+      huggingface_token: `hf_${fake(34, 'qW2eR4tY6u')}`,
+      google_oauth_client_secret: `GOCSPX-${fake(28, 'zX1cV2bN3m-_')}`,
+      bearer_token: `Authorization: ${['Bear', 'er'].join('')} ${fake(24, 'abc.def~123+/=')}`,
+      url_userinfo: `postgres://app:${fake(12, 'pAsS-w0rd')}@db.internal:5432/x`,
     };
     for (const p of CREDENTIAL_DETECTORS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
     expect(findCredentialLike({ Refresh_Token: 'bất kỳ' })).toEqual({ patternId: 'credential_field_name' });
@@ -375,6 +465,16 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
     'AKIA lặp': 'AKIA'.repeat(Math.floor(MB / 4)),
     'hex 1 MB (không chặn, quét hết)': '0123456789abcdef'.repeat(MB / 16),
     'UUID lặp': '3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11 '.repeat(Math.floor(MB / 37)),
+    ':// lặp': '://'.repeat(Math.floor(MB / 3)),
+    '://a: + 1 MiB không @': `://a:${'b'.repeat(MB)}`,
+    '://: + 1 MiB @ (authority dài, có mật khẩu)': `://a:${'@'.repeat(MB)}`,
+    '://@ lặp': '://@'.repeat(Math.floor(MB / 4)),
+    ':// + 1 MiB TAB/LF': `://${'\t\n'.repeat(MB / 2)}`,
+    ':/:/ lặp (gần ://)': ':/:/'.repeat(Math.floor(MB / 4)),
+    '://u:p lặp (không @)': '://u:pppppppppp '.repeat(Math.floor(MB / 16)),
+    'Bearer lặp': 'Bearer '.repeat(Math.floor(MB / 7)),
+    'bearer + 1 MiB tab': `bearer${'\t'.repeat(MB)}`,
+    'hf_ / npm_ lặp': 'hf_npm_'.repeat(Math.floor(MB / 7)),
     'A_A_A_… (gần .env)': 'A_'.repeat(MB / 2),
     'A_KEY lặp': 'A_KEY'.repeat(Math.floor(MB / 5)),
     'X_SECRET= + 1 MB khoảng trắng': `X_SECRET=${' '.repeat(MB)}`,
