@@ -1,0 +1,15 @@
+{
+  "name": "@ga/egress",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "ga-egress — proxy CONNECT/HTTP có allowlist domain, chỉ log metadata (BUILD-PLAN §A.1 Egress, §B.3). Chỉ thư viện chuẩn Node.",
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs",
+    "start": "node src/main.ts"
+  },
+  "devDependencies": {
+    "@ga/contracts": "workspace:*"
+  }
+}

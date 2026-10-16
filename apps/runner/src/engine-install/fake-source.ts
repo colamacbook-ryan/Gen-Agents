@@ -1,0 +1,31 @@
+import type { InstallRecipe } from './recipe.ts';
+
+// CHỈ CÓ TRONG IMAGE TEST (deploy/docker/Dockerfile.runtime-test chép thêm tệp này; Dockerfile.runtime KHÔNG chép).
+// Nguồn `fake` của ga-engine-install (BUILD-PLAN §C.2, CNS-137): máy chủ "trình cài giả" (testing/fakes/engine-source của
+// L-FAKE; trong lúc chờ: stub ở testing/it/runtime/stubs/) phục vụ manifest theo nền tảng tại
+//   <GA_FAKE_ENGINE_SOURCE_URL>/manifests/<slug>/<platform>.json   = { version, url, sha512 }   (url tương đối hoặc tuyệt đối)
+// và đi qua ga-egress như nguồn thật ⇒ cùng đường code tải / %, checksum, phân loại lỗi. Tên binary lấy từ công thức thật
+// của adapter (để /opt/engines/<slug>/current/<bin> đúng chỗ adapter trỏ tới).
+
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const BASE_RE = /^https?:\/\/[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?$/;
+
+export function fakeRecipe(slug: string, binaryName: string, env: NodeJS.ProcessEnv): InstallRecipe {
+  const base = env.GA_FAKE_ENGINE_SOURCE_URL ?? '';
+  if (!SLUG_RE.test(slug)) throw new Error('slug không hợp lệ');
+  if (!BASE_RE.test(base)) throw new Error('GA_FAKE_ENGINE_SOURCE_URL không hợp lệ');
+  return {
+    binaryName,
+    platforms: [
+      { arch: 'x64', libc: 'glibc', key: 'linux-x64' },
+      { arch: 'arm64', libc: 'glibc', key: 'linux-arm64' },
+    ],
+    manifest: {
+      kind: 'per-platform',
+      urlTemplate: `${base}/manifests/${slug}/{platform}.json`,
+      fields: { version: 'version', url: 'url', checksum: 'sha512' },
+    },
+    payload: { kind: 'raw' },
+    verifiedAt: 'fake',
+  };
+}
