@@ -8,8 +8,6 @@ import type {
   ProbeOutcome,
   TurnClassification,
   TurnOutcome,
-  TurnPlan,
-  TurnPlanInput,
   TurnStreamEvent,
 } from '@ga/contracts';
 import type { EnvSpec } from './env.ts';
@@ -38,22 +36,14 @@ export interface DetailedClassification {
   ruleId: string;
 }
 
-/** Nền tảng cài: kiến trúc theo `process.arch` của Node, libc của image runtime (Debian bookworm = glibc). */
-export interface InstallPlatform {
-  readonly arch: 'x64' | 'arm64';
-  readonly libc: 'glibc' | 'musl';
-  /** Khoá nền tảng của hãng (tên trong manifest / URL). */
-  readonly key: string;
-}
-
 /**
- * Công thức cài từ nguồn chính chủ, dạng DỮ LIỆU (tuần tự hoá được) cho ga-engine-install. Template dùng `{platform}`,
- * `{version}`. Đề xuất: InstallSpec của contracts có thêm `platforms` (arch) — hiện contracts chưa có trường arch.
+ * Phần nguồn cài contracts CHƯA có (InstallSpec chỉ có origin / checksum / platforms / egressDomains): cách lấy manifest + dạng
+ * gói, đã GET kiểm. Dữ liệu tuần tự hoá được cho ga-engine-install (L-RT). Template dùng `{platform}` (= InstallPlatform.key),
+ * `{version}`. [Đề xuất L0 đưa vào InstallSpec nếu cần — L-ENG.]
  */
-export interface InstallRecipe {
+export interface InstallSource {
   /** Tên tệp CLI trong `/opt/engines/<slug>/current/`. */
   readonly binaryName: string;
-  readonly platforms: readonly InstallPlatform[];
   readonly manifest:
     | {
         /** Một manifest cho mỗi nền tảng: JSON phẳng có version / url / checksum. */
@@ -88,18 +78,6 @@ export interface ToolRestriction {
   readonly source: string;
 }
 
-export interface TurnPlanInputExt extends TurnPlanInput {
-  /**
-   * Cờ CLI đã quét lúc chạy (capability registry `flag:*`, STD-10) của đúng phiên bản đang cài. Thiếu ⇒ không biết CLI có
-   * cơ chế giới hạn công cụ ⇒ turnPlan từ chối (engine_unrestricted).
-   */
-  detectedFlags?: readonly string[];
-  /** Trần thời gian lượt; thiếu thì dùng DEFAULT_TURN_TIMEOUT_MS (đề xuất đưa vào contracts TurnPlanInput). */
-  timeoutMs?: number;
-  /** Cách đăng nhập của tài khoản (API key cần cấu hình riêng ở một số CLI); thiếu = 'subscription'. */
-  authMethod?: AuthMethod;
-}
-
 /**
  * Pha của lượt cho avatar / sessions.phase: 'planning' trước sự kiện công cụ đầu tiên, 'acting' sau đó.
  * null = CLI không cho tín hiệu để tách ⇒ "chưa đo được" (avatar hiện 'run', PS §4.7 luật 4).
@@ -122,7 +100,7 @@ export interface TurnLineParser {
 }
 
 export interface EngineAdapterExt extends EngineAdapter {
-  readonly install: InstallRecipe;
+  readonly installSource: InstallSource;
   /** argv[0] của mọi plan: `/opt/engines/<slug>/current/<binaryName>`. */
   readonly binaryPath: string;
   /** Bảng env ĐÓNG có mẫu giá trị chặt (flagTable.env = đúng các tên này); runner chỉ đặt env theo bảng. */
@@ -133,9 +111,6 @@ export interface EngineAdapterExt extends EngineAdapter {
   readonly toolRestriction: ToolRestriction | null;
   /** Tên env CLI đọc API key (runner đọc bí mật từ tệp mount rồi đặt env cho tiến trình con, không qua Docker env). */
   readonly apiKeyEnvName: string | null;
-  turnPlan(input: TurnPlanInputExt): TurnPlan;
-  /** Như parseStreamLine nhưng trả MỌI sự kiện của dòng (contracts chỉ cho một — đề xuất đổi ở contracts). */
-  parseStreamLineAll(line: string): TurnStreamEvent[];
   createLineParser(): TurnLineParser;
   classifyDetailed(
     exit: Pick<ExecResult, 'exitCode' | 'signal' | 'timedOut'>,

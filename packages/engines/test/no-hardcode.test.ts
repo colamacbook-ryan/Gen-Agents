@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { CAPABILITY_KINDS } from '@ga/contracts';
 import { describe, expect, it } from 'vitest';
-import { CAPABILITY_KINDS } from '../src/index.ts';
 
 // "Không hardcode" (STD-10, INT-05, BUILD-PLAN §D.2): ngoài src/adapters không có tên CLI / model (luật lint của repo,
 // chạy lại ngay trong test của gói); trong adapter không có danh sách model / mức effort / cửa sổ quota viết cứng.

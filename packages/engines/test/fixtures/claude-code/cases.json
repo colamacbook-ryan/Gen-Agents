@@ -28,7 +28,7 @@
   },
   "streamFiles": [
     {
-      "name": "lượt thật một câu (Spike 1b): model + delta + usage (có chi phí)",
+      "name": "lượt thật một câu (Spike 1b): model + delta + quota (cửa sổ 5 giờ, 24 %) + usage (có chi phí)",
       "file": "stream-ok.jsonl",
       "expected": [
         {
@@ -38,6 +38,15 @@
         {
           "type": "delta",
           "text": "ok"
+        },
+        {
+          "type": "quota",
+          "quota": {
+            "window": "five_hour",
+            "status": "allowed",
+            "resetAt": "2026-10-14T11:00:00.000Z",
+            "utilizationPct": 24
+          }
         },
         {
           "type": "usage",
@@ -110,20 +119,34 @@
       "expected": []
     },
     {
-      "name": "rate_limit_event rejected ⇒ error (assumed CC-E02)",
+      "name": "rate_limit_event rejected ⇒ sự kiện quota có cấu trúc (assumed CC-Q02)",
       "line": "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"rejected\",\"resetsAt\":1792000000,\"rateLimitType\":\"five_hour\"}}",
       "expected": [
         {
-          "type": "error",
-          "code": "rate_limit_rejected",
-          "message": "resetsAt=1792000000"
+          "type": "quota",
+          "quota": {
+            "window": "five_hour",
+            "status": "rejected",
+            "resetAt": "2026-10-14T17:46:40.000Z",
+            "utilizationPct": null
+          }
         }
       ]
     },
     {
-      "name": "rate_limit_event allowed (Spike 1b) ⇒ không sự kiện",
+      "name": "rate_limit_event allowed (dạng Spike 1b) ⇒ sự kiện quota allowed",
       "line": "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed\",\"resetsAt\":1791975600,\"rateLimitType\":\"five_hour\"}}",
-      "expected": []
+      "expected": [
+        {
+          "type": "quota",
+          "quota": {
+            "window": "five_hour",
+            "status": "allowed",
+            "resetAt": "2026-10-14T11:00:00.000Z",
+            "utilizationPct": null
+          }
+        }
+      ]
     },
     {
       "name": "result lỗi ⇒ usage + error (assumed)",
@@ -165,6 +188,26 @@
     {
       "name": "system/status không mang thông tin",
       "line": "{\"type\":\"system\",\"subtype\":\"status\"}",
+      "expected": []
+    },
+    {
+      "name": "rate_limit_event loại cửa sổ lạ + allowed_warning ⇒ window other, status warning (CC-Q02)",
+      "line": "{\"type\": \"rate_limit_event\", \"rate_limit_info\": {\"status\": \"allowed_warning\", \"resetsAt\": null, \"rateLimitType\": \"opus_weekly\"}}",
+      "expected": [
+        {
+          "type": "quota",
+          "quota": {
+            "window": "other",
+            "status": "warning",
+            "resetAt": null,
+            "utilizationPct": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "rate_limit_event status lạ ⇒ bỏ",
+      "line": "{\"type\": \"rate_limit_event\", \"rate_limit_info\": {\"status\": \"weird\"}}",
       "expected": []
     }
   ],
@@ -745,5 +788,37 @@
       "resetAt": null
     }
   },
-  "_doc_fake": "fakeScenarios: kịch bản của CLI giả chung (testing/fakes, GA_FAKE_SCENARIO) ⇒ kết quả phân loại mong đợi. Kịch bản quota_exhausted chạy với resetAt 2026-10-16T19:00:00Z."
+  "_doc_fake": "fakeScenarios: kịch bản của CLI giả chung (testing/fakes, GA_FAKE_SCENARIO) ⇒ kết quả phân loại mong đợi. Kịch bản quota_exhausted chạy với resetAt 2026-10-16T19:00:00Z.",
+  "statefulCases": [
+    {
+      "name": "gọi công cụ thấy ở cả stream_event và assistant ⇒ một sự kiện (khử trùng theo id); chỉ ở assistant (CL-STREAM-2) ⇒ vẫn bắt; subagent ⇒ bỏ; kết quả mang tên đã nhớ",
+      "lines": [
+        "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"mcp__ga__recall\",\"input\":{}}},\"parent_tool_use_id\":null}",
+        "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"x\"},{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"mcp__ga__recall\",\"input\":{}}]},\"parent_tool_use_id\":null}",
+        "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_2\",\"name\":\"mcp__ga__remember\",\"input\":{}}]},\"parent_tool_use_id\":null}",
+        "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_9\",\"name\":\"Bash\",\"input\":{}}]},\"parent_tool_use_id\":\"toolu_2\"}",
+        "{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_2\",\"content\":\"ok\"}]},\"parent_tool_use_id\":null}"
+      ],
+      "expected": [
+        {
+          "type": "tool",
+          "stage": "call",
+          "name": "mcp__ga__recall",
+          "callId": "toolu_1"
+        },
+        {
+          "type": "tool",
+          "stage": "call",
+          "name": "mcp__ga__remember",
+          "callId": "toolu_2"
+        },
+        {
+          "type": "tool",
+          "stage": "result",
+          "name": "mcp__ga__remember",
+          "callId": "toolu_2"
+        }
+      ]
+    }
+  ]
 }

@@ -503,8 +503,8 @@
         "accountHint": null
       },
       "probe": {
-        "loginStatus": "expired",
-        "probeStatus": "ok"
+        "loginStatus": "unknown",
+        "probeStatus": "failed"
       }
     },
     {
@@ -522,7 +522,7 @@
         "accountHint": null
       },
       "probe": {
-        "loginStatus": "logged_in",
+        "loginStatus": "unknown",
         "probeStatus": "ok"
       }
     },
@@ -560,7 +560,7 @@
         "accountHint": null
       },
       "probe": {
-        "loginStatus": "error",
+        "loginStatus": "unknown",
         "probeStatus": "failed"
       }
     },
@@ -579,8 +579,8 @@
         "accountHint": null
       },
       "probe": {
-        "loginStatus": "expired",
-        "probeStatus": "ok"
+        "loginStatus": "unknown",
+        "probeStatus": "failed"
       }
     },
     {
@@ -598,7 +598,7 @@
         "accountHint": null
       },
       "probe": {
-        "loginStatus": "logged_in",
+        "loginStatus": "unknown",
         "probeStatus": "ok"
       }
     }
@@ -754,5 +754,7 @@
       "resetAt": null
     }
   },
-  "_doc_fake": "fakeScenarios: kịch bản của CLI giả chung (testing/fakes, GA_FAKE_SCENARIO) ⇒ kết quả phân loại mong đợi. Kịch bản quota_exhausted chạy với resetAt 2026-10-16T19:00:00Z."
+  "_doc_fake": "fakeScenarios: kịch bản của CLI giả chung (testing/fakes, GA_FAKE_SCENARIO) ⇒ kết quả phân loại mong đợi. Kịch bản quota_exhausted chạy với resetAt 2026-10-16T19:00:00Z.",
+  "_doc_login": "probe: allowlist /auth của agy = unknown ⇒ GEN-04 fail-closed: kiểm đăng nhập luôn 'unknown' (không nối credential). `expected` là kết quả parse thô của CLI.",
+  "statefulCases": []
 }

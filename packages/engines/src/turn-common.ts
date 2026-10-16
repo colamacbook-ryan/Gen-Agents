@@ -1,5 +1,6 @@
 import {
   EFFORT_RE,
+  ENGINE_UNRESTRICTED_REASON,
   ENGINES_ROOT,
   type EngineFlagTable,
   EnginePlan,
@@ -12,7 +13,7 @@ import {
   type TurnPlanInput,
 } from '@ga/contracts';
 import { assertEnvTable, assertPlanEnv, type EnvSpec, EnvTableError } from './env.ts';
-import type { ToolRestriction, TurnPlanInputExt } from './types.ts';
+import type { ToolRestriction } from './types.ts';
 
 // Phần dùng chung khi dựng EnginePlan (§B.5 bước 4, CNS-168): kiểm đầu vào, argv chỉ từ BẢNG CỜ ĐÓNG của adapter,
 // chặn tiêm cờ qua giá trị, cấu hình MCP trỏ gateway. Hàm thuần — chạy được trong ga-runner (chỉ phụ thuộc contracts).
@@ -31,7 +32,7 @@ export class TurnPlanError extends Error {
     | 'system_prompt_too_large'
     | 'invalid_timeout'
     | 'plan_policy_violation'
-    | 'engine_unrestricted';
+    | typeof ENGINE_UNRESTRICTED_REASON;
   constructor(code: TurnPlanError['code'], message: string) {
     super(message);
     this.name = 'TurnPlanError';
@@ -39,8 +40,7 @@ export class TurnPlanError extends Error {
   }
 }
 
-/** Không phải giá trị của hãng: trần chính sách khi người gọi không truyền timeoutMs (đề xuất đưa vào contracts). */
-export const DEFAULT_TURN_TIMEOUT_MS = 10 * 60_000;
+/** Trần cứng an toàn của một lượt; giá trị thật = TurnPlanInput.timeoutMs (= TurnBundle.timeoutMs, từ setting — GEN-06). */
 export const MAX_TURN_TIMEOUT_MS = 60 * 60_000;
 /** Linux giới hạn MỘT đối số argv ở 128 KiB (MAX_ARG_STRLEN); chừa biên. */
 export const MAX_PROMPT_ARG_BYTES = 120 * 1024;
@@ -243,14 +243,20 @@ export function assertToolRestriction(
   detectedFlags: readonly string[] | undefined,
 ): ToolRestriction {
   if (restriction === null) {
-    throw new TurnPlanError('engine_unrestricted', 'CLI không có cơ chế giới hạn công cụ đã biết — không chạy lượt');
+    throw new TurnPlanError(
+      ENGINE_UNRESTRICTED_REASON,
+      'CLI không có cơ chế giới hạn công cụ đã biết — không chạy lượt',
+    );
   }
   if (detectedFlags === undefined) {
-    throw new TurnPlanError('engine_unrestricted', 'thiếu bảng năng lực đã quét (detectedFlags) — không chạy lượt');
+    throw new TurnPlanError(
+      ENGINE_UNRESTRICTED_REASON,
+      'thiếu bảng năng lực đã quét (detectedFlags) — không chạy lượt',
+    );
   }
   const missing = restriction.requiredFlags.filter((f) => !detectedFlags.includes(f));
   if (missing.length > 0) {
-    throw new TurnPlanError('engine_unrestricted', `CLI đã quét thiếu cờ giới hạn công cụ: ${missing.join(', ')}`);
+    throw new TurnPlanError(ENGINE_UNRESTRICTED_REASON, `CLI đã quét thiếu cờ giới hạn công cụ: ${missing.join(', ')}`);
   }
   return restriction;
 }
@@ -266,7 +272,7 @@ export interface CheckedTurnInput {
   turnDir: string;
 }
 
-export function checkTurnInput(input: TurnPlanInputExt): CheckedTurnInput {
+export function checkTurnInput(input: TurnPlanInput): CheckedTurnInput {
   for (const p of [input.turnDir, input.homeDir, input.ticketFile, input.authDir]) {
     if (!isAbsClean(p)) throw new TurnPlanError('invalid_path', 'đường dẫn phải tuyệt đối và không chứa ..');
   }
@@ -301,7 +307,7 @@ export function checkTurnInput(input: TurnPlanInputExt): CheckedTurnInput {
   if (input.systemPrompt !== null && exceedsBytes(input.systemPrompt, MAX_SYSTEM_PROMPT_BYTES)) {
     throw new TurnPlanError('system_prompt_too_large', `systemPrompt > ${MAX_SYSTEM_PROMPT_BYTES} byte`);
   }
-  const timeoutMs = input.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
+  const timeoutMs = input.timeoutMs;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > MAX_TURN_TIMEOUT_MS) {
     throw new TurnPlanError('invalid_timeout', 'timeoutMs phải trong [10 s, 60 phút]');
   }

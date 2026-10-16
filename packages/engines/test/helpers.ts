@@ -18,7 +18,10 @@ export function fixture(slug: string, file: string): string {
   if (file.startsWith('fake:')) {
     const adapter = BUILTIN_ADAPTERS.find((a) => a.slug === slug);
     if (adapter === undefined) throw new Error(`slug lạ: ${slug}`);
-    return readFileSync(join(FAKE_DUMPS, adapter.install.binaryName, 'dumps', file.slice('fake:'.length)), 'utf8');
+    return readFileSync(
+      join(FAKE_DUMPS, adapter.installSource.binaryName, 'dumps', file.slice('fake:'.length)),
+      'utf8',
+    );
   }
   return readFileSync(join(FIXTURES, slug, file), 'utf8');
 }
@@ -56,6 +59,8 @@ export interface Cases {
   };
   streamFiles?: Array<{ name: string; file: string; expected: TurnStreamEvent[] }>;
   stream: Array<{ name: string; line?: string; lineFile?: string; expected: TurnStreamEvent[] }>;
+  /** Nhiều dòng qua parser CÓ trạng thái (khử trùng, nhớ tên công cụ). */
+  statefulCases: Array<{ name: string; lines: string[]; expected: TurnStreamEvent[] }>;
   classify: Array<{
     name: string;
     exit: { exitCode: number | null; signal: string | null; timedOut: boolean };
@@ -134,7 +139,10 @@ export function turnInput(overrides: Record<string, unknown> = {}) {
     promptFile: `/run/ga/${TURN_ID}/prompt/user.md`,
     systemPromptFile: null as string | null,
     authDir: '/auth/EN-0001',
-    detectedFlags: ALL_DECLARED_FLAGS as readonly string[] | undefined,
+    measure: null as 'overhead_bare' | 'overhead_shell' | 'prompt_worst' | null,
+    timeoutMs: 600_000,
+    authMethod: 'subscription' as 'subscription' | 'api_key' | 'adc',
+    detectedFlags: ALL_DECLARED_FLAGS as readonly string[],
     ...overrides,
   };
 }

@@ -64,6 +64,21 @@ export function interpretLoginCheck(
   outcome: ProbeOutcome,
   execError: string | null = null,
 ): LoginProbeOutcome {
+  // GEN-04 (Gen duyệt 2026-10-16, fail-closed): allowlist /auth chưa biết ⇒ runner KHÔNG nối credential vào HOME tmpfs, nên
+  // câu trả lời của CLI không nói gì về tài khoản ⇒ luôn 'unknown' (không kết luận "đã đăng nhập" hay "hết hạn").
+  if (adapter.authAllowlist === 'unknown') {
+    return {
+      result: {
+        status: 'unknown',
+        accountHint: null,
+        detail:
+          'GEN-04: allowlist /auth chưa biết — không nối credential, kiểm đăng nhập chưa kết luận được (Spike 1c)',
+      },
+      loginStatus: 'unknown',
+      probeStatus: execError !== null || execBroken(outcome) ? 'failed' : 'ok',
+      error: execError,
+    };
+  }
   const result = adapter.parseLoginCheck(authMethod, outcome);
   let loginStatus: ProbeLoginStatus;
   switch (result.status) {

@@ -12,6 +12,7 @@ import {
   type ProbePlan,
   type ProbePlanInput,
   type TurnPlan,
+  type TurnPlanInput,
 } from '@ga/contracts';
 import {
   ANY_ITEM,
@@ -35,7 +36,7 @@ import {
   mcpBridgeCommand,
   planKit,
 } from '../../turn-common.ts';
-import type { EngineAdapterExt, InstallRecipe, ToolRestriction, TurnPlanInputExt } from '../../types.ts';
+import type { EngineAdapterExt, InstallSource, ToolRestriction } from '../../types.ts';
 import { AdapterError } from '../errors-common.ts';
 import { classifyDetailed, ERROR_RULES } from './errors.ts';
 import { createParser, parseLineAll } from './parser.ts';
@@ -49,14 +50,8 @@ const SLUG = 'claude-code';
 const MCP_CONFIG_FILE = 'mcp.json';
 
 /** Nguồn cài chính chủ — đã GET kiểm 2026-10-16: https://claude.ai/install.sh → bootstrap của downloads.claude.ai. */
-const INSTALL: InstallRecipe = {
+const INSTALL_SOURCE: InstallSource = {
   binaryName: BIN,
-  platforms: [
-    { arch: 'x64', libc: 'glibc', key: 'linux-x64' },
-    { arch: 'arm64', libc: 'glibc', key: 'linux-arm64' },
-    { arch: 'x64', libc: 'musl', key: 'linux-x64-musl' },
-    { arch: 'arm64', libc: 'musl', key: 'linux-arm64-musl' },
-  ],
   manifest: {
     kind: 'versioned',
     latestUrl: 'https://downloads.claude.ai/claude-code-releases/latest',
@@ -307,18 +302,22 @@ function parseCapabilitiesFor(outcomes: readonly ProbeOutcome[], input: Capabili
 }
 
 // ---------------------------------------------------------------- lượt (§B.5)
-function turnPlan(input: TurnPlanInputExt): TurnPlan {
+function turnPlan(input: TurnPlanInput): TurnPlan {
+  // detectedFlags CHỈ làm cổng (contracts), không bao giờ vào argv.
   assertToolRestriction(TOOL_RESTRICTION, input.detectedFlags);
   const c = checkTurnInput(input);
+  // Phiên đo 'overhead_bare' (CNS-178): CLI trần — không cấu hình MCP / tool gateway; giới hạn công cụ vẫn giữ (không tool nào).
+  const bare = input.measure === 'overhead_bare';
   const bridge = mcpBridgeCommand(input);
   const mcpConfig = {
     mcpServers: { [GATEWAY_MCP_SERVER]: { type: 'stdio', command: bridge.command, args: bridge.args } },
   };
   // Dạng `--cờ=giá-trị`: giá trị không bị hiểu là cờ khác; cờ nhiều giá trị (--mcp-config, --allowedTools) đứng trước
-  // cờ boolean nên không nuốt prompt. Prompt là toán hạng cuối, ngay sau `-p` (boolean).
-  const a = argv()
-    .value('--mcp-config', `${c.turnDir}/${MCP_CONFIG_FILE}`, 'eq')
-    .value('--allowedTools', `mcp__${GATEWAY_MCP_SERVER}`, 'eq')
+  // cờ boolean nên không nuốt prompt. Prompt là toán hạng cuối, ngay sau `-p` (boolean). Nội dung prompt KHÔNG BAO GIỜ vào
+  // cờ mang cấu hình (--mcp-config / --settings / …): chỉ ở toán hạng của `-p` và `--append-system-prompt` (cờ chữ, dạng =).
+  const a = argv();
+  if (!bare) a.value('--mcp-config', `${c.turnDir}/${MCP_CONFIG_FILE}`, 'eq');
+  a.value('--allowedTools', `mcp__${GATEWAY_MCP_SERVER}`, 'eq')
     .flag('--strict-mcp-config')
     // INT-07: mọi hành động ra ngoài đi qua gateway ⇒ chỉ cho công cụ của gateway, phần còn lại tự từ chối (dontAsk).
     .value('--permission-mode', 'dontAsk', 'eq')
@@ -332,7 +331,7 @@ function turnPlan(input: TurnPlanInputExt): TurnPlan {
   if (c.systemPrompt !== null) a.value('--append-system-prompt', c.systemPrompt, 'eq');
   a.flag('-p').text(c.prompt);
   return KIT.plan({
-    files: [{ path: MCP_CONFIG_FILE, content: JSON.stringify(mcpConfig), mode: 0o400 }],
+    files: bare ? [] : [{ path: MCP_CONFIG_FILE, content: JSON.stringify(mcpConfig), mode: 0o400 }],
     argv: a.build(),
     env: CLI_ENV,
     timeoutMs: c.timeoutMs,
@@ -365,8 +364,15 @@ export const claudeCodeAdapter: EngineAdapterExt = {
     // Trình cài chính chủ có tự cập nhật vào thư mục chỉ đọc không: chưa kiểm (CC-I02, Spike 1c tiêu chí CNS-137).
     selfUpdate: 'unknown',
     egressDomains: ['downloads.claude.ai'],
+    // Khoá nền tảng trong manifest `platforms[<key>]` (GET kiểm 2026-10-16).
+    platforms: [
+      { arch: 'x64', libc: 'glibc', key: 'linux-x64' },
+      { arch: 'arm64', libc: 'glibc', key: 'linux-arm64' },
+      { arch: 'x64', libc: 'musl', key: 'linux-x64-musl' },
+      { arch: 'arm64', libc: 'musl', key: 'linux-arm64-musl' },
+    ],
   },
-  install: INSTALL,
+  installSource: INSTALL_SOURCE,
   binaryPath: KIT.binaryPath,
   flagTable: FLAG_TABLE,
   envTable: ENV_TABLE,
@@ -382,8 +388,7 @@ export const claudeCodeAdapter: EngineAdapterExt = {
   capabilityScan,
   parseCapabilities: (outcomes) => parseCapabilitiesFor(outcomes, { authMode: 'unknown' }),
   parseCapabilitiesFor,
-  parseStreamLine: (line) => parseLineAll(line)[0] ?? null,
-  parseStreamLineAll: parseLineAll,
+  parseStreamLine: parseLineAll,
   createLineParser: createParser,
   classify: (exit, stdout, stderr) => classifyDetailed(exit, stdout, stderr).classification,
   classifyDetailed,
