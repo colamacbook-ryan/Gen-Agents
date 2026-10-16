@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
-"""DDL tham chiếu SQLite cho DATABASE.md v2.2 → v2.3.0 (gen-agents) — sinh từ một DSL nhỏ.
-(v2.3.0: thư mục / tên tệp giữ "v2_2" — bằng chứng nối tiếp từ v2.2.x; xem DATABASE.md changelog v2.2.13 → v2.3.0.)
-Mục đích: kiểm chứng spec v2.2 chạy được (không phải nguồn schema thật; nguồn thật = Drizzle ở bước ⑥).
+"""DDL SQLite cho DATABASE.md v2.2 → v2.3.1 (gen-agents) — sinh từ một DSL nhỏ.
+(v2.3.x: thư mục / tên tệp giữ "v2_2" — bằng chứng nối tiếp từ v2.2.x; xem DATABASE.md changelog v2.2.13 → v2.3.0 và v2.3.0 → v2.3.1.)
+v2.3.1 (ADR 0004 [Gen quyết 2026-10-16], BUILD-PLAN §D.4, CNS-157): SQL TRƯỚC — DDL sinh ở đây (đã test) CHÍNH LÀ nguồn schema; không có Drizzle.
+Repo code vendor theo MỘT commit của SB (db-sync, SYNC.json) rồi tách: baseline `0001_baseline.sql` = CHỈ bảng + index (+ bảng ảo FTS);
+`R__triggers.sql` = mọi trigger (luật cột, chống REPLACE, nghiệp vụ, đồng bộ FTS) — repeatable, runner DROP + CREATE lại sau mỗi lượt migration và
+sau mỗi `rebuild`; `R__views.sql` = mọi view. Không đóng cứng trigger vào baseline (rebuild DROP trigger thì không còn gì dựng lại).
+Test parity (BUILD-PLAN §C.4): runner TS dựng DB (baseline + R__*) phải khớp sqlite_master của DB do file này dựng (bảng, index, trigger, view).
 Chạy: python3 -I schema_v2_2.py  -> ghi schema_v2_2.sql + in thống kê.
 """
 import re, json, sys, os, sqlite3
@@ -76,7 +80,11 @@ table('workspaces', 'P', cols=[
     # v2.2.9 (CONTRACT-r8b §A, CNS-099): mốc = lần kiểm đăng nhập ĐẠT đầu tiên (probe_runs login_check ok) của tài khoản Core agent
     # (probe_runs_core_lock_ai/_au), KHÔNG còn lúc ghi binding. ST-0017 chỉ đọc kể từ mốc này; trước mốc (mode setup) gỡ được tài khoản +
     # binding Core agent và đổi được loại ("Chọn loại khác").
-    "core_agent_locked_at TEXT"],
+    "core_agent_locked_at TEXT",
+    # v2.3.1 (BUILD-PLAN §B.9, CNS-145 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN]): MỐC KHÔI PHỤC gần nhất — backup không chứa volume /auth, nên sau
+    # `genagents restore` (nhất là sang máy mới) mọi tài khoản phải kiểm đăng nhập lại. App ghi = app_now() ở lần khởi động đầu sau restore (updater để lại
+    # dấu ở /data/run), cho mọi workspace tenant. Chỉ tiến, không xoá / lùi (workspaces_restored_u). Nguồn của v_relogin_required (A0 + A5).
+    "restored_at TEXT"],
     cons=[f"CHECK ((kind = 'system') = (id = '{SYS}'))"],
     idx=["CREATE UNIQUE INDEX ux_workspaces_system ON workspaces(kind) WHERE kind = 'system'"])
 
@@ -685,6 +693,24 @@ table('engines', 'P', cols=[
     boolc('core_capable', 0)],
     cons=[f"CHECK (workspace_id = '{SYS}')"])
 
+# v2.3.1 (BUILD-PLAN §A.2-5, §B.7, §F.6 n; CNS-137 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN]): TRẠNG THÁI CÀI CLI theo workspace × loại CLI. Image KHÔNG chứa
+# binary CLI của hãng: install.sh / "Cài lại" chạy ga-engine-install tải từ nguồn chính chủ vào volume ga-engines (/opt/engines/<slug>/<version>/, mount
+# chỉ đọc vào container). App ghi hàng theo `ga-engine-install status` (supervisor báo) — DB không kiểm được sự thật của việc cài, chỉ giữ trạng thái
+# đã báo. Không prefix (En): hàng định danh bằng engine_slug như danh mục engines (§2.1). Thiếu hàng sống ⇒ coi như 'not_installed' (fail-closed:
+# v_engine_installs, CORE_READY). Core agent sẵn sàng đòi CLI của loại Core agent 'installed' ⇒ lý do O4 'engine_not_installed'.
+INSTALL_STATES = ['not_installed', 'installing', 'installed', 'failed']
+INSTALL_FAIL = ['domain_blocked', 'unsupported_arch', 'network', 'checksum_mismatch', 'unknown']
+table('engine_installs', 'En', cols=[
+    "engine_slug TEXT NOT NULL REFERENCES engines(slug)",
+    enum('install_state', INSTALL_STATES, default='not_installed'),
+    "installed_version TEXT",                                  # version đã cài (đọc từ CLI sau khi cài); chỉ có khi installed
+    enum('failure_reason', INSTALL_FAIL, nn=False),            # domain hãng bị chặn / sai kiến trúc máy / mạng / checksum lệch / chưa phân loại được
+    "detail TEXT",                                             # một dòng lỗi đã qua bộ lọc che (không bao giờ chứa credential)
+    "checked_at TEXT"],                                        # lần chạy `ga-engine-install status` gần nhất
+    cons=["CHECK ((install_state = 'installed') = (installed_version IS NOT NULL))",
+          "CHECK ((install_state = 'failed') = (failure_reason IS NOT NULL))"],
+    idx=["CREATE UNIQUE INDEX ux_ei_engine ON engine_installs(workspace_id, engine_slug) WHERE deleted_at IS NULL"])
+
 QSTATE = ['ok', 'low', 'exhausted', 'unknown']
 table('engine_accounts', 'E', 'EN', cols=[
     "engine_slug TEXT NOT NULL REFERENCES engines(slug)", "label TEXT NOT NULL",
@@ -1195,8 +1221,10 @@ table('settings', 'E', 'ST', cols=["key TEXT NOT NULL", jsonc('value_json', nn=T
       idx=["CREATE UNIQUE INDEX ux_st_key ON settings(workspace_id, key) WHERE deleted_at IS NULL"])
 
 # kind KHÔNG có oauth/session: token đăng nhập subscription không bao giờ là một secret của control plane (CNS-014)
+# v2.3.1 (BUILD-PLAN §F.6 h, CNS-146 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN]): + 'anchor_remote_token' = token HTTPS của git remote cho repo neo audit
+# `_anchors` (isomorphic-git chỉ có HTTP(S); SSH chưa hỗ trợ ở MVP). Setting backup.remote_anchor chỉ trỏ secret kind này (settings_remote_anchor_i/_u).
 table('secrets', 'E', 'SEC', cols=[
-    enum('kind', ['engine_api_key', 'telegram_bot_token', 'backup_target', 'integration_token', 'mfa_totp']),
+    enum('kind', ['engine_api_key', 'telegram_bot_token', 'backup_target', 'integration_token', 'mfa_totp', 'anchor_remote_token']),
     "label TEXT NOT NULL", "ciphertext BLOB NOT NULL", "nonce BLOB NOT NULL", "wrapped_dek BLOB NOT NULL",
     "dek_nonce BLOB NOT NULL", "kek_id TEXT NOT NULL", "alg TEXT NOT NULL DEFAULT 'A256GCM'", "last4 TEXT",
     "fingerprint TEXT NOT NULL", enum('status', ['active', 'rotated', 'revoked'], default='active'),
@@ -1519,11 +1547,13 @@ def CORE_CALM(ws):
     'in_progress' = relogin_in_progress)]. v2.2.10 (CONTRACT-r8c §A): 'in_progress' của tài khoản Core agent MỚI sau khi owner đổi loại (chưa từng kiểm
     đạt) = type_change_in_progress — cũng "êm", TRỪ khi lần kiểm của nó đã xong mà không đạt (view: login_check_failed / _partial ⇒ sự cố, Gen ghi chú 3
     vòng 8c); binding cũ đã tắt khác loại nên không khớp na.engine_slug = CORE. v2.2.11 (CONTRACT-r8d §E): 'in_progress' QUÁ 15 phút (LOGIN_STALLED) không
-    còn "êm" ⇒ login_stalled là sự cố (cảnh báo + nút đổi loại hiện lại)."""
+    còn "êm" ⇒ login_stalled là sự cố (cảnh báo + nút đổi loại hiện lại). v2.3.1 (CNS-137): CLI của loại Core agent chưa cài (ENGINE_INSTALLED sai) đứng
+    TRƯỚC consent / đăng nhập trong thứ tự lý do ⇒ không bao giờ "êm" (engine_not_installed là sự cố — kể cả lúc owner đang đổi loại sang CLI chưa cài)."""
     return (f"EXISTS (SELECT 1 FROM engine_bindings nb JOIN engine_accounts na ON na.id = nb.engine_account_id AND na.workspace_id = nb.workspace_id "
             f"WHERE nb.workspace_id = {ws} AND nb.consumer_kind = 'system' AND nb.deleted_at IS NULL AND na.deleted_at IS NULL "
             f"AND na.engine_slug = {CORE(ws)} AND EXISTS (SELECT 1 FROM containers nc WHERE nc.workspace_id = {ws} AND nc.kind = 'system' "
-            f"AND nc.deleted_at IS NULL AND nc.desired_state <> 'absent') AND ({CONSENT_IDENTITY_CHANGED('na')} OR ({CONSENT_OK('na')} "
+            f"AND nc.deleted_at IS NULL AND nc.desired_state <> 'absent') AND {ENGINE_INSTALLED(ws, 'na.engine_slug')} "
+            f"AND ({CONSENT_IDENTITY_CHANGED('na')} OR ({CONSENT_OK('na')} "
             f"AND nb.is_enabled = 1 AND na.status = 'active' AND na.login_status = 'in_progress' AND NOT ({TYPE_CHANGE_FAILED('na', ws)}) "
             f"AND NOT {LOGIN_STALLED('na')})))")
 # v2.2.11 (CONTRACT-r8d §E, CNS-123 — [ĐỀ XUẤT — Gen vòng 8d]): ĐỒNG HỒ = SQL function app_now() do app đăng ký ở MỌI kết nối (như app_maint(), §9.3;
@@ -1556,16 +1586,23 @@ def LOGIN_CHECK_OK(acc, ws):
     return (f"(SELECT lp.status FROM probe_runs lp JOIN containers lc ON lc.id = lp.container_id AND lc.workspace_id = {ws} "
             f"AND lc.kind = 'system' AND lc.deleted_at IS NULL WHERE lp.engine_account_id = {acc} AND lp.trigger = 'login_check' "
             f"AND lp.status <> 'running' ORDER BY lp.display_seq DESC LIMIT 1) IS 'ok'")
+def ENGINE_INSTALLED(ws, slug):
+    """v2.3.1 (CNS-137, BUILD-PLAN §F.6 n): CLI loại {slug} ĐÃ CÀI trong workspace {ws} — hàng engine_installs sống, install_state = 'installed'.
+    Thiếu hàng ⇒ chưa cài (fail-closed). = v_core_agent_accounts.engine_install_state = 'installed' (nhánh 'engine_not_installed' của not_ready_reason)."""
+    return (f"EXISTS (SELECT 1 FROM engine_installs ei WHERE ei.workspace_id = {ws} AND ei.engine_slug = {slug} AND ei.deleted_at IS NULL "
+            f"AND ei.install_state = 'installed')")
 def CORE_READY(ws):
     """Tài khoản Core agent SẴN SÀNG — MỘT định nghĩa (= v_core_agent_accounts.is_ready = mẫu số OB-04): binding hệ thống sống + bật,
     tài khoản active cùng loại Core agent, login_status = 'logged_in' (cache của lần kiểm mới nhất từ mọi nguồn: probe, hoặc lỗi 401/403
     lúc chạy) VÀ lần kiểm đăng nhập mới nhất (probe login_check trong container AI Hệ thống) = ok. Áp cho subscription lẫn API key (CNS-076).
     v2.2.8: + đồng ý điều khoản hợp lệ (CONSENT_OK, CONTRACT-r7 §A) + không hết quota + không có sự cố hãng đang mở (CONTRACT-r8 §C: bốn sự cố
-    "đăng nhập hết hạn / outage / hết quota / bị khoá" đều làm Core agent mất sẵn sàng ⇒ chế độ khắc phục)."""
+    "đăng nhập hết hạn / outage / hết quota / bị khoá" đều làm Core agent mất sẵn sàng ⇒ chế độ khắc phục).
+    v2.3.1 (CNS-137): + CLI của loại Core agent đã cài (ENGINE_INSTALLED) — image không chứa CLI của hãng; chưa cài / đang tải / cài lỗi ⇒ không sẵn sàng."""
     return (f"SELECT 1 FROM engine_bindings cb JOIN engine_accounts ca ON ca.id = cb.engine_account_id AND ca.workspace_id = cb.workspace_id "
             f"WHERE cb.workspace_id = {ws} AND cb.consumer_kind = 'system' AND cb.deleted_at IS NULL AND cb.is_enabled = 1 "
             f"AND ca.deleted_at IS NULL AND ca.status = 'active' AND ca.engine_slug = {CORE(ws)} AND ca.login_status = 'logged_in' "
             f"AND ca.quota_state <> 'exhausted' AND ca.outage_since IS NULL "
+            f"AND {ENGINE_INSTALLED('cb.workspace_id', 'ca.engine_slug')} "
             f"AND {LOGIN_CHECK_OK('ca.id', 'cb.workspace_id')} AND {CONSENT_OK('ca')}")
 def CONSENT_OK(a):
     """v2.2.8 (CONTRACT-r7 §A, OB-05): tài khoản {a} dùng được về mặt điều khoản = engine không đòi consent, HOẶC consents_id trỏ một
@@ -1845,6 +1882,37 @@ BEGIN SELECT RAISE(ABORT, '{MSG_AV_SET}'); END""",
 f"""CREATE TRIGGER settings_avatar_u BEFORE UPDATE OF key, value_json, deleted_at, workspace_id ON settings
 WHEN (NEW.key IN {AV_KEYS} OR OLD.key IN {AV_KEYS}) AND NOT (NEW.key IS OLD.key AND {AV_VALID} AND {OWNER_ADMIN('NEW.updated_by')})
 BEGIN SELECT RAISE(ABORT, '{MSG_AV_SET}'); END""",
+]
+
+# ================================================================ v2.3.1 (BUILD-PLAN §F.6 h, CNS-146 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN])
+# Neo audit ngoài máy (§9.6) CHỈ qua git remote HTTPS + token lưu ở secrets (kind anchor_remote_token): isomorphic-git không có SSH (SSH chưa hỗ trợ ở MVP).
+# Setting backup.remote_anchor = {"url": "https://…", "secret_id": "<ULID secret>"}. Luật lúc GHI (không phải bất biến vòng đời — secret đổi kind / bị xoá về
+# sau thì lần push neo lỗi và UI báo; xoá mềm setting hỏng vẫn được):
+#  (a) url bắt đầu 'https://' (http, ssh://, git@host:… bị chặn);  (b) url không có '@' (không nhét user:token vào URL — settings có audit before/after
+#      và vào backup, token nằm trong URL là lộ bản rõ);  (c) secret_id trỏ secret CÙNG workspace, kind 'anchor_remote_token';
+#  thiếu khoá / sai kiểu ⇒ COALESCE về 0 ⇒ chặn (CHECK không bao giờ NULL, §9.1). Lối vào: INSERT; UPDATE key / value_json / deleted_at / workspace_id;
+#  đổi khoá đi / về bị chặn (như settings_avatar_*). Không giới hạn người ghi (không tuyên bố "chỉ owner").
+RA_KEY = 'backup.remote_anchor'
+RA_URL = "json_extract(NEW.value_json, '$.url')"
+RA_VALID = (f"COALESCE(substr({RA_URL}, 1, 8) = 'https://' AND instr({RA_URL}, '@') = 0 "
+            f"AND EXISTS (SELECT 1 FROM secrets rs WHERE rs.id = json_extract(NEW.value_json, '$.secret_id') AND rs.workspace_id = NEW.workspace_id "
+            f"AND rs.kind = 'anchor_remote_token'), 0)")
+MSG_RA = ('settings (v2.3.1): backup.remote_anchor = {"url": "https://…" (chỉ HTTPS, không có @ / user:token trong URL), "secret_id": secret cùng workspace '
+          'kind anchor_remote_token} — neo audit ngoài máy chỉ qua HTTPS + token trong secrets; SSH chưa hỗ trợ ở MVP')
+MSG_RESTORED = ('workspaces.restored_at (v2.3.1): mốc khôi phục chỉ tiến — không xoá, không lùi (danh sách "cần đăng nhập lại sau khôi phục" '
+                'v_relogin_required không được ẩn bằng cách sửa mốc)')
+V231_TRIGGERS = [
+# §B.9 (CNS-145): mốc khôi phục — lối vào: UPDATE restored_at (NULL → giá trị, tiến tới được; về NULL / lùi bị chặn). INSERT workspace mang sẵn mốc: không chặn
+# (workspace mới chưa có tài khoản nào để ẩn).
+f"""CREATE TRIGGER workspaces_restored_u BEFORE UPDATE OF restored_at ON workspaces
+WHEN OLD.restored_at IS NOT NULL AND (NEW.restored_at IS NULL OR NEW.restored_at < OLD.restored_at)
+BEGIN SELECT RAISE(ABORT, '{MSG_RESTORED}'); END""",
+f"""CREATE TRIGGER settings_remote_anchor_i BEFORE INSERT ON settings
+WHEN NEW.key = '{RA_KEY}' AND NOT {RA_VALID}
+BEGIN SELECT RAISE(ABORT, '{MSG_RA}'); END""",
+f"""CREATE TRIGGER settings_remote_anchor_u BEFORE UPDATE OF key, value_json, deleted_at, workspace_id ON settings
+WHEN (NEW.key = '{RA_KEY}' OR OLD.key = '{RA_KEY}') AND NOT (NEW.key IS OLD.key AND (NEW.deleted_at IS NOT NULL OR {RA_VALID}))
+BEGIN SELECT RAISE(ABORT, '{MSG_RA}'); END""",
 ]
 
 BUSINESS_TRIGGERS = [
@@ -2736,7 +2804,7 @@ BEGIN SELECT RAISE(ABORT, 'settings: {ATT_KEY} phải là số nguyên byte 1–
 ] + _pair('message_attachments_max_bytes', 'message_attachments',
           f"NEW.scan_status = 'clean' AND NEW.size_bytes > {SETTING_INT(ATT_KEY, ATT_DEFAULT)}",
           f'chat: tệp vượt trần {ATT_KEY} (mặc định 25 MB) — tệp được nhận (clean) không vượt trần; vượt thì rejected + reject_reason "> 25 MB"',
-          ['scan_status', 'size_bytes', 'workspace_id']) + V230_TRIGGERS     # v2.3.0 (CONTRACT-r9): tạo SAU ⇒ chạy TRƯỚC guard cùng sự kiện
+          ['scan_status', 'size_bytes', 'workspace_id']) + V230_TRIGGERS + V231_TRIGGERS   # v2.3.0 / v2.3.1: tạo SAU ⇒ chạy TRƯỚC guard cùng sự kiện
 
 FTS = [
 "CREATE VIRTUAL TABLE search_fts USING fts5(title_norm, body_norm, content='search_documents', content_rowid='id', tokenize='unicode61')",

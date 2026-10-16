@@ -49,9 +49,16 @@ describe('runner — DB rỗng → baseline + R__triggers + R__views', () => {
         app_version: '0.0.0',
         applied_at: '2026-10-14T08:00:00.000Z',
       });
-      expect(SYNC.counts.triggers).toBe(402);
-      expect(SYNC.counts.views).toBe(29);
-      expect(SYNC.counts.tables).toBe(80);
+      // hai cách đếm độc lập phải trùng: db-sync (Python sqlite3) ghi SYNC.json, db:gen (better-sqlite3) ghi sync.ts
+      const json = JSON.parse(readFileSync(new URL('../../../db/spec/SYNC.json', import.meta.url), 'utf8'));
+      expect(SYNC.rev).toBe(json.rev);
+      expect(SYNC.counts).toEqual({
+        tables: json.counts.tables,
+        virtualTables: json.counts.virtual_tables,
+        indexes: json.counts.indexes,
+        triggers: json.counts.triggers,
+        views: json.counts.views,
+      });
     } finally {
       conn.close();
     }

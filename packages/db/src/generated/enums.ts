@@ -1,4 +1,4 @@
-// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain f54d06a (DATABASE v2.3.0) — KHÔNG SỬA TAY.
+// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 359e59b (DATABASE v2.3.1) — KHÔNG SỬA TAY.
 // Union giá trị từ CHECK (col IN (…)) của từng bảng — test đối chiếu enum của @ga/contracts với DB.
 export const DB_ENUMS = {
   "actors.kind": ['user', 'role', 'system'],
@@ -72,6 +72,8 @@ export const DB_ENUMS = {
   "engine_bindings.consumer_kind": ['role', 'system'],
   "engine_bindings.is_enabled": [0, 1],
   "engine_bindings.selection_state": ['valid', 'unavailable', 'unknown'],
+  "engine_installs.failure_reason": ['domain_blocked', 'unsupported_arch', 'network', 'checksum_mismatch', 'unknown'],
+  "engine_installs.install_state": ['not_installed', 'installing', 'installed', 'failed'],
   "engines.adapter_status": ['ready', 'beta', 'coming_soon', 'deprecated'],
   "engines.core_capable": [0, 1],
   "engines.requires_consent": [0, 1],
@@ -149,7 +151,7 @@ export const DB_ENUMS = {
   "schema_migrations.is_expand_only": [0, 1],
   "schema_migrations.kind": ['standard', 'rebuild', 'data'],
   "search_documents.is_live": [0, 1],
-  "secrets.kind": ['engine_api_key', 'telegram_bot_token', 'backup_target', 'integration_token', 'mfa_totp'],
+  "secrets.kind": ['engine_api_key', 'telegram_bot_token', 'backup_target', 'integration_token', 'mfa_totp', 'anchor_remote_token'],
   "secrets.status": ['active', 'rotated', 'revoked'],
   "sessions.agent_kind": ['role', 'interviewer', 'trainer', 'consolidator', 'judge', 'system'],
   "sessions.native_memory": ['off', 'imported', 'discarded', 'unknown'],

@@ -52,15 +52,16 @@ export const ExecResult = z.strictObject({
 export type ExecResult = z.infer<typeof ExecResult>;
 
 // ---------------------------------------------------------------- trạng thái cài CLI (CNS-137)
+// = bảng DB `engine_installs` (DATABASE v2.3.1): install_state + failure_reason; THIẾU HÀNG nghĩa là chưa cài (fail-closed).
 export const ENGINE_INSTALL_STATES = ['not_installed', 'installing', 'installed', 'failed'] as const;
 export type EngineInstallState = (typeof ENGINE_INSTALL_STATES)[number];
 
-/** Lý do cài lỗi: domain bị chặn, sai kiến trúc, mạng, sai checksum; `unknown` khi trình cài không phân loại được. */
+/** Lý do cài lỗi (= engine_installs.failure_reason): domain hãng bị chặn, sai kiến trúc máy, mạng, checksum lệch, chưa phân loại. */
 export const ENGINE_INSTALL_FAILURE_REASONS = [
   'domain_blocked',
-  'wrong_arch',
+  'unsupported_arch',
   'network',
-  'checksum',
+  'checksum_mismatch',
   'unknown',
 ] as const;
 
@@ -81,7 +82,7 @@ export const EngineInstallStatus = z.discriminatedUnion('state', [
 ]);
 export type EngineInstallStatus = z.infer<typeof EngineInstallStatus>;
 
-/** Lý do O4 khi CLI của Core agent chưa cài (BUILD-PLAN §B.8; tên cột / view do lane DB đặt — §F.6 n). */
+/** Lý do O4 khi CLI của Core agent chưa cài (= v_core_agent_status.reason, DATABASE v2.3.1; chữ cho owner lấy từ view / i18n). */
 export const ENGINE_NOT_INSTALLED_REASON = 'engine_not_installed' as const;
 
 /** Nguồn cài chính chủ (CNS-137). Image không chứa CLI của hãng; ga-engine-install tải vào volume ga-engines (mount chỉ đọc). */

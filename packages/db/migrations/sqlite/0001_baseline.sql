@@ -2,7 +2,7 @@
 -- compat_min_app_version: 0.0.0
 -- expand_only: false
 -- breaking: baseline — trước v0.1.0 được sinh lại khi DB spec đổi; từ v0.1.0 forward-only (BUILD-PLAN §D.4)
--- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain f54d06a (DATABASE v2.3.0) — KHÔNG SỬA TAY.
+-- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 359e59b (DATABASE v2.3.1) — KHÔNG SỬA TAY.
 -- Chỉ bảng + index (+ bảng ảo FTS5). Trigger ở R__triggers.sql, view ở R__views.sql (CNS-157).
 
 -- @ga:object table workspaces
@@ -22,6 +22,7 @@ CREATE TABLE workspaces (
   updated_at TEXT,
   archived_at TEXT,
   core_agent_locked_at TEXT,
+  restored_at TEXT,
   CHECK ((kind = 'system') = (id = '00000000000000000000000000'))
 );
 
@@ -1122,6 +1123,27 @@ CREATE TABLE engines (
   CHECK (workspace_id = '00000000000000000000000000')
 );
 
+-- @ga:object table engine_installs
+CREATE TABLE engine_installs (
+  id TEXT PRIMARY KEY CHECK (length(id) = 26),
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  created_by TEXT NOT NULL REFERENCES actors(id),
+  updated_at TEXT,
+  updated_by TEXT REFERENCES actors(id),
+  deleted_at TEXT,
+  deleted_by TEXT REFERENCES actors(id),
+  version INTEGER NOT NULL DEFAULT 1,
+  engine_slug TEXT NOT NULL REFERENCES engines(slug),
+  install_state TEXT NOT NULL DEFAULT 'not_installed' CHECK (install_state IN ('not_installed', 'installing', 'installed', 'failed')),
+  installed_version TEXT,
+  failure_reason TEXT CHECK (failure_reason IS NULL OR failure_reason IN ('domain_blocked', 'unsupported_arch', 'network', 'checksum_mismatch', 'unknown')),
+  detail TEXT,
+  checked_at TEXT,
+  CHECK ((install_state = 'installed') = (installed_version IS NOT NULL)),
+  CHECK ((install_state = 'failed') = (failure_reason IS NOT NULL))
+);
+
 -- @ga:object table engine_accounts
 CREATE TABLE engine_accounts (
   id TEXT PRIMARY KEY CHECK (length(id) = 26),
@@ -2145,7 +2167,7 @@ CREATE TABLE secrets (
   deleted_at TEXT,
   deleted_by TEXT REFERENCES actors(id),
   version INTEGER NOT NULL DEFAULT 1,
-  kind TEXT NOT NULL CHECK (kind IN ('engine_api_key', 'telegram_bot_token', 'backup_target', 'integration_token', 'mfa_totp')),
+  kind TEXT NOT NULL CHECK (kind IN ('engine_api_key', 'telegram_bot_token', 'backup_target', 'integration_token', 'mfa_totp', 'anchor_remote_token')),
   label TEXT NOT NULL,
   ciphertext BLOB NOT NULL,
   nonce BLOB NOT NULL,
@@ -2643,6 +2665,9 @@ CREATE UNIQUE INDEX ux_usage ON usage_daily(workspace_id, day_local, COALESCE(ro
 
 -- @ga:object index ix_usage_role
 CREATE INDEX ix_usage_role ON usage_daily(workspace_id, role_id, day_local);
+
+-- @ga:object index ux_ei_engine
+CREATE UNIQUE INDEX ux_ei_engine ON engine_installs(workspace_id, engine_slug) WHERE deleted_at IS NULL;
 
 -- @ga:object index ux_en_label
 CREATE UNIQUE INDEX ux_en_label ON engine_accounts(workspace_id, engine_slug, label) WHERE deleted_at IS NULL;

@@ -1,4 +1,4 @@
-// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain f54d06a (DATABASE v2.3.0) — KHÔNG SỬA TAY.
+// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 359e59b (DATABASE v2.3.1) — KHÔNG SỬA TAY.
 // Bảng: Generated<T> khi cột có DEFAULT hoặc là INTEGER PRIMARY KEY; union từ CHECK (col IN (…)).
 // View: chỉ đọc (ColumnType<T, never, never>); cột biểu thức không có kiểu khai báo ⇒ SqlValue.
 import type { ColumnType, Generated } from 'kysely';
@@ -616,6 +616,24 @@ export interface EngineBindings {
   is_enabled: Generated<0 | 1>;
   selection_state: Generated<'valid' | 'unavailable' | 'unknown'>;
   selection_checked_at: string | null;
+}
+
+export interface EngineInstalls {
+  id: string;
+  workspace_id: string;
+  created_at: Generated<string>;
+  created_by: string;
+  updated_at: string | null;
+  updated_by: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  version: Generated<number>;
+  engine_slug: string;
+  install_state: Generated<'not_installed' | 'installing' | 'installed' | 'failed'>;
+  installed_version: string | null;
+  failure_reason: 'domain_blocked' | 'unsupported_arch' | 'network' | 'checksum_mismatch' | 'unknown' | null;
+  detail: string | null;
+  checked_at: string | null;
 }
 
 export interface Engines {
@@ -1340,7 +1358,7 @@ export interface Secrets {
   deleted_at: string | null;
   deleted_by: string | null;
   version: Generated<number>;
-  kind: 'engine_api_key' | 'telegram_bot_token' | 'backup_target' | 'integration_token' | 'mfa_totp';
+  kind: 'engine_api_key' | 'telegram_bot_token' | 'backup_target' | 'integration_token' | 'mfa_totp' | 'anchor_remote_token';
   label: string;
   ciphertext: Buffer;
   nonce: Buffer;
@@ -1898,6 +1916,7 @@ export interface Workspaces {
   updated_at: string | null;
   archived_at: string | null;
   core_agent_locked_at: string | null;
+  restored_at: string | null;
 }
 
 /** view (chỉ đọc) */
@@ -2005,6 +2024,7 @@ export interface VCoreAgentAccounts {
   core_slug: ColumnType<SqlValue | null, never, never>;
   consent_ok: ColumnType<SqlValue | null, never, never>;
   consent_state: ColumnType<SqlValue | null, never, never>;
+  engine_install_state: ColumnType<SqlValue | null, never, never>;
   last_login_check_id: ColumnType<string | null, never, never>;
   last_login_check_display_id: ColumnType<string | null, never, never>;
   last_login_check_status: ColumnType<string | null, never, never>;
@@ -2039,6 +2059,7 @@ export interface VCoreAgentStatus {
   account_label: ColumnType<string | null, never, never>;
   binding_display_id: ColumnType<string | null, never, never>;
   is_ready: ColumnType<SqlValue | null, never, never>;
+  engine_install_state: ColumnType<SqlValue | null, never, never>;
   mode: ColumnType<SqlValue | null, never, never>;
   blocks_admin: ColumnType<SqlValue | null, never, never>;
   reason: ColumnType<SqlValue | null, never, never>;
@@ -2122,6 +2143,25 @@ export interface VEngineAccounts {
   is_core_agent: ColumnType<SqlValue | null, never, never>;
   consent_state: ColumnType<SqlValue | null, never, never>;
   consent_display_id: ColumnType<string | null, never, never>;
+  engine_install_state: ColumnType<SqlValue | null, never, never>;
+  engine_installed_version: ColumnType<string | null, never, never>;
+}
+
+/** view (chỉ đọc) */
+export interface VEngineInstalls {
+  workspace_id: ColumnType<string | null, never, never>;
+  engine_slug: ColumnType<string | null, never, never>;
+  engine_name: ColumnType<string | null, never, never>;
+  adapter_status: ColumnType<string | null, never, never>;
+  core_capable: ColumnType<number | null, never, never>;
+  engine_install_id: ColumnType<string | null, never, never>;
+  install_state: ColumnType<SqlValue | null, never, never>;
+  installed_version: ColumnType<string | null, never, never>;
+  failure_reason: ColumnType<string | null, never, never>;
+  detail: ColumnType<string | null, never, never>;
+  checked_at: ColumnType<string | null, never, never>;
+  state_changed_at: ColumnType<SqlValue | null, never, never>;
+  is_core_agent_type: ColumnType<SqlValue | null, never, never>;
 }
 
 /** view (chỉ đọc) */
@@ -2213,6 +2253,24 @@ export interface VQuotaWindows {
 }
 
 /** view (chỉ đọc) */
+export interface VReloginRequired {
+  workspace_id: ColumnType<string | null, never, never>;
+  restored_at: ColumnType<string | null, never, never>;
+  engine_account_id: ColumnType<string | null, never, never>;
+  account_display_id: ColumnType<string | null, never, never>;
+  label: ColumnType<string | null, never, never>;
+  engine_slug: ColumnType<string | null, never, never>;
+  auth_method: ColumnType<string | null, never, never>;
+  consumer_kind: ColumnType<string | null, never, never>;
+  role_id: ColumnType<string | null, never, never>;
+  consumer_display_id: ColumnType<string | null, never, never>;
+  consumer_label: ColumnType<SqlValue | null, never, never>;
+  last_login_check_display_id: ColumnType<string | null, never, never>;
+  last_login_check_status: ColumnType<string | null, never, never>;
+  last_login_check_at: ColumnType<string | null, never, never>;
+}
+
+/** view (chỉ đọc) */
 export interface VRoleAvatarState {
   workspace_id: ColumnType<string | null, never, never>;
   role_id: ColumnType<string | null, never, never>;
@@ -2282,12 +2340,16 @@ export interface VRolePromptBudget {
   overhead_estimate_basis: ColumnType<SqlValue | null, never, never>;
   overhead_source: ColumnType<SqlValue | null, never, never>;
   compiled_status: ColumnType<string | null, never, never>;
+  compiled_tokenizer: ColumnType<string | null, never, never>;
+  measured_prompt_session_id: ColumnType<string | null, never, never>;
+  measured_prompt_tokens: ColumnType<SqlValue | null, never, never>;
   tool_definition_tokens: ColumnType<SqlValue | null, never, never>;
   conditional_worst_extra: ColumnType<SqlValue | null, never, never>;
   pending_delta: ColumnType<SqlValue | null, never, never>;
   budget: ColumnType<number | null, never, never>;
   compiled_tokens: ColumnType<SqlValue | null, never, never>;
   runtime_overhead_tokens: ColumnType<SqlValue | null, never, never>;
+  card_total_worst: ColumnType<SqlValue | null, never, never>;
   total_default: ColumnType<SqlValue | null, never, never>;
   total_worst: ColumnType<SqlValue | null, never, never>;
   headroom: ColumnType<SqlValue | null, never, never>;
@@ -2295,6 +2357,9 @@ export interface VRolePromptBudget {
   overhead_label: ColumnType<SqlValue | null, never, never>;
   polaris_block_tokens: ColumnType<SqlValue | null, never, never>;
   polaris_warning: ColumnType<SqlValue | null, never, never>;
+  prompt_source: ColumnType<SqlValue | null, never, never>;
+  prompt_label: ColumnType<SqlValue | null, never, never>;
+  prompt_tokenizer: ColumnType<SqlValue | null, never, never>;
   sign_ok: ColumnType<SqlValue | null, never, never>;
   card_ok: ColumnType<SqlValue | null, never, never>;
   gate_ok: ColumnType<SqlValue | null, never, never>;
@@ -2487,6 +2552,7 @@ export interface DB {
   employee_cards: EmployeeCards;
   engine_accounts: EngineAccounts;
   engine_bindings: EngineBindings;
+  engine_installs: EngineInstalls;
   engines: Engines;
   events: Events;
   id_aliases: IdAliases;
@@ -2554,6 +2620,7 @@ export interface DB {
   v_dna_sheet: VDnaSheet;
   v_employee_cards: VEmployeeCards;
   v_engine_accounts: VEngineAccounts;
+  v_engine_installs: VEngineInstalls;
   v_integrity: VIntegrity;
   v_integrity_tenant: VIntegrityTenant;
   v_leaderboard: VLeaderboard;
@@ -2561,6 +2628,7 @@ export interface DB {
   v_memory_chain: VMemoryChain;
   v_penalty_presets: VPenaltyPresets;
   v_quota_windows: VQuotaWindows;
+  v_relogin_required: VReloginRequired;
   v_role_avatar_state: VRoleAvatarState;
   v_role_polaris: VRolePolaris;
   v_role_prompt_budget: VRolePromptBudget;
@@ -2574,5 +2642,5 @@ export interface DB {
   v_wound_messages: VWoundMessages;
 }
 
-export const TABLES = ["actors","app_versions","assignments","audit_log","auth_sessions","avatars","backups","blobs","capabilities","change_set_items","change_sets","chat_messages","chat_threads","commitments","compiled_prompt_segments","compiled_prompts","consents","containers","dna_field_defs","dna_field_versions","dna_fields","egress_rules","employee_cards","engine_accounts","engine_bindings","engines","events","id_aliases","id_counters","instruction_versions","instructions","jobs","knowledge_chunks","knowledge_items","ledger_entries","memories","message_anchors","message_attachments","model_ranks","notifications","permission_requests","polaris_checks","positions","proactive_jobs","proactive_policies","proactive_sends","probe_runs","quota_snapshots","recall_hits","revisions","role_skills","role_wounds","roles","schema_migrations","search_documents","search_fts","secrets","sessions","settings","skill_engine_support","skill_files","skill_prereqs","skill_versions","skills","skin_assets","system_agents","tasks","taxonomy_nodes","telegram_allowlist","telegram_bots","tool_grants","tools","trial_runs","trust_tier_changes","ui_actions","update_runs","usage_daily","users","wallets","workspace_members","workspaces"] as const;
-export const VIEWS = ["v_account_consent","v_attention","v_card_checks","v_character_library","v_container_mounts","v_core_agent_accounts","v_core_agent_options","v_core_agent_status","v_dna_sheet","v_employee_cards","v_engine_accounts","v_integrity","v_integrity_tenant","v_leaderboard","v_ledger_by_role","v_memory_chain","v_penalty_presets","v_quota_windows","v_role_avatar_state","v_role_polaris","v_role_prompt_budget","v_role_skill_tree","v_role_wounds","v_roles","v_setup_checklist","v_skin_pack_usage","v_system_agents","v_tree_nodes","v_wound_messages"] as const;
+export const TABLES = ["actors","app_versions","assignments","audit_log","auth_sessions","avatars","backups","blobs","capabilities","change_set_items","change_sets","chat_messages","chat_threads","commitments","compiled_prompt_segments","compiled_prompts","consents","containers","dna_field_defs","dna_field_versions","dna_fields","egress_rules","employee_cards","engine_accounts","engine_bindings","engine_installs","engines","events","id_aliases","id_counters","instruction_versions","instructions","jobs","knowledge_chunks","knowledge_items","ledger_entries","memories","message_anchors","message_attachments","model_ranks","notifications","permission_requests","polaris_checks","positions","proactive_jobs","proactive_policies","proactive_sends","probe_runs","quota_snapshots","recall_hits","revisions","role_skills","role_wounds","roles","schema_migrations","search_documents","search_fts","secrets","sessions","settings","skill_engine_support","skill_files","skill_prereqs","skill_versions","skills","skin_assets","system_agents","tasks","taxonomy_nodes","telegram_allowlist","telegram_bots","tool_grants","tools","trial_runs","trust_tier_changes","ui_actions","update_runs","usage_daily","users","wallets","workspace_members","workspaces"] as const;
+export const VIEWS = ["v_account_consent","v_attention","v_card_checks","v_character_library","v_container_mounts","v_core_agent_accounts","v_core_agent_options","v_core_agent_status","v_dna_sheet","v_employee_cards","v_engine_accounts","v_engine_installs","v_integrity","v_integrity_tenant","v_leaderboard","v_ledger_by_role","v_memory_chain","v_penalty_presets","v_quota_windows","v_relogin_required","v_role_avatar_state","v_role_polaris","v_role_prompt_budget","v_role_skill_tree","v_role_wounds","v_roles","v_setup_checklist","v_skin_pack_usage","v_system_agents","v_tree_nodes","v_wound_messages"] as const;

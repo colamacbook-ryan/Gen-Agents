@@ -7,7 +7,10 @@ thì bộ test phải đỏ. Luật chống "đỏ giả" của STD-11:
   - mỗi lượt là MỘT TIẾN TRÌNH MỚI trên MỘT BẢN SAO MỚI của db/spec ⇒ đồng hồ giả (_CLOCK, _FAKE_NOW), RESULTS, cache schema
     và mọi biến toàn cục của bộ test được reset từ đầu, không cộng dồn qua các lượt;
   - kiểm trước khi chạy rằng đột biến đã áp đúng: DB dựng từ SQL đột biến có đúng (tổng − 1) trigger và thiếu đúng trigger đó;
-  - in số trigger đã drop.
+  - in số trigger đã drop;
+  - CHỈ tính "đỏ thật" khi bộ test chạy hết, in dòng TỔNG và có dòng FAIL của assert. Lượt vỡ vì exception (Traceback,
+    IntegrityError, OperationalError…) hoặc quá giờ là "NGHI ĐỎ GIẢ": không tính là đã bắt, liệt kê để đọc và sửa
+    (STD-11 1.11.0, L-20261016-31).
 
 Dùng:
   python3 -B -I db/spec/mutate.py --sample 20 [--seed 20261016]   20 trigger chọn ngẫu nhiên tất định
@@ -17,7 +20,8 @@ Dùng:
 Tuỳ chọn: --jobs N (mặc định min(4, số CPU)), --timeout giây mỗi lượt (600), --keep (giữ thư mục tạm),
   --baseline <json>: trigger sống ĐÃ BIẾT (đo bằng --all) chỉ báo "sống (đã biết)", không làm đỏ — chặn kiểu bánh cóc:
   trigger sống MỚI vẫn đỏ; trigger đã biết mà nay đỏ được báo để gỡ khỏi baseline. --write-baseline <json>: ghi danh sách sống.
-Thoát 0 khi đối chứng xanh và không có đột biến sống (ngoài baseline); 1 khi có; 2 khi đối chứng đỏ / lỗi hạ tầng.
+Thoát 0 khi đối chứng xanh, không có đột biến sống (ngoài baseline) và không có lượt nghi đỏ giả; 1 khi có;
+2 khi đối chứng đỏ / lỗi hạ tầng.
 """
 import argparse, concurrent.futures, json, os, random, re, shutil, sqlite3, subprocess, sys, tempfile, time
 
@@ -67,8 +71,10 @@ def run_suite(d, timeout):
         tail = (p.stderr or p.stdout).strip().splitlines()[-1:] or ['']
         return dict(kind='crash', secs=time.time() - t0, fails=fails, passed=None, total=None, code=p.returncode, tail=tail[0][:160])
     passed, total = int(m[-1][0]), int(m[-1][1])
-    return dict(kind='green' if passed == total else 'red', secs=time.time() - t0, fails=fails, passed=passed, total=total,
-                code=p.returncode)
+    # đỏ thật = có dòng FAIL của assert; TỔNG < tổng mà không có dòng FAIL nào ⇒ không giải thích được ⇒ nghi đỏ giả
+    kind = 'green' if passed == total else ('red' if fails else 'crash')
+    return dict(kind=kind, secs=time.time() - t0, fails=fails, passed=passed, total=total, code=p.returncode,
+                tail='' if kind != 'crash' else 'TỔNG < tổng nhưng không có dòng FAIL')
 
 
 def select(args, trig):
@@ -156,8 +162,8 @@ def main():
                 elif r['kind'] == 'green':
                     print('  SỐNG %-48s bộ test vẫn %d/%d — thiếu ca âm cho trigger này' % (name, r['passed'], r['total']), flush=True)
                 else:
-                    print('  ĐỎ*  %-48s %s%s (%.0f s)' % (name, r['kind'], (' — ' + r.get('tail', '')) if r.get('tail') else '', r['secs']),
-                          flush=True)
+                    print('  NGHI %-48s đỏ giả? %s%s (%.0f s) — đọc và sửa test / đột biến' % (
+                        name, r['kind'], (' — ' + r.get('tail', '')) if r.get('tail') else '', r['secs']), flush=True)
         red = [n for n, r in results.items() if r['kind'] == 'red']
         crash = [n for n, r in results.items() if r['kind'] in ('crash', 'timeout')]
         alive = [n for n, r in results.items() if r['kind'] == 'green']
@@ -174,18 +180,21 @@ def main():
                                measured=len(chosen), surviving=sorted(alive)), fh, ensure_ascii=False, indent=2)
                 fh.write('\n')
             print('✓ ghi %s: %d trigger sống / %d đã thử' % (args.write_baseline, len(alive), len(chosen)))
-        print('%s MUTATION: %d/%d đỏ (FAIL %d, crash/timeout %d), sống %d — đối chứng %d/%d xanh — đã drop %d trigger '
-              '(mỗi lượt đúng 1, đã kiểm áp đúng; mỗi lượt tiến trình + bản sao mới ⇒ đồng hồ giả / biến toàn cục reset)' % (
-                  '✓' if not alive else '✗', len(red) + len(crash), len(chosen), len(red), len(crash), len(alive),
+        print('%s MUTATION: %d/%d đỏ thật (qua dòng FAIL), nghi đỏ giả %d (exception / quá giờ — không tính), sống %d — '
+              'đối chứng %d/%d xanh — đã drop %d trigger (mỗi lượt đúng 1, đã kiểm áp đúng; mỗi lượt tiến trình + bản sao '
+              'mới ⇒ đồng hồ giả / biến toàn cục reset)' % (
+                  '✓' if not alive and not crash else '✗', len(red), len(chosen), len(crash), len(alive),
                   ctl['passed'], ctl['total'], len(chosen)))
         if alive:
             print('  trigger sống: ' + ', '.join(alive))
+        if crash:
+            print('  nghi đỏ giả: ' + ', '.join(crash))
         if args.baseline:
             print('%s so với baseline (%d đã biết): sống MỚI %d%s; đã biết nay đỏ %d%s' % (
                 '✓' if not new_alive else '✗', len(known), len(new_alive), (' — ' + ', '.join(new_alive)) if new_alive else '',
                 len(healed), (' — gỡ khỏi baseline: ' + ', '.join(healed)) if healed else ''))
-            return 0 if not new_alive else 1
-        return 0 if not alive else 1
+            return 0 if not new_alive and not crash else 1
+        return 0 if not alive and not crash else 1
     finally:
         if args.keep:
             print('(giữ thư mục tạm: %s)' % workdir)

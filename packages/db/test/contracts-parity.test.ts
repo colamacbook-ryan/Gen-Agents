@@ -7,6 +7,9 @@ import {
   CAPABILITY_AUTH_MODES,
   CAPABILITY_CONFIDENCE,
   DesiredState,
+  ENGINE_INSTALL_FAILURE_REASONS,
+  ENGINE_INSTALL_STATES,
+  ENGINE_NOT_INSTALLED_REASON,
   ENTITY_TYPES,
   mapDbError,
   NATIVE_MEMORY_STATES,
@@ -68,6 +71,17 @@ describe('contracts ↔ DB', () => {
     expect(sorted(run.status.options)).toEqual(sorted(DB_ENUMS['update_runs.status']));
     expect(sorted(run.trigger.options)).toEqual(sorted(DB_ENUMS['update_runs.trigger']));
     expect(sorted(ToolArgs.remember.shape.kind.options)).toEqual(sorted(DB_ENUMS['memories.kind']));
+  });
+
+  it('trạng thái cài CLI = bảng engine_installs; lý do O4 engine_not_installed có trong v_core_agent_status', () => {
+    expect(sorted(ENGINE_INSTALL_STATES)).toEqual(sorted(DB_ENUMS['engine_installs.install_state']));
+    expect(sorted(ENGINE_INSTALL_FAILURE_REASONS)).toEqual(sorted(DB_ENUMS['engine_installs.failure_reason']));
+    const view = (
+      conn.db.prepare("SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'v_core_agent_status'").get() as {
+        sql: string;
+      }
+    ).sql;
+    expect(view).toContain(`'${ENGINE_NOT_INSTALLED_REASON}'`);
   });
 
   it('16 trạng thái avatar = các khoá của v_role_avatar_state', () => {

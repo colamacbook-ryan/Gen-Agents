@@ -108,9 +108,9 @@ describe('engine — env tiêm vào container (CNS-142)', () => {
   it('trạng thái cài CLI có đủ 4 trạng thái + lý do lỗi', () => {
     expect(EngineInstallStatus.parse({ state: 'not_installed' })).toEqual({ state: 'not_installed' });
     expect(EngineInstallStatus.parse({ state: 'installing', progressPct: 42, version: null }).state).toBe('installing');
-    expect(EngineInstallStatus.safeParse({ state: 'failed', reason: 'checksum', detail: 'sha512 lệch' }).success).toBe(
-      true,
-    );
+    expect(
+      EngineInstallStatus.safeParse({ state: 'failed', reason: 'checksum_mismatch', detail: 'sha512 lệch' }).success,
+    ).toBe(true);
     expect(EngineInstallStatus.safeParse({ state: 'failed', reason: 'flaky', detail: '' }).success).toBe(false);
   });
 });

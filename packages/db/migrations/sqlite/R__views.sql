@@ -1,6 +1,6 @@
 -- repeatable: views
--- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain f54d06a (DATABASE v2.3.0) — KHÔNG SỬA TAY.
--- 29 view, theo thứ tự tạo (view sau có thể đọc view trước). Trigger KHÔNG được SELECT từ view.
+-- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 359e59b (DATABASE v2.3.1) — KHÔNG SỬA TAY.
+-- 31 view, theo thứ tự tạo (view sau có thể đọc view trước). Trigger KHÔNG được SELECT từ view.
 
 -- @ga:object view v_role_prompt_budget
 CREATE VIEW v_role_prompt_budget AS
@@ -87,6 +87,17 @@ WITH primary_engine AS (
                          AND (cp.engine_slug IS e.engine_slug OR cp.engine_slug IS NULL)
                        ORDER BY cp.display_seq DESC LIMIT 1) AS gc_id
   FROM roles r LEFT JOIN primary_engine e ON e.role_id = r.id
+), cur_gw AS (                                   -- v2.3.1: bản 'worst' CÙNG THẾ HỆ với bản default hiện hành (cùng revision, vị trí, Nội quy, engine, bộ số luật chơi)
+  SELECT g.rid, (SELECT w.id FROM compiled_prompts d JOIN compiled_prompts w ON w.revision_id = d.revision_id
+                   AND w.position_revision_id IS d.position_revision_id AND w.rules_revision_id IS d.rules_revision_id
+                   AND w.engine_slug IS d.engine_slug AND w.polaris_params_hash IS d.polaris_params_hash AND w.context_key = 'worst'
+                 WHERE d.id = g.gc_id ORDER BY w.display_seq DESC LIMIT 1) AS gw_id
+  FROM cur_gc g
+), meas AS (                                     -- v2.3.1: phiên ĐO mới nhất — baseline đã xong 'ok', tài khoản chính, adapter xác nhận nạp đúng bản 'worst'
+  SELECT w.rid, (SELECT ms.id FROM sessions ms WHERE ms.compiled_prompt_id = w.gw_id AND ms.engine_account_id = e.account_id
+                   AND ms.trigger = 'baseline' AND ms.status = 'ok' AND ms.delivered_prompt_hash IS NOT NULL
+                 ORDER BY ms.display_seq DESC LIMIT 1) AS ms_id
+  FROM cur_gw w LEFT JOIN primary_engine e ON e.role_id = w.rid
 ), base AS (
   SELECT r.workspace_id, r.id AS role_id, r.display_id, e.engine_slug, e.account_id AS engine_account_id,
          COALESCE(dn.dn_tok, 0)  AS dna_tokens,
@@ -117,6 +128,12 @@ WITH primary_engine AS (
          -- v2.2.1 (CNS-047): 'estimated' (nhãn "ước lượng") — Ký giấy khai sinh dùng được; Cấp thẻ đòi 'measured'
          CASE WHEN e.baseline_tok IS NULL THEN 'estimated' ELSE 'measured' END AS overhead_source,
          (SELECT cp.status FROM compiled_prompts cp WHERE cp.id = g.gc_id) AS compiled_status,
+         (SELECT cp.tokenizer FROM compiled_prompts cp WHERE cp.id = g.gc_id) AS compiled_tokenizer,
+         -- v2.3.1: token prompt ĐO THẬT của bản 'worst' = phiên đo − phiên baseline vỏ (overhead_shell_session_id) của tài khoản chính; âm / thiếu ⇒ NULL
+         m.ms_id AS measured_prompt_session_id,
+         (SELECT ms.tokens_input - sh.tokens_input FROM sessions ms JOIN engine_accounts xa ON xa.id = e.account_id
+            JOIN sessions sh ON sh.id = xa.overhead_shell_session_id
+          WHERE ms.id = m.ms_id AND ms.tokens_input >= sh.tokens_input) AS measured_prompt_tokens,
          COALESCE(te.tool_tok, 0) AS tool_definition_tokens,
          COALESCE(w.cond_tok, 0) AS conditional_worst_extra,
          COALESCE(p.pend_tok, 0) AS pending_delta,
@@ -124,6 +141,7 @@ WITH primary_engine AS (
   FROM roles r
   LEFT JOIN primary_engine e ON e.role_id = r.id
   LEFT JOIN cur_gc g ON g.rid = r.id
+  LEFT JOIN meas m ON m.rid = r.id
   LEFT JOIN dn ON dn.rid = r.id          LEFT JOIN in_default d ON d.rid = r.id
   LEFT JOIN in_worst w ON w.rid = r.id   LEFT JOIN sk ON sk.rid = r.id
   LEFT JOIN pend p ON p.rid = r.id       LEFT JOIN tools_extra te ON te.rid = r.id
@@ -132,7 +150,8 @@ WITH primary_engine AS (
   SELECT b.*,
          dna_tokens + instruction_tokens + house_rules_tokens + position_tokens + skill_index_tokens + frame_tokens + polaris_tokens
            AS compiled_tokens,
-         baseline_overhead_tokens + tool_definition_tokens AS runtime_overhead_tokens
+         baseline_overhead_tokens + tool_definition_tokens AS runtime_overhead_tokens,
+         measured_prompt_tokens + baseline_overhead_tokens + tool_definition_tokens AS card_total_worst   -- v2.3.1: NULL khi chưa đo
   FROM base b
 )
 SELECT t.*,
@@ -150,22 +169,29 @@ SELECT t.*,
             THEN 'khối Polaris ' || polaris_tokens || ' > 80 token (mục tiêu; luật chơi ' || COALESCE(polaris_rules_tokens, '?') || ' + ★ '
                  || COALESCE(polaris_suffix_reserve_tokens, '?') || ') — rút gọn: P4 về khối Giá trị, chú giải ★ vào khung, P1–P4 chỉ còn số + động từ'
             END AS polaris_warning,
-       -- v2.2.1 (CNS-047): Ký — được dùng overhead ước lượng; Cấp thẻ — đòi overhead đo + luật chơi đã biên dịch + bản biên dịch ok.
-       -- v2.2.2: chỉ CHẶN theo tổng ngân sách (M3, ≤ 2.000) và các điều kiện cứng; khối Polaris dài chỉ cảnh báo
+       -- v2.3.1 (CNS-154): nguồn của phần prompt — 'measured' khi có số đo thật của bản 'worst' cùng thế hệ, còn lại 'estimated' (ước lượng của compiler)
+       CASE WHEN measured_prompt_tokens IS NOT NULL THEN 'measured' ELSE 'estimated' END AS prompt_source,
+       CASE WHEN measured_prompt_tokens IS NOT NULL THEN 'đo thật' ELSE 'ước lượng' END AS prompt_label,
+       CASE WHEN measured_prompt_tokens IS NOT NULL THEN 'measured:' || engine_slug ELSE compiled_tokenizer END AS prompt_tokenizer,
+       -- v2.2.1 (CNS-047): Ký — được dùng overhead ước lượng; v2.2.2: chỉ CHẶN theo tổng ngân sách (M3, ≤ 2.000) và các điều kiện cứng; khối Polaris dài
+       -- chỉ cảnh báo. v2.3.1 (CNS-154): Ký dùng ƯỚC LƯỢNG (token_count của compiler, đã gồm biên ×1,15 — G-27); Cấp thẻ dùng SỐ ĐO THẬT (card_total_worst =
+       -- token prompt đo của bản 'worst' + overhead đo + định nghĩa tool không built-in), đòi overhead đo + luật chơi đã biên dịch + bản biên dịch ok;
+       -- ước lượng không bao giờ mở cổng Cấp thẻ.
        CASE WHEN compiled_tokens + runtime_overhead_tokens + conditional_worst_extra <= budget THEN 1 ELSE 0 END AS sign_ok,
-       CASE WHEN compiled_tokens + runtime_overhead_tokens + conditional_worst_extra <= budget
+       CASE WHEN card_total_worst <= budget
              AND overhead_source = 'measured' AND polaris_rules_tokens IS NOT NULL AND compiled_status IS 'ok' THEN 1 ELSE 0 END AS card_ok,
-       CASE WHEN compiled_tokens + runtime_overhead_tokens + conditional_worst_extra <= budget
+       CASE WHEN card_total_worst <= budget
              AND overhead_source = 'measured' AND polaris_rules_tokens IS NOT NULL AND compiled_status IS 'ok' THEN 1 ELSE 0 END AS gate_ok,   -- = card_ok (tên cũ)
        CASE WHEN compiled_tokens + runtime_overhead_tokens + conditional_worst_extra > budget
               THEN 'vượt ngân sách: nặng nhất ' || (compiled_tokens + runtime_overhead_tokens + conditional_worst_extra) || ' / ' || budget
             END AS sign_block_reason,
-       CASE WHEN compiled_tokens + runtime_overhead_tokens + conditional_worst_extra > budget
-              THEN 'vượt ngân sách: nặng nhất ' || (compiled_tokens + runtime_overhead_tokens + conditional_worst_extra) || ' / ' || budget
-            WHEN compiled_status IS 'failed' THEN 'bản biên dịch mới nhất lỗi — biên dịch lại'
+       CASE WHEN compiled_status IS 'failed' THEN 'bản biên dịch mới nhất lỗi — biên dịch lại'
             WHEN polaris_rules_tokens IS NULL THEN 'chưa biên dịch luật chơi Polaris bằng tokenizer của engine'
             WHEN overhead_source <> 'measured' THEN 'overhead runtime chưa đo — đang dùng ước lượng ' || baseline_overhead_tokens
                  || ' (' || CASE overhead_estimate_basis WHEN 'same_engine' THEN 'max đo cùng engine × 1,1' ELSE 'setting' END || '; Ký được, Cấp thẻ chưa)'
+            WHEN measured_prompt_tokens IS NULL THEN 'token prompt chưa đo thật — chạy phiên đo bản biên dịch nặng nhất (Cấp thẻ không dùng ước lượng)'
+            WHEN card_total_worst > budget
+              THEN 'vượt ngân sách (đo thật): nặng nhất ' || card_total_worst || ' / ' || budget
             END AS card_block_reason
 FROM tot t;
 
@@ -359,6 +385,8 @@ WITH wk AS (
          a.status AS account_status, a.login_status, a.login_checked_at, a.login_started_at, a.quota_state, a.outage_since, wk.core_slug,
          -- v2.2.8 (CONTRACT-r7 §A, OB-05): đồng ý điều khoản hợp lệ (= CONSENT_OK() của schema_v2_2.py); v2.2.9: một nguồn v_account_consent (+ danh tính)
          CASE WHEN vc.consent_state IN ('not_required', 'ok') THEN 1 ELSE 0 END AS consent_ok, vc.consent_state,
+         COALESCE((SELECT ei.install_state FROM engine_installs ei WHERE ei.workspace_id = b.workspace_id AND ei.engine_slug = a.engine_slug
+                   AND ei.deleted_at IS NULL), 'not_installed') AS engine_install_state,                                   -- v2.3.1 (CNS-137)
          (SELECT lp.id FROM probe_runs lp JOIN containers lc ON lc.id = lp.container_id AND lc.workspace_id = b.workspace_id
             AND lc.kind = 'system' AND lc.deleted_at IS NULL
           WHERE lp.engine_account_id = a.id AND lp.trigger = 'login_check' AND lp.status <> 'running'
@@ -371,12 +399,13 @@ WITH wk AS (
 )
 SELECT b.*, p.display_id AS last_login_check_display_id, p.status AS last_login_check_status, p.finished_at AS last_login_check_at,
        CASE WHEN b.is_enabled = 1 AND b.account_status = 'active' AND b.engine_slug = b.core_slug AND b.login_status = 'logged_in'
-                 AND b.quota_state <> 'exhausted' AND b.outage_since IS NULL
+                 AND b.quota_state <> 'exhausted' AND b.outage_since IS NULL AND b.engine_install_state = 'installed'
                  AND p.status IS 'ok' AND b.consent_ok = 1 THEN 1 ELSE 0 END AS is_ready,
        CASE WHEN b.engine_slug <> b.core_slug THEN 'wrong_type'
             -- v2.2.7 (CNS-093): không còn container AI Hệ thống sống (lớp hai — trigger containers_system_last_* chặn khi còn binding)
             WHEN NOT EXISTS (SELECT 1 FROM containers sc WHERE sc.workspace_id = b.workspace_id AND sc.kind = 'system'
                              AND sc.deleted_at IS NULL AND sc.desired_state <> 'absent') THEN 'container_missing'
+            WHEN b.engine_install_state <> 'installed' THEN 'engine_not_installed'   -- v2.3.1 (CNS-137): CLI chưa cài / đang tải / cài lỗi
             WHEN b.consent_ok = 0 THEN 'consent_missing'        -- v2.2.8: chưa đồng ý / đã rút / lời cảnh báo đổi version
             WHEN b.is_enabled = 0 THEN 'binding_disabled'
             WHEN b.account_status <> 'active' THEN 'account_' || b.account_status
@@ -427,7 +456,9 @@ WITH wk AS (
   SELECT wk.workspace_id, wk.core_agent_locked_at, wk.core_slug, COALESCE(e.name, wk.core_slug) AS core_name,
          c.engine_account_id, c.account_display_id, c.label AS account_label, c.binding_display_id, c.consent_state,
          COALESCE(c.is_ready, 0) AS is_ready,
-         CASE WHEN c.is_ready = 1 THEN NULL WHEN c.engine_account_id IS NULL THEN 'no_account' ELSE c.not_ready_reason END AS reason
+         CASE WHEN c.is_ready = 1 THEN NULL WHEN c.engine_account_id IS NULL THEN 'no_account' ELSE c.not_ready_reason END AS reason,
+         COALESCE((SELECT ei.install_state FROM engine_installs ei WHERE ei.workspace_id = wk.workspace_id AND ei.engine_slug = wk.core_slug
+                   AND ei.deleted_at IS NULL), 'not_installed') AS engine_install_state                                   -- v2.3.1 (CNS-137)
   FROM wk LEFT JOIN engines e ON e.slug = wk.core_slug
   LEFT JOIN v_core_agent_accounts c ON c.workspace_id = wk.workspace_id AND c.engine_binding_id = (
        SELECT y.engine_binding_id FROM v_core_agent_accounts y WHERE y.workspace_id = wk.workspace_id
@@ -444,6 +475,7 @@ WITH wk AS (
               WHEN 'login_check_failed' THEN 'lần kiểm đăng nhập mới nhất không đạt' WHEN 'login_check_partial' THEN 'lần kiểm đăng nhập mới nhất không đạt'
               WHEN 'relogin_in_progress' THEN 'đang đăng nhập lại' WHEN 'type_change_in_progress' THEN 'đang đổi loại Core agent'
               WHEN 'login_stalled' THEN 'đăng nhập bị bỏ dở'
+              WHEN 'engine_not_installed' THEN 'CLI chưa được cài'                                                             -- v2.3.1 (CNS-137)
               END AS reason_text,
          CASE WHEN x.reason = 'consent_missing' AND x.consent_state = 'identity_changed' THEN 'identity_changed' END AS sub_reason,
          CASE WHEN x.is_ready = 0 AND x.core_agent_locked_at IS NOT NULL THEN 1 ELSE 0 END AS blocks
@@ -463,11 +495,12 @@ WITH wk AS (
               WHEN t.reason = 'consent_missing' THEN 'Đồng ý lại điều khoản ' || t.core_name
               WHEN t.reason = 'container_missing' THEN 'Dựng lại container AI Hệ thống'
               WHEN t.reason IN ('relogin_in_progress', 'type_change_in_progress') THEN 'Hoàn tất đăng nhập trong terminal'
+              WHEN t.reason = 'engine_not_installed' THEN 'Cài lại CLI'                                                   -- v2.3.1 (CNS-137)
               END AS owner_action
   FROM t
 )
 SELECT u.workspace_id, u.core_slug, u.core_name, u.core_agent_locked_at, u.engine_account_id, u.account_display_id, u.account_label,
-       u.binding_display_id, u.is_ready,
+       u.binding_display_id, u.is_ready, u.engine_install_state,
        CASE WHEN u.is_ready = 1 THEN 'ok' WHEN u.core_agent_locked_at IS NULL THEN 'setup' ELSE 'recovery' END AS mode,
        u.blocks AS blocks_admin,
        u.reason, u.reason_text, u.sub_reason,
@@ -606,12 +639,40 @@ SELECT a.workspace_id, a.id AS engine_account_id, a.display_id, a.engine_slug, a
             THEN 1 ELSE 0 END AS is_core_agent,
        -- v2.2.9 (CONTRACT-r8b §C): trạng thái đồng ý điều khoản (v_account_consent) — A3.E / A5 hiện banner "đồng ý lại" khi 'missing' hoặc
        -- 'identity_changed' (đăng nhập ra danh tính khác: đồng ý cũ hết hiệu lực, tick lại = CN- mới, giữ EN-/EB-); áp cho Role lẫn AI Hệ thống
-       vc.consent_state, vc.consent_display_id
+       vc.consent_state, vc.consent_display_id,
+       -- v2.3.1 (CNS-137): trạng thái cài CLI của loại tài khoản (A5 cột "CLI", nút "Cài lại") — thiếu hàng ⇒ 'not_installed'
+       COALESCE(ei.install_state, 'not_installed') AS engine_install_state, ei.installed_version AS engine_installed_version
 FROM engine_accounts a
 JOIN v_account_consent vc ON vc.engine_account_id = a.id
 LEFT JOIN engine_bindings b ON b.engine_account_id = a.id AND b.workspace_id = a.workspace_id AND b.deleted_at IS NULL
 LEFT JOIN roles r ON r.id = b.role_id AND r.workspace_id = b.workspace_id
+LEFT JOIN engine_installs ei ON ei.workspace_id = a.workspace_id AND ei.engine_slug = a.engine_slug AND ei.deleted_at IS NULL
 WHERE a.deleted_at IS NULL;
+
+-- @ga:object view v_engine_installs
+CREATE VIEW v_engine_installs AS
+SELECT w.id AS workspace_id, e.slug AS engine_slug, e.name AS engine_name, e.adapter_status, e.core_capable,
+       i.id AS engine_install_id, COALESCE(i.install_state, 'not_installed') AS install_state, i.installed_version, i.failure_reason, i.detail,
+       i.checked_at, COALESCE(i.updated_at, i.created_at) AS state_changed_at,
+       CASE WHEN e.slug = COALESCE((SELECT json_extract(s.value_json, '$') FROM settings s WHERE s.workspace_id = w.id
+                                    AND s.key = 'system.core_agent_engine' AND s.deleted_at IS NULL), 'antigravity') THEN 1 ELSE 0 END AS is_core_agent_type
+FROM workspaces w CROSS JOIN engines e
+LEFT JOIN engine_installs i ON i.workspace_id = w.id AND i.engine_slug = e.slug AND i.deleted_at IS NULL
+WHERE w.kind = 'tenant' AND e.adapter_status IN ('ready', 'beta');
+
+-- @ga:object view v_relogin_required
+CREATE VIEW v_relogin_required AS
+SELECT w.id AS workspace_id, w.restored_at, a.id AS engine_account_id, a.display_id AS account_display_id, a.label, a.engine_slug, a.auth_method,
+       b.consumer_kind, b.role_id, r.display_id AS consumer_display_id,
+       CASE WHEN b.consumer_kind = 'system' THEN 'Hệ thống' ELSE r.name END AS consumer_label,
+       p.display_id AS last_login_check_display_id, p.status AS last_login_check_status, p.finished_at AS last_login_check_at
+FROM workspaces w
+JOIN engine_bindings b ON b.workspace_id = w.id AND b.deleted_at IS NULL AND b.is_enabled = 1
+JOIN engine_accounts a ON a.id = b.engine_account_id AND a.workspace_id = b.workspace_id AND a.deleted_at IS NULL AND a.status = 'active'
+LEFT JOIN roles r ON r.id = b.role_id AND r.workspace_id = b.workspace_id
+LEFT JOIN probe_runs p ON p.id = (SELECT lp.id FROM probe_runs lp WHERE lp.engine_account_id = a.id AND lp.trigger = 'login_check'
+                                   AND lp.finished_at >= w.restored_at ORDER BY lp.display_seq DESC LIMIT 1)   -- lần đang chạy: finished_at NULL ⇒ không tính
+WHERE w.restored_at IS NOT NULL AND p.status IS NOT 'ok';
 
 -- @ga:object view v_memory_chain
 CREATE VIEW v_memory_chain AS
@@ -1475,6 +1536,14 @@ UNION ALL
 SELECT 'role_wounds.revive_entry_id' AS fk, c.workspace_id, count(*) AS n FROM role_wounds c JOIN ledger_entries p ON p.id = c.revive_entry_id WHERE p.workspace_id <> c.workspace_id GROUP BY c.workspace_id
 UNION ALL
 SELECT 'role_wounds.reflection_session_id' AS fk, c.workspace_id, count(*) AS n FROM role_wounds c JOIN sessions p ON p.id = c.reflection_session_id WHERE p.workspace_id <> c.workspace_id GROUP BY c.workspace_id
+UNION ALL
+SELECT 'engine_installs.created_by' AS fk, c.workspace_id, count(*) AS n FROM engine_installs c JOIN actors p ON p.id = c.created_by WHERE p.workspace_id <> c.workspace_id GROUP BY c.workspace_id
+UNION ALL
+SELECT 'engine_installs.updated_by' AS fk, c.workspace_id, count(*) AS n FROM engine_installs c JOIN actors p ON p.id = c.updated_by WHERE p.workspace_id <> c.workspace_id GROUP BY c.workspace_id
+UNION ALL
+SELECT 'engine_installs.deleted_by' AS fk, c.workspace_id, count(*) AS n FROM engine_installs c JOIN actors p ON p.id = c.deleted_by WHERE p.workspace_id <> c.workspace_id GROUP BY c.workspace_id
+UNION ALL
+SELECT 'engine_installs.engine_slug' AS fk, c.workspace_id, count(*) AS n FROM engine_installs c JOIN engines p ON p.slug = c.engine_slug WHERE p.workspace_id <> c.workspace_id AND p.workspace_id <> '00000000000000000000000000' GROUP BY c.workspace_id
 UNION ALL
 SELECT 'engine_accounts.created_by' AS fk, c.workspace_id, count(*) AS n FROM engine_accounts c JOIN actors p ON p.id = c.created_by WHERE p.workspace_id <> c.workspace_id GROUP BY c.workspace_id
 UNION ALL

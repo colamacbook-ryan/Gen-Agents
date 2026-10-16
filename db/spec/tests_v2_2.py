@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Bằng chứng kiểm thử cho DATABASE.md v2.2 (→ v2.3.0) — chạy: python3 -B -I tests_v2_2.py [--perf]"""
+"""Bằng chứng kiểm thử cho DATABASE.md v2.2 (→ v2.3.1) — chạy: python3 -B -I tests_v2_2.py [--perf]"""
 import sqlite3, hashlib, hmac, json, os, sys, time, re, datetime, zoneinfo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -298,6 +298,8 @@ TQ_CHIBI = [('tq046', 'Gia Cát Lượng', '諸葛亮', 'Thục', 'strategist', 
             ('tq031', 'Hoa Đà', '華佗', 'Quần hùng', 'civil', 'male'), ('tqx001', 'Lính quèn', None, None, 'soldier', 'male')]
 TQ_CODES = [t[0] for t in TQ_CHIBI]
 
+INSTALLED_CLI = (('antigravity', '1.3.5'), ('claude-code', '2.1.299'))   # v2.3.1: version mock (Spike 1b), không phải giá trị registry
+
 def seed(with_fn=True):
     ctx = Ctx()
     db = connect(ctx, with_fn)
@@ -342,6 +344,10 @@ def seed(with_fn=True):
                         (17, 'system.core_agent_engine', '"antigravity"'),                        # v2.2.8 (Q-I5 [CHỐT]): Core agent = Antigravity — ST-0017
                         (18, 'chat.attachment_max_bytes', '26214400')):                           # v2.2.6 (B1.3): trần tệp chat 25 MB — ST-0018
             D.ins('settings', seqno=n, workspace_id=ws, key=k, value_json=v)
+        # v2.3.1 (BUILD-PLAN §A.2-5, §F.6 n, CNS-137): install.sh đã tải CLI Antigravity + Claude Code vào volume ga-engines (app ghi theo
+        # `ga-engine-install status`, actor system) — Core agent sẵn sàng đòi CLI của loại Core agent 'installed'
+        for slug, ver in INSTALLED_CLI:
+            D.ins('engine_installs', workspace_id=ws, engine_slug=slug, install_state='installed', installed_version=ver, created_by=A[(ws, 'system')])
     # v2.3.0 (CONTRACT-r9 §B): gói skin MVP tam-quoc-chibi 1.0.0 — 10 nhân vật chibi vẽ bằng code, cài khi tạo workspace (seed tham chiếu, actor system)
     # ⇒ SN-0001…0010 theo thứ tự hợp đồng; sha256 = sha256(JCS(tham số))
     SN = {}
@@ -547,6 +553,13 @@ def seed(with_fn=True):
     gc = compile_prompt('antigravity', 'default', CANON['compiled'], seqno=12)      # GC-0012 (design D4)
     gc_worst = compile_prompt('antigravity', 'worst', CANON['compiled'] + CANON['cond'], conditional=True)
     gc_cc = compile_prompt('claude-code', 'default', CANON['cc_compiled'])
+    # v2.3.1 (BUILD-PLAN §F.6 p, CNS-154): token prompt ĐO THẬT cho cổng Cấp thẻ = phiên baseline nạp bản 'worst' (vỏ + prompt) − phiên vỏ của tài khoản chính.
+    # Số mock = đúng số ước lượng (seed demo-fixed) ⇒ Mai: đo 1.685 + overhead 204 = 1.889 (giữ số chuẩn §7.6). Mốc giờ dùng lại của phiên vỏ (không gọi now()).
+    sh_id = D.one("SELECT overhead_shell_session_id FROM engine_accounts WHERE id=?", EN['mai_ag'])
+    sh_at, sh_tok = db.execute("SELECT started_at, tokens_input FROM sessions WHERE id=?", (sh_id,)).fetchone()
+    ss_meas = D.ins('sessions', workspace_id=W, agent_kind='system', trigger='baseline', engine_account_id=EN['mai_ag'], container_id=CT['Mai'],
+                    compiled_prompt_id=gc_worst, delivered_prompt_hash='c-antigravity-worst', started_at=sh_at, status='ok', ended_at=sh_at,
+                    tokens_input=sh_tok + CANON['compiled'] + CANON['cond'], title='baseline: vỏ adapter + prompt biên dịch nặng nhất (đo token prompt)')
     # ---- Telegram, chat, Ghim & Soi (+ ui_actions)
     sec = D.ins('secrets', workspace_id=W, kind='telegram_bot_token', label='bot', ciphertext=b'x', nonce=b'n', wrapped_dek=b'd',
                 dek_nonce=b'n', kek_id='kek1', fingerprint='fp')
@@ -722,7 +735,7 @@ def seed(with_fn=True):
                    DEF=DEF, WT=WT, WS=WS_, WM=WM, WL=WLn, tk=tk, tk2=tk2, tk_open=tk_open, cm=cm, rv1=rv1, rv2=rv2, rv3=rv3, rvp=rvp,
                    rvw=rvw, gc=gc, gc_worst=gc_worst, gc_cc=gc_cc, cd4=cd4, pp=pp, m1=m1, m2=m2, m3=m3, ss1=ss1, au_id=au_id,
                    au_hash=au_hash, ryan=ryan, cs=cs, cs_role=cs_role, sec=sec, tg=tg, pen=pen, tl=tl, kn=kn,
-                   tk447=tk447, au447=au447, tk449=tk449, tk454=tk454, cm22=cm22, penL=penL, rwL=rwL, ssL=ssL, PS2_=PS2, SN=SN)
+                   tk447=tk447, au447=au447, tk449=tk449, tk454=tk454, cm22=cm22, penL=penL, rwL=rwL, ssL=ssL, PS2_=PS2, SN=SN, ss_meas=ss_meas)
 
 # ------------------------------------------------------------------ quy trình purge Role (§10.9), có bước xuất Brain trước (CNS-025)
 def purge_role(D, ws, role, owner_actor, skip_actor=False, skip_export_offer=False):
@@ -783,7 +796,7 @@ def t_schema():
     D, X = seed()
     st = S.stats(D.db)
     fk = D.db.execute("PRAGMA foreign_key_check").fetchall()
-    report("schema", st['tables'] == len(S.MVP_TABLES) == 80 and not fk,
+    report("schema", st['tables'] == len(S.MVP_TABLES) == 81 and not fk,                   # v2.3.1: + engine_installs
            f"{st['tables']} bảng MVP, {st['views']} view, {st['triggers']} trigger, {st['indexes_total']} index (gồm autoindex); "
            f"seed chuẩn v2.2 nạp xong (gồm mẫu Trọng thương Lan RW-0001), foreign_key_check rỗng; v_integrity_tenant kiểm {st['tenant_fk_checked']} FK")
     bad = [(n, c, ref) for n in S.MVP_TABLES for (c, ref, _, _) in S.fks(n) if ref not in S.MVP_TABLES]
@@ -2144,14 +2157,23 @@ GATE_COLS = ("sign_ok, card_ok, gate_ok, overhead_source, overhead_label, polari
 def gate(D, role):
     return dict(zip([x.strip() for x in GATE_COLS.split(',')],
                     D.db.execute(f"SELECT {GATE_COLS} FROM v_role_prompt_budget WHERE role_id=?", (role,)).fetchone()))
-def _recompile_mai(D, X, rules_tok, tag):
-    """Biên dịch lại bản default của Mai với luật chơi đo được `rules_tok` token (tokenizer của engine) + ★ dự trữ 42; status 'ok'."""
+def _recompile_mai(D, X, rules_tok, tag, measure=True):
+    """Biên dịch lại bản default của Mai với luật chơi đo được `rules_tok` token (tokenizer của engine) + ★ dự trữ 42; status 'ok'.
+    v2.3.1 (CNS-154): compiler biên dịch luôn bản 'worst' CÙNG THẾ HỆ (+ khối có điều kiện 94); measure ⇒ thêm phiên ĐO token prompt của bản worst
+    (số mock = đúng số biên dịch) — cổng Cấp thẻ dùng số đo này."""
     W, mai = X['W'], X['mai']
     rules_txt, rules_params = render_rules(D, W)
+    total = 1591 - POLARIS_TOKENS + rules_tok + POLARIS_SUFFIX_RESERVE
     gc = D.ins('compiled_prompts', workspace_id=W, role_id=mai, revision_id=X['rv3'], engine_slug='antigravity', context_key='default',
-               compiler_version='c2', tokenizer='antigravity-tok', total_tokens=1591 - POLARIS_TOKENS + rules_tok + POLARIS_SUFFIX_RESERVE,
+               compiler_version='c2', tokenizer='antigravity-tok', total_tokens=total,
                frame_tokens=28, budget_tokens=2000, status='ok', content='...', content_hash=f'c-{tag}', stable_prefix_hash='p',
                polaris_params_hash=f'h-{tag}')
+    gw = D.ins('compiled_prompts', workspace_id=W, role_id=mai, revision_id=X['rv3'], engine_slug='antigravity', context_key='worst',
+               compiler_version='c2', tokenizer='antigravity-tok', total_tokens=total + CANON['cond'], frame_tokens=28, budget_tokens=2000,
+               status='ok' if total + CANON['cond'] <= 2000 else 'over_budget', content='...', content_hash=f'c-{tag}-w', stable_prefix_hash='p',
+               polaris_params_hash=f'h-{tag}')
+    if measure:
+        _ms(D, X, gw, total + CANON['cond'])
     D.ins('compiled_prompt_segments', workspace_id=W, compiled_prompt_id=gc, ordinal=1, layer='polaris', source_kind='polaris_rules',
           source_display='P', text=rules_txt, params_json=rules_params, token_count=rules_tok)
     D.ins('compiled_prompt_segments', workspace_id=W, compiled_prompt_id=gc, ordinal=2, layer='polaris', source_kind='polaris',
@@ -2362,7 +2384,7 @@ MSG_AL_NEW_T = 'chỉ thành chủ sở hữu active'                           
 MSG_TG_RESTORE_OWNER_T = 'chỉ owner của workspace khôi phục'                     # v2.2.13 (review bảo mật, HIGH)
 FO_REASONS = ['login_expired', 'outage', 'quota_exhausted', 'account_suspended']
 
-def _fresh_ws(D, tag, code):
+def _fresh_ws(D, tag, code, cli=True):
     """Workspace tenant mới, CHƯA onboarding: chỉ có owner (Ryan) + vài actor hệ thống; KHÔNG có hàng settings (fail-closed)."""
     db = D.db
     ws = uid('ws:' + tag)
@@ -2374,6 +2396,9 @@ def _fresh_ws(D, tag, code):
     for k in ('system', 'trainer', 'gateway'):
         A[k] = uid(f'actor:{ws}:{k}')
         db.execute("INSERT INTO actors(id,workspace_id,kind,system_key,label) VALUES(?,?,?,?,?)", (A[k], ws, 'system', k, k.title()))
+    if cli:                                     # v2.3.1 (CNS-137): bản cài đã tải CLI (install.sh) — cli=False: CLI chưa cài (thiếu hàng ⇒ not_installed)
+        for slug, ver in INSTALLED_CLI:
+            D.ins('engine_installs', workspace_id=ws, engine_slug=slug, install_state='installed', installed_version=ver, created_by=A['system'])
     return ws, A
 
 def _ob(D, ws, code):
@@ -3668,7 +3693,8 @@ def t_v229_status_matrix():
     """CONTRACT-r8b §B (CNS-098, 103, 115): v_core_agent_status là MỘT nguồn cho bảng "lý do × hành vi" — với TỪNG lý do (17; v2.2.10: 18 — + type_change_in_progress,
     CONTRACT-r8c §A; chữ đổi danh tính riêng, §C) ở chế độ khắc phục:
     reason_text, auto_recheck, fix_target, owner_action, is_incident, overlay_text, fix_hint (= màn + owner_action), hàng v_attention (danger chỉ khi
-    sự cố) và trigger notifications_core_incident_* (phát được ⇔ is_incident = 1 — so trigger với view). Đối chứng: setup (chưa khoá) và ok."""
+    sự cố) và trigger notifications_core_incident_* (phát được ⇔ is_incident = 1 — so trigger với view). Đối chứng: setup (chưa khoá) và ok.
+    v2.3.1 (CNS-137): + engine_not_installed (19 lý do; login_stalled kiểm riêng ở CORE-login-stalled vì cần đồng hồ giả)."""
     D, X = seed()
     db = D.db
     O = 'Đổi tài khoản / Đăng nhập lại'
@@ -3683,7 +3709,8 @@ def t_v229_status_matrix():
            'relogin_in_progress': (0, 'a5.system', 'Hoàn tất đăng nhập trong terminal', 0),
            'type_change_in_progress': (0, 'a5.system', 'Hoàn tất đăng nhập trong terminal', 0),   # v2.2.10 (CONTRACT-r8c §A)
            'no_account': (0, 'a5.system', O, 1), 'wrong_type': (0, 'a5.system', O, 1), 'binding_disabled': (0, 'a5.system', O, 1),
-           'account_disabled': (0, 'a5.system', O, 1), 'account_revoked': (0, 'a5.system', O, 1)}
+           'account_disabled': (0, 'a5.system', O, 1), 'account_revoked': (0, 'a5.system', O, 1),
+           'engine_not_installed': (0, 'a5.system', 'Cài lại CLI', 1)}                         # v2.3.1 (CNS-137): CLI Core agent cài lỗi ⇒ sự cố
     SCREEN = {'a5.system': 'A5 › AI Hệ thống', 'a5.container': 'A5 › Container (Hạ tầng)'}
     ws = {}
     def mk(key, i):
@@ -3695,6 +3722,8 @@ def t_v229_status_matrix():
     # --- lý do đạt được bằng đường bình thường (guard còn nguyên)
     db.execute("UPDATE engine_accounts SET outage_since=? WHERE id=?", (now(), acc('outage')))
     db.execute("UPDATE engine_accounts SET quota_state='exhausted' WHERE id=?", (acc('quota_exhausted'),))
+    db.execute("UPDATE engine_installs SET install_state='failed', installed_version=NULL, failure_reason='network' WHERE workspace_id=? "
+               "AND engine_slug='antigravity'", (ws['engine_not_installed'][0],))                  # v2.3.1: đường bình thường (app ghi theo ga-engine-install)
     for k, v in (('login_expired', 'expired'), ('login_error', 'error'), ('login_unknown', 'unknown'), ('login_suspended', 'suspended'),
                  ('relogin_in_progress', 'in_progress')):
         db.execute("UPDATE engine_accounts SET login_status=? WHERE id=?", (v, acc(k)))
@@ -3749,7 +3778,7 @@ def t_v229_status_matrix():
     ok_ok = (s_ok['mode'] == 'ok' and all(s_ok[c] in (None, 0) for c in ('reason', 'sub_reason', 'is_incident', 'auto_recheck', 'fix_target',
                                                                           'owner_action', 'overlay_text', 'fix_hint')) and not nt_ok)
     reasons = {k.split('/')[0] for k in EXP}
-    ok = not bad and len(reasons) == 18 and ok_setup and ok_ok                      # v2.2.10: + type_change_in_progress (v2.2.9: 17)
+    ok = not bad and len(reasons) == 19 and ok_setup and ok_ok                      # v2.3.1: + engine_not_installed (v2.2.10: 18, + type_change_in_progress; v2.2.9: 17)
     report("CORE-status-matrix", ok, f"{len(EXP) - len(bad)}/{len(EXP)} trạng thái khớp bảng §B ({len(reasons)} lý do + consent_missing do đổi danh tính): "
            f"auto_recheck = 1 chỉ outage / quota_exhausted; fix_target a5.container chỉ container_missing (\"{seen['container_missing']['fix_hint']}\"); "
            f"is_incident = 0 chỉ relogin_in_progress, type_change_in_progress và đổi danh tính (overlay riêng từng trạng thái, A0 warn); fix_hint = màn + "
@@ -5428,6 +5457,306 @@ def t_v230_state_priority():
            f"author_actor_id) ⇒ {res.get('j')}; nhận việc (đối chiếu Polaris) ⇒ {res.get('k')}; cộng rồi đảo ⇒ {res.get('m')}"
            + (f" — LỆCH {bad}" if bad else ""))
 
+
+# ================================================================== v2.3.1 (BUILD-PLAN §F.6 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN]; ADR 0004)
+MSG_CLI_T = 'CHECK constraint failed'
+def _cli_core_ws(D, tag, code, probe=True):
+    """Workspace mới CHƯA cài CLI (thiếu hàng engine_installs) + container AI Hệ thống + tài khoản Core agent Antigravity (đồng ý Clause 6) + binding;
+    probe ⇒ một lần kiểm đăng nhập đạt (khoá loại)."""
+    ws, A = _fresh_ws(D, tag, code, cli=False)
+    ct = D.ins('containers', workspace_id=ws, kind='system', container_name=f'ga-sys-{code.lower()}', desired_state='sleeping', observed_state='created')
+    a = _core_acc(D, ws, 'Google — Hệ thống', f'ga-auth-{code.lower()}-0001', 'logged_in')
+    b = D.ins('engine_bindings', workspace_id=ws, consumer_kind='system', engine_account_id=a, priority=1)
+    if probe:
+        _probe(D, ws, a, ct)
+    return ws, A, ct, a, b
+
+def t_v231_cli_install():
+    """v2.3.1 (BUILD-PLAN §A.2-5, §B.7, §B.8, §F.6 n; CNS-137): trạng thái cài CLI = engine_installs (workspace × loại CLI); thiếu hàng ⇒ chưa cài (fail-closed).
+    Core agent sẵn sàng đòi CLI của loại Core agent 'installed' (CORE_READY + v_core_agent_accounts) ⇒ lý do O4 'engine_not_installed' "CLI chưa được cài":
+    sự cố (chuông + Telegram), chặn Role mới + phiên AI Hệ thống; CORE_CALM không coi "đổi loại sang CLI chưa cài" là êm. CHECK: installed ⇔ có version,
+    failed ⇔ có lý do; một hàng sống mỗi (workspace, loại)."""
+    D, X = seed()
+    db, W, A, EN, CT = D.db, X['W'], X['A'], X['EN'], X['CT']
+    c, case = _cases(db)
+    # --- CHECK + UNIQUE (workspace chưa cài gì ⇒ không có hàng nào chắn bằng UNIQUE)
+    wx, AX = _fresh_ws(D, 'cli-x', 'CLX1', cli=False)
+    ins = lambda **kw: (lambda: D.ins('engine_installs', workspace_id=wx, created_by=AX['system'], **kw))
+    case("installed thiếu installed_version", ins(engine_slug='antigravity', install_state='installed'), MSG_CLI_T)
+    case("not_installed mà có installed_version", ins(engine_slug='antigravity', install_state='not_installed', installed_version='1.3.5'), MSG_CLI_T)
+    case("failed thiếu failure_reason", ins(engine_slug='antigravity', install_state='failed'), MSG_CLI_T)
+    case("installing mà có failure_reason", ins(engine_slug='antigravity', install_state='installing', failure_reason='network'), MSG_CLI_T)
+    case("install_state lạ 'done'", ins(engine_slug='antigravity', install_state='done', installed_version='1'), MSG_CLI_T)
+    case("failure_reason lạ 'oops'", ins(engine_slug='antigravity', install_state='failed', failure_reason='oops'), MSG_CLI_T)
+    case("loại CLI không có trong danh mục", ins(engine_slug='gemini-cli', install_state='not_installed'), 'FOREIGN KEY')
+    db.execute("DELETE FROM engine_installs WHERE workspace_id=?", (wx,))     # no-op khi mọi ca trên bị chặn; dọn hàng lọt (đột biến) để test báo FAIL thay vì vỡ
+    ei = D.ins('engine_installs', workspace_id=wx, created_by=AX['system'], engine_slug='antigravity', install_state='installing')
+    case("hàng sống thứ hai cùng (workspace, loại)", ins(engine_slug='antigravity', install_state='not_installed'), 'UNIQUE')
+    case("UPDATE installing → installed không có version", lambda: db.execute("UPDATE engine_installs SET install_state='installed' WHERE id=?", (ei,)),
+         MSG_CLI_T)
+    db.execute("UPDATE engine_installs SET deleted_at=? WHERE id=?", (now(), ei))
+    redo_ok = _try(ins(engine_slug='antigravity', install_state='failed', failure_reason='domain_blocked', detail='GET … 403'))   # xoá mềm ⇒ ghi lại được
+    vi = sorted(db.execute("SELECT engine_slug, install_state, failure_reason, is_core_agent_type FROM v_engine_installs WHERE workspace_id=?", (wx,)))
+    acc_x = _acc(D, wx, 'claude-code', 'Anthropic — thử', 'ga-auth-clx1-cc')                  # tài khoản của loại chưa có hàng cài đặt
+    vi_ok = (vi == [('antigravity', 'failed', 'domain_blocked', 1), ('claude-code', 'not_installed', None, 0)]     # thiếu hàng ⇒ not_installed; codex/openclaw ẩn
+             and D.one("SELECT count(*) FROM v_engine_installs WHERE workspace_id=?", X['SYS']) == 0                # workspace hệ thống không có hàng
+             and D.one("SELECT engine_install_state FROM v_engine_accounts WHERE engine_account_id=?", acc_x) == 'not_installed')
+    # --- Onboarding trên bản cài chưa có CLI: mode setup, lý do engine_not_installed (không overlay) ⇒ cài ⇒ kiểm đăng nhập ⇒ ok
+    w1, A1, ct1, a1, b1 = _cli_core_ws(D, 'cli-a', 'CLA1', probe=False)
+    s_setup = _status(D, w1)
+    st_setup = D.one("SELECT engine_install_state FROM v_core_agent_status WHERE workspace_id=?", w1)
+    ob4 = _ob(D, w1, 'OB-04')
+    ei1 = D.ins('engine_installs', workspace_id=w1, created_by=A1['system'], engine_slug='antigravity', install_state='installing')
+    r_inst = _status(D, w1)['reason']
+    _probe(D, w1, a1, ct1)                                                  # kiểm đăng nhập đạt (khoá loại) trong lúc CLI còn đang tải
+    s_lock = _status(D, w1)
+    role_lock, nt_lock = _try_role(D, w1, 'Thử khi đang tải'), _nt_core(D, w1, 'cli-installing')
+    db.execute("UPDATE engine_installs SET install_state='installed', installed_version='1.3.5', checked_at=? WHERE id=?", (now(), ei1))
+    s_ok = _status(D, w1)
+    role_ok = _try_role(D, w1, 'Thử khi đã cài')
+    flow_ok = ((s_setup['mode'], s_setup['reason'], s_setup['blocks_admin'], s_setup['reason_text'], s_setup['owner_action'], s_setup['fix_target'])
+               == ('setup', 'engine_not_installed', 0, 'CLI chưa được cài', 'Cài lại CLI', 'a5.system') and st_setup == 'not_installed'
+               and ob4[0] == 'err' and r_inst == 'engine_not_installed'
+               and (s_lock['mode'], s_lock['reason'], s_lock['is_incident']) == ('recovery', 'engine_not_installed', 1) and not role_lock and nt_lock
+               and s_ok['mode'] == 'ok' and role_ok)
+    # --- sự cố lúc đang dùng (seed W: Core agent sẵn sàng): CLI Antigravity cài lỗi ⇒ O4 sự cố, chặn Role mới + phiên AI Hệ thống, phát được cảnh báo
+    ei_w = D.one("SELECT id FROM engine_installs WHERE workspace_id=? AND engine_slug='antigravity'", W)
+    sa_ins = lambda: D.ins('sessions', workspace_id=W, agent_kind='interviewer', trigger='interview', engine_account_id=EN['sys_ag'],
+                           container_id=CT['sys'], started_at=now())
+    pre = (_status(D, W)['mode'], _try(sa_ins), _try_role(D, W, 'Thử trước'))                     # đối chứng: ok, phiên + Role mới được
+    db.execute("UPDATE engine_installs SET install_state='failed', installed_version=NULL, failure_reason='checksum_mismatch' WHERE id=?", (ei_w,))
+    s_f = _status(D, W)
+    att = db.execute("SELECT level, what FROM v_attention WHERE workspace_id=? AND what LIKE '%Core agent%'", (W,)).fetchall()
+    case("Role mới khi CLI Core agent cài lỗi", lambda: _role(D, W, 'Thử sau'), 'INT-20')
+    case("phiên Interviewer khi CLI Core agent cài lỗi", sa_ins, 'INT-20')
+    nt_f = _nt_core(D, W, 'cli-failed')
+    inc_ok = ((s_f['mode'], s_f['blocks_admin'], s_f['reason'], s_f['is_incident'], s_f['auto_recheck'], s_f['fix_target'], s_f['owner_action'])
+              == ('recovery', 1, 'engine_not_installed', 1, 0, 'a5.system', 'Cài lại CLI')
+              and s_f['overlay_text'] == 'Core agent gặp sự cố: CLI chưa được cài. Xử lý trước khi tiếp tục.'
+              and s_f['fix_hint'] == 'A5 › AI Hệ thống: Cài lại CLI' and att == [('danger', s_f['overlay_text'])] and nt_f)
+    # xoá mềm hàng (kể cả hàng 'installed') ⇒ coi như chưa cài; hàng mới 'installed' ⇒ hết O4
+    db.execute("UPDATE engine_installs SET install_state='installed', installed_version='1.3.6', failure_reason=NULL WHERE id=?", (ei_w,))
+    m_back = _status(D, W)['mode']
+    db.execute("UPDATE engine_installs SET deleted_at=? WHERE id=?", (now(), ei_w))
+    r_del = _status(D, W)['reason']
+    del_block = (not _try_role(D, W, 'Thử khi xoá mềm hàng cài')) and _nt_core(D, W, 'cli-deleted')        # trigger cùng định nghĩa với view
+    re_ins = _try(lambda: D.ins('engine_installs', workspace_id=W, created_by=A[(W, 'system')], engine_slug='antigravity', install_state='installed',
+                                installed_version='1.3.6'))                        # xoá mềm ⇒ ghi hàng mới được (partial UNIQUE)
+    m_re = _status(D, W)['mode']
+    # đối chứng: CLI của loại KHÁC (Claude Code) lỗi không làm Core agent (Antigravity) mất sẵn sàng; A5 thấy trạng thái cài từng tài khoản
+    db.execute("UPDATE engine_installs SET install_state='failed', installed_version=NULL, failure_reason='network' WHERE workspace_id=? "
+               "AND engine_slug='claude-code' AND deleted_at IS NULL", (W,))
+    m_other = _status(D, W)['mode']
+    acc_cli = dict(db.execute("SELECT display_id, engine_install_state FROM v_engine_accounts WHERE workspace_id=?", (W,)).fetchall())
+    n_acc = D.one("SELECT count(*) FROM v_engine_accounts WHERE workspace_id=?", W)            # hàng cài đặt đã xoá mềm không nhân đôi tài khoản
+    other_ok = (pre == ('ok', True, True) and m_back == 'ok' and r_del == 'engine_not_installed' and del_block and re_ins and m_re == 'ok' and m_other == 'ok'
+                and acc_cli == {'EN-0001': 'installed', 'EN-0003': 'installed', 'EN-0004': 'failed', 'EN-0005': 'installed'} and n_acc == 4)
+    # --- đổi loại khi sự cố sang loại CHƯA cài ⇒ vẫn sự cố (engine_not_installed, phát được cảnh báo) — CORE_CALM không coi là "đang đổi loại";
+    #     đối chứng: đích đã cài ⇒ type_change_in_progress (êm, không phát)
+    def tc(tag, code, cc_state):
+        w, Aw, ct, accs, bs = _core_ws(D, tag, code, n=1)
+        if cc_state != 'installed':
+            db.execute("UPDATE engine_installs SET install_state=?, installed_version=NULL WHERE workspace_id=? AND engine_slug='claude-code'", (cc_state, w))
+        db.execute("UPDATE engine_accounts SET login_status='suspended' WHERE id=?", (accs[0],))
+        _type_change(D, w, 'claude-code', D.owner_actor(w), f'ga-auth-{code.lower()}-cc', insert=True)
+        s = _status(D, w)
+        return s['reason'], s['is_incident'], _nt_core(D, w, tag)
+    tc_bad, tc_good = tc('cli-tc1', 'CLT1', 'not_installed'), tc('cli-tc2', 'CLT2', 'installed')
+    tc_ok = tc_bad == ('engine_not_installed', 1, True) and tc_good == ('type_change_in_progress', 0, False)
+    ok = all(x[1] for x in c) and redo_ok and vi_ok and flow_ok and inc_ok and other_ok and tc_ok
+    report("CLI-install", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn (CHECK installed ⇔ version ×2, failed ⇔ lý do ×2, enum ×2, FK loại CLI, hàng sống thứ hai, "
+           f"UPDATE thiếu version, Role mới + phiên Interviewer khi CLI Core agent cài lỗi); xoá mềm ⇒ ghi lại được ({'đúng' if redo_ok else 'SAI'}); "
+           f"v_engine_installs thiếu hàng ⇒ not_installed ({'đúng' if vi_ok else 'SAI'}); Onboarding chưa có CLI ⇒ setup + \"{s_setup['reason_text']}\" / "
+           f"\"{s_setup['owner_action']}\" (OB-04 err), installing ⇒ {r_inst}; kiểm đăng nhập đạt lúc đang tải ⇒ {s_lock['mode']} / {s_lock['reason']} (Role mới bị chặn, phát cảnh báo); "
+           f"installed ⇒ {s_ok['mode']}, Role mới được ({'đúng' if flow_ok else 'SAI'}); "
+           f"đang dùng mà CLI lỗi ⇒ {s_f['mode']} / {s_f['reason']} / sự cố {s_f['is_incident']} / A0 danger / phát cảnh báo {nt_f} ({'đúng' if inc_ok else 'SAI'}); "
+           f"cài lại ⇒ {m_back}, xoá mềm hàng ⇒ {r_del} (trigger cũng chặn Role mới + phát cảnh báo), hàng mới ⇒ {m_re}; Claude Code lỗi khi Core = Antigravity ⇒ {m_other}; A5 {acc_cli} "
+           f"({'đúng' if other_ok else 'SAI'}); đổi loại sang CLI chưa cài ⇒ {tc_bad}, sang CLI đã cài ⇒ {tc_good} ({'đúng' if tc_ok else 'SAI'})")
+    _show(c)
+
+MEAS_COLS = ("measured_prompt_tokens, card_total_worst, prompt_source, prompt_label, prompt_tokenizer, card_ok, gate_ok, sign_ok, card_block_reason, "
+             "total_worst")
+def _meas(D, role):
+    return dict(zip([x.strip() for x in MEAS_COLS.split(',')],
+                    D.db.execute(f"SELECT {MEAS_COLS} FROM v_role_prompt_budget WHERE role_id=?", (role,)).fetchone()))
+def _gc(D, X, ctx, tag, **kw):
+    """Một bản biên dịch của Mai (mặc định: cùng thế hệ với bản seed — rv3, vị trí rvp, Nội quy rvw, antigravity, bộ số luật chơi của seed)."""
+    total = kw.pop('total', CANON['compiled'] + CANON['cond'])
+    base = dict(revision_id=X['rv3'], position_revision_id=X['rvp'], rules_revision_id=X['rvw'], engine_slug='antigravity',
+                polaris_params_hash=D.one("SELECT polaris_params_hash FROM compiled_prompts WHERE id=?", X['gc_worst']))
+    base.update(kw)
+    return D.ins('compiled_prompts', workspace_id=X['W'], role_id=X['mai'], context_key=ctx, compiler_version='c3', tokenizer='o200k_base*1.15',
+                 total_tokens=total, frame_tokens=28, budget_tokens=2000, status='ok' if total <= 2000 else 'over_budget', content='...',
+                 content_hash=f'c-{tag}', stable_prefix_hash='p', **base)
+def _ms(D, X, gc, n, acc=None, **kw):
+    """Phiên ĐO token prompt: baseline nạp bản gc, tokens_input = phiên vỏ của tài khoản chính Mai + n."""
+    sh = D.one("SELECT s.tokens_input FROM sessions s JOIN engine_accounts a ON a.overhead_shell_session_id = s.id WHERE a.id=?", X['EN']['mai_ag'])
+    h = kw.pop('hash', D.one("SELECT content_hash FROM compiled_prompts WHERE id=?", gc))
+    st = kw.pop('status', 'ok')
+    t = now()
+    return D.ins('sessions', workspace_id=X['W'], agent_kind='system', trigger=kw.pop('trigger', 'baseline'), engine_account_id=acc or X['EN']['mai_ag'],
+                 container_id=X['CT']['Mai'], compiled_prompt_id=gc, delivered_prompt_hash=h, started_at=t, status=st,
+                 ended_at=None if st == 'running' else t, tokens_input=sh + n, title='baseline: đo token prompt', **kw)
+
+def t_v231_card_measured():
+    """v2.3.1 (BUILD-PLAN §A.1 dòng Token prompt, §F.6 p; CNS-154; G-07/G-27): cổng Cấp thẻ dùng token prompt ĐO THẬT — phiên baseline nạp bản 'worst' CÙNG
+    THẾ HỆ với bản default hiện hành, mới nhất, xong 'ok', tài khoản chính, adapter xác nhận hash; số đo = phiên đo − phiên vỏ (âm ⇒ không có). Ước lượng
+    (token_count của compiler, gồm biên ×1,15) chỉ cho cổng Ký. Nhãn nguồn 'measured:<engine>'."""
+    D, X = seed()
+    db, mai, lan = D.db, X['mai'], X['lan']
+    m0, l0 = _meas(D, mai), _meas(D, lan)
+    seed_ok = ((m0['measured_prompt_tokens'], m0['card_total_worst'], m0['prompt_source'], m0['prompt_label'], m0['prompt_tokenizer'], m0['card_ok'],
+                m0['gate_ok'], m0['sign_ok']) == (1685, 1889, 'measured', 'đo thật', 'measured:antigravity', 1, 1, 1)
+               and l0['prompt_source'] == 'estimated' and l0['prompt_label'] == 'ước lượng' and l0['card_ok'] == 0 and l0['measured_prompt_tokens'] is None)
+    # --- phiên KHÔNG được tính (mỗi phiên vi phạm đúng một điều kiện, mới hơn phiên seed, số đo 1.900 ⇒ nếu bị tính thì Cấp thẻ đỏ)
+    gw = X['gc_worst']
+    skip = [('đo bản default (không phải worst)', lambda: _ms(D, X, X['gc'], 1900)),
+            ('tài khoản ưu tiên 2 (EN-0004 Claude Code)', lambda: _ms(D, X, gw, 1900, acc=X['EN']['mai_cc'])),
+            ("trigger 'probe' (không phải baseline)", lambda: _ms(D, X, gw, 1900, trigger='probe')),
+            ("phiên lỗi (status 'error')", lambda: _ms(D, X, gw, 1900, status='error')),
+            ("phiên đang chạy (status 'running')", lambda: _ms(D, X, gw, 1900, status='running')),
+            ('adapter không xác nhận hash (delivered_prompt_hash NULL)', lambda: _ms(D, X, gw, 1900, hash=None))]
+    bad_skip = []
+    for name, fn in skip:
+        fn()
+        m = _meas(D, mai)
+        if m['measured_prompt_tokens'] != 1685 or m['card_ok'] != 1:
+            bad_skip.append((name, m['measured_prompt_tokens']))
+    # --- bản worst KHÁC THẾ HỆ (mới hơn, có phiên đo 1.900) không được tính — mỗi bản lệch đúng một trường
+    gens = [('vị trí khác (position_revision_id NULL)', dict(position_revision_id=None)), ('Nội quy khác (rules_revision_id NULL)', dict(rules_revision_id=None)),
+            ('engine khác (claude-code)', dict(engine_slug='claude-code')), ('bộ số luật chơi khác (polaris_params_hash)', dict(polaris_params_hash='h-khac')),
+            ('revision cũ (rv2)', dict(revision_id=X['rv2'])), ("ngữ cảnh khác cùng thế hệ ('telegram', không phải worst)", dict(ctx='telegram'))]
+    bad_gen = []
+    for i, (name, kw) in enumerate(gens):
+        g = _gc(D, X, kw.pop('ctx', 'worst'), f'gen{i}', **kw)
+        _ms(D, X, g, 1900)
+        m = _meas(D, mai)
+        if m['measured_prompt_tokens'] != 1685:
+            bad_gen.append((name, m['measured_prompt_tokens']))
+    # --- thuận: phiên đo mới hợp lệ thắng phiên cũ; CNS-154: số đo > ngân sách trong khi ước lượng ≤ ngân sách ⇒ Ký ✓, Cấp thẻ ✗ (đo thật)
+    _ms(D, X, gw, 1700)
+    m1 = _meas(D, mai)
+    _ms(D, X, gw, 1850)
+    m2 = _meas(D, mai)
+    # phiên đo có tokens_input < phiên vỏ (số âm) ⇒ không có số đo ⇒ Cấp thẻ ✗ "chưa đo thật"
+    _ms(D, X, gw, -50)
+    m3 = _meas(D, mai)
+    live_ok = ((m1['measured_prompt_tokens'], m1['card_total_worst'], m1['card_ok']) == (1700, 1904, 1)
+               and (m2['measured_prompt_tokens'], m2['card_total_worst'], m2['card_ok'], m2['gate_ok'], m2['sign_ok'], m2['total_worst'])
+               == (1850, 2054, 0, 0, 1, 1889) and m2['card_block_reason'] == 'vượt ngân sách (đo thật): nặng nhất 2054 / 2000'
+               and m3['measured_prompt_tokens'] is None and m3['card_ok'] == 0 and m3['prompt_source'] == 'estimated'
+               and 'chưa đo thật' in (m3['card_block_reason'] or ''))
+    # --- biên dịch lại (bộ số luật chơi mới) ⇒ thế hệ mới chưa đo ⇒ Cấp thẻ ✗; đo bản worst của thế hệ mới ⇒ ✓
+    D2, X2 = seed()
+    _recompile_mai(D2, X2, 40, 'g2', measure=False)
+    n1 = _meas(D2, X2['mai'])
+    gw2 = D2.one("SELECT id FROM compiled_prompts WHERE content_hash='c-g2-w'")
+    _ms(D2, X2, gw2, D2.one("SELECT total_tokens FROM compiled_prompts WHERE id=?", gw2))
+    n2 = _meas(D2, X2['mai'])
+    regen_ok = (n1['measured_prompt_tokens'] is None and n1['card_ok'] == 0 and n1['sign_ok'] == 1 and n1['prompt_tokenizer'] == 'antigravity-tok'
+                and n2['card_ok'] == 1 and n2['prompt_source'] == 'measured')
+    ok = seed_ok and not bad_skip and not bad_gen and live_ok and regen_ok
+    report("CARD-measured", ok, f"seed Mai: đo {m0['measured_prompt_tokens']} + overhead 204 = {m0['card_total_worst']} ({m0['prompt_tokenizer']}, "
+           f"\"{m0['prompt_label']}\") ⇒ Cấp thẻ ✓; Lan chưa đo ⇒ \"{l0['prompt_label']}\", Cấp thẻ ✗ ({'đúng' if seed_ok else 'SAI'}); "
+           f"{len(skip) - len(bad_skip)}/{len(skip)} phiên sai điều kiện bị bỏ qua {bad_skip or ''}; {len(gens) - len(bad_gen)}/{len(gens)} bản worst khác thế hệ "
+           f"bị bỏ qua {bad_gen or ''}; phiên đo mới 1.700 ⇒ {m1['card_total_worst']} ✓; CNS-154: đo 1.850 ⇒ {m2['card_total_worst']} > 2.000 trong khi ước lượng "
+           f"{m2['total_worst']} ⇒ Ký {m2['sign_ok']}, Cấp thẻ {m2['card_ok']} — \"{m2['card_block_reason']}\"; số đo âm ⇒ \"{m3['card_block_reason']}\" "
+           f"({'đúng' if live_ok else 'SAI'}); biên dịch lại ⇒ chưa đo ⇒ Cấp thẻ {n1['card_ok']} (Ký {n1['sign_ok']}), đo bản worst mới ⇒ {n2['card_ok']} "
+           f"({'đúng' if regen_ok else 'SAI'})")
+
+MSG_RA_T = 'backup.remote_anchor = '
+def t_v231_anchor():
+    """v2.3.1 (BUILD-PLAN §A.1 dòng Bản xuất Brain, §F.6 h; CNS-146; G-06): neo audit ngoài máy chỉ qua git remote HTTPS + token trong secrets kind mới
+    'anchor_remote_token'. settings_remote_anchor_i/_u: url 'https://', không có '@' (user:token trong URL), secret cùng workspace đúng kind; thiếu / sai kiểu ⇒
+    chặn; đổi khoá đi / về bị chặn; xoá mềm setting hỏng vẫn được."""
+    D, X = seed()
+    db, W, W2, A = D.db, X['W'], X['W2'], X['A']
+    own = A[(W, 'owner')]
+    sec = lambda kind, ws=W: D.ins('secrets', workspace_id=ws, kind=kind, label='neo audit', ciphertext=b'x', nonce=b'n', wrapped_dek=b'd',
+                                   dek_nonce=b'n', kek_id='kek1', fingerprint=f'fp-{kind}-{ws[:6]}')
+    try:
+        s_ok = sec('anchor_remote_token')                                     # thuận: kind mới ghi được
+    except sqlite3.DatabaseError as e:
+        report("ANCHOR-https", False, f"secrets.kind 'anchor_remote_token' bị từ chối: {e}"); return
+    s_bt, s_w2 = sec('backup_target'), sec('anchor_remote_token', W2)
+    URL = 'https://git.example.com/afi/anchors.git'
+    val = lambda url, sid: json.dumps({'url': url, 'secret_id': sid})
+    ins = lambda v, ws=W: (lambda: D.ins('settings', workspace_id=ws, key='backup.remote_anchor', value_json=v, created_by=A[(ws, 'owner')]))
+    upd = lambda sql, *p: (lambda: db.execute(f"UPDATE settings SET {sql}, updated_by=?, updated_at=? WHERE workspace_id=? AND key='backup.remote_anchor' "
+                                              f"AND deleted_at IS NULL", (*p, own, now(), W)))
+    c, case = _cases(db)
+    case("http:// (không TLS)", ins(val('http://git.example.com/afi/anchors.git', s_ok)), MSG_RA_T)
+    case("ssh:// (SSH chưa hỗ trợ)", ins(val('ssh://git.example.com/afi/anchors.git', s_ok)), MSG_RA_T)
+    case("HTTPS có user:token trong URL", ins(val('https://ryan:ghp_abc123@git.example.com/afi/anchors.git', s_ok)), MSG_RA_T)
+    case("secret kind backup_target", ins(val(URL, s_bt)), MSG_RA_T)
+    case("secret của workspace khác", ins(val(URL, s_w2)), MSG_RA_T)
+    case("secret_id không tồn tại", ins(val(URL, uid('khong-co'))), MSG_RA_T)
+    case("thiếu url", ins(json.dumps({'secret_id': s_ok})), MSG_RA_T)
+    case("giá trị là chuỗi URL (không phải object)", ins(json.dumps(URL)), MSG_RA_T)
+    ins_ok = _try(ins(val(URL, s_ok)))
+    case("UPDATE sang ssh://", upd("value_json=?", val('ssh://git.example.com/a.git', s_ok)), MSG_RA_T)
+    case("UPDATE chèn token vào URL", upd("value_json=?", val('https://x:y@git.example.com/a.git', s_ok)), MSG_RA_T)
+    case("đổi khoá đi (→ backup.remote_anchor.old, giá trị hợp lệ)", upd("key='backup.remote_anchor.old'"), MSG_RA_T)
+    D.ins('settings', workspace_id=W2, key='backup.schedule', value_json=val(URL, s_w2), created_by=A[(W2, 'owner')])
+    case("đổi khoá về (backup.schedule → backup.remote_anchor, giá trị hợp lệ)",
+         lambda: db.execute("UPDATE settings SET key='backup.remote_anchor' WHERE workspace_id=? AND key='backup.schedule'", (W2,)), MSG_RA_T)
+    upd_ok = _try(upd("value_json=?", val('https://git.example.org/afi/anchors2.git', s_ok)))
+    db.execute("UPDATE secrets SET kind='integration_token' WHERE id=?", (s_ok,))          # secret đổi kind về sau ⇒ setting hỏng
+    del_ok = _try(upd("deleted_at=?", now()))                                                 # vẫn xoá mềm được
+    w2_ok = _try(ins(val(URL, s_w2), W2))
+    kind_ok = s_ok is not None
+    ok = all(x[1] for x in c) and ins_ok and upd_ok and del_ok and w2_ok and kind_ok
+    report("ANCHOR-https", ok, f"secrets.kind 'anchor_remote_token' ghi được; {sum(x[1] for x in c)}/{len(c)} ca bị chặn (http, ssh://, user:token trong URL, "
+           f"secret sai kind / workspace khác / không tồn tại, thiếu url, không phải object, UPDATE sang ssh / chèn token, đổi khoá đi / về); thuận: HTTPS + "
+           f"secret đúng ({'được' if ins_ok else 'BỊ CHẶN'}), sửa URL HTTPS khác ({'được' if upd_ok else 'BỊ CHẶN'}), secret đổi kind về sau ⇒ xoá mềm setting "
+           f"({'được' if del_ok else 'BỊ CHẶN'}), workspace khác với secret của nó ({'được' if w2_ok else 'BỊ CHẶN'})")
+    _show(c)
+
+def t_v231_relogin():
+    """v2.3.1 (BUILD-PLAN §B.9, CNS-145; yêu cầu Gen 2026-10-16): v_relogin_required — sau khôi phục (workspaces.restored_at), tài khoản có binding sống + bật,
+    tài khoản sống + active mà lần kiểm đăng nhập MỚI NHẤT kể từ mốc chưa 'ok'. Mốc chỉ tiến (workspaces_restored_u)."""
+    D, X = seed()
+    db, W, EN, EB, CT = D.db, X['W'], X['EN'], X['EB'], X['CT']
+    q = lambda ws=W: sorted(r[0] for r in db.execute("SELECT account_display_id FROM v_relogin_required WHERE workspace_id=?", (ws,)))
+    pb = lambda acc, ct, st='ok', trig='login_check': D.ins('probe_runs', workspace_id=W, engine_account_id=acc, engine_slug=D.one(
+        "SELECT engine_slug FROM engine_accounts WHERE id=?", acc), container_id=ct, trigger=trig, auth_mode='oauth', status=st, started_at=now(),
+        finished_at=None if st == 'running' else now())
+    l0 = q()                                                                                  # chưa khôi phục ⇒ rỗng (dù có tài khoản)
+    t0 = now()
+    db.execute("UPDATE workspaces SET restored_at=? WHERE id=?", (t0, W))
+    l1 = q()                                                                                  # mọi tài khoản đang dùng — lần đạt trước mốc không tính
+    pb(EN['sys_ag'], CT['sys'], 'ok', 'manual')                                               # quét khả năng (không phải kiểm đăng nhập) ⇒ chưa tính
+    l2 = q()
+    pb(EN['sys_ag'], CT['sys'], 'ok')                                                         # kiểm đăng nhập đạt sau mốc ⇒ rời danh sách
+    pb(EN['lan_ag'], CT['Lan'], 'failed')                                                     # Lan: không đạt ⇒ còn
+    l3 = q()
+    last_lan = db.execute("SELECT last_login_check_status, consumer_label FROM v_relogin_required WHERE engine_account_id=?", (EN['lan_ag'],)).fetchone()
+    pb(EN['lan_ag'], CT['Lan'], 'ok'); pb(EN['lan_ag'], CT['Lan'], 'running')                 # đạt rồi một lần đang chạy ⇒ rời (lần ĐÃ XONG mới nhất = ok)
+    l4 = q()
+    pb(EN['lan_ag'], CT['Lan'], 'failed')                                                     # lần xong mới nhất không đạt ⇒ quay lại danh sách
+    l5 = q()
+    db.execute("UPDATE engine_bindings SET is_enabled=0 WHERE id=?", (EB['mai_cc'],)); l6 = q()          # binding tắt ⇒ không cần đăng nhập lại
+    db.execute("UPDATE engine_bindings SET is_enabled=1 WHERE id=?", (EB['mai_cc'],))
+    db.execute("UPDATE engine_bindings SET deleted_at=? WHERE id=?", (now(), EB['mai_cc'])); l7 = q()    # binding đã gỡ
+    db.execute("UPDATE engine_accounts SET status='disabled' WHERE id=?", (EN['mai_ag'],)); l8 = q()      # tài khoản vô hiệu
+    db.execute("UPDATE engine_accounts SET status='active' WHERE id=?", (EN['mai_ag'],))
+    db.execute("UPDATE engine_accounts SET deleted_at=? WHERE id=?", (now(), EN['mai_ag'])); l9 = q()     # tài khoản đã xoá mềm
+    c, case = _cases(db)
+    case("xoá mốc khôi phục (restored_at → NULL)", lambda: db.execute("UPDATE workspaces SET restored_at=NULL WHERE id=?", (W,)), 'mốc khôi phục chỉ tiến')
+    case("lùi mốc khôi phục", lambda: db.execute("UPDATE workspaces SET restored_at=? WHERE id=?", ('2026-01-01T00:00:00.000Z', W)), 'mốc khôi phục chỉ tiến')
+    t1 = now()
+    adv_ok = _try(lambda: db.execute("UPDATE workspaces SET restored_at=? WHERE id=?", (t1, W)))           # khôi phục lần nữa ⇒ mốc tiến
+    l10 = q()
+    ok = (l0 == [] and l1 == ['EN-0001', 'EN-0003', 'EN-0004', 'EN-0005'] and l2 == l1 and l3 == ['EN-0003', 'EN-0004', 'EN-0005']
+          and last_lan == ('failed', 'Lan') and l4 == ['EN-0003', 'EN-0004'] and l5 == ['EN-0003', 'EN-0004', 'EN-0005']
+          and l6 == ['EN-0003', 'EN-0005'] and l7 == ['EN-0003', 'EN-0005'] and l8 == ['EN-0005'] and l9 == ['EN-0005']
+          and all(x[1] for x in c) and adv_ok and l10 == ['EN-0001', 'EN-0005'])
+    report("RESTORE-relogin", ok, f"chưa khôi phục ⇒ {l0}; khôi phục ⇒ {l1} (lần đạt trước mốc không tính); quét 'manual' ⇒ không đổi; EN-0001 kiểm đạt ⇒ {l3}, "
+           f"Lan không đạt ⇒ còn ({last_lan}); Lan đạt + một lần đang chạy ⇒ {l4}; Lan lần xong mới nhất không đạt ⇒ {l5}; binding tắt ⇒ {l6}; binding gỡ ⇒ {l7}; "
+           f"tài khoản vô hiệu ⇒ {l8}; tài khoản xoá mềm ⇒ {l9}; {sum(x[1] for x in c)}/{len(c)} ca bị chặn (xoá / lùi mốc); khôi phục lần nữa ⇒ mốc tiến "
+           f"({'được' if adv_ok else 'BỊ CHẶN'}) ⇒ {l10}")
+    _show(c)
+
 if __name__ == '__main__':
     perf = '--perf' in sys.argv
     t_schema()
@@ -5452,4 +5781,5 @@ if __name__ == '__main__':
     t_v2212_allowlist_invariant(); t_v2212_sa_attention()
     t_v2213_no_replace(); t_v2213_owner_create()
     t_v230_catalog(); t_v230_toggle(); t_v230_assign(); t_v230_settings(); t_v230_state_matrix(); t_v230_state_priority()
+    t_v231_cli_install(); t_v231_card_measured(); t_v231_anchor(); t_v231_relogin()
     print("\nTỔNG:", sum(1 for r in RESULTS if r[1]), "/", len(RESULTS), "PASS — SQLite", sqlite3.sqlite_version)
