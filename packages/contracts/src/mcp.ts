@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ENTITY_TYPES, type EntityPrefix } from './ids.ts';
+import { CERTAINTY_LEVELS } from './sessions.ts';
 
 // Hợp đồng MCP gateway (BUILD-PLAN §B.4 `gateway/`, STD-08 §3–§5; CNS-133).
 //
@@ -149,7 +150,7 @@ export const ToolArgs = {
     status: z.enum(['done', 'failed', 'blocked', 'waiting_approval']),
     summary: z.string().max(4000),
     /** Role tự khai chưa chắc (nguồn chat_messages.certainty / avatar 'unsure', G-13). */
-    certainty: z.enum(['sure', 'unsure']).nullable(),
+    certainty: z.enum(CERTAINTY_LEVELS).nullable(),
   }),
   send_telegram: z.strictObject({ chatRef: z.string().min(1), text: z.string().min(1).max(4096) }),
   propose_change: z.strictObject({ title: z.string().min(1).max(200), items: z.array(z.json()).min(1) }),
@@ -395,12 +396,18 @@ const CREDENTIAL_ASSIGNMENT_RE = new RegExp(
   'i',
 );
 
-/** Đoạn token tối đại ≥ 32 (quét bằng regex một lớp ký tự; lastIndex nhảy qua cả đoạn ⇒ tuyến tính). */
-const LONG_TOKEN_RUN_RE = /[0-9A-Za-z_-]{32,}/g;
+/**
+ * Đoạn token tối đại ≥ 32: lookbehind MỘT ký tự (không quantifier) ⇒ chỉ thử ở ĐẦU đoạn, mỗi đoạn quét một lần (nhanh ~3×
+ * so với thử ở mọi vị trí trên chuỗi nhiều đoạn ngắn); lastIndex nhảy qua cả đoạn ⇒ tuyến tính.
+ */
+const LONG_TOKEN_RUN_RE = /(?<![0-9A-Za-z_-])[0-9A-Za-z_-]{32,}/g;
 
 /**
  * Đoạn token liền ≥ 32 ký tự có CẢ chữ hoa, chữ thường VÀ chữ số (Gen quyết 2026-10-16, CNS-169). Đoạn chỉ gồm chữ số hex
  * + '-' (hex mọi độ dài / hoa thường, UUID) KHÔNG bị chặn — mã commit, checksum, UUID là dữ liệu làm việc hợp lệ.
+ * Miễn hex vì CNS-169 (commit hash / checksum là dữ liệu lõi của agent code; sink MCP do owner kiểm soát; lối ra ngoài
+ * qua egress allowlist). Chỗ key hex / chữ thường hay nằm được BÙ bằng `credential_assignment` (tên credential + gán) và
+ * `env_secret_assignment` (dòng kiểu `.env`: `ABC_SECRET=…`, `X_API_KEY=…`).
  */
 function hasHighEntropyRun(s: string): boolean {
   const re = LONG_TOKEN_RUN_RE;
@@ -441,6 +448,15 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   // tiền tố cố định + MỘT quantifier (\s*) ⇒ tuyến tính; refresh_token + phép gán ⇒ chặn bất kể giá trị (giữ từ v0)
   { id: 'refresh_token_field', test: (s) => /refresh_token["']?\s*[:=]/i.test(s) },
   { id: 'credential_assignment', test: (s) => CREDENTIAL_ASSIGNMENT_RE.test(s) },
+  /**
+   * Gán kiểu `.env` (Gen, security review "miễn hex làm lọt key hãng không prefix"): tên UPPER_SNAKE kết thúc bằng
+   * _SECRET / _TOKEN / _PASSWORD / _PASSWD / _KEY / _PAT + [:=] + ≥ 8 ký tự giá trị. PHÂN BIỆT hoa thường (câu văn không
+   * bắt). `\b` chỉ ở đầu đoạn từ, `[A-Z0-9_]*` không lồng, giá trị giới hạn {8} ⇒ tuyến tính (test 1 MiB `A_A_A_…`).
+   */
+  {
+    id: 'env_secret_assignment',
+    test: (s) => /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\s*[:=]\s*["']?[^\s"']{8}/.test(s),
+  },
   { id: 'canary', test: (s) => /GA-CANARY-[0-9a-f-]{8}/i.test(s) },
   { id: 'high_entropy_run', test: hasHighEntropyRun },
 ];
@@ -466,6 +482,7 @@ export const CREDENTIAL_PATTERN_IDS = [
   'pem_private_key',
   'refresh_token_field',
   'credential_assignment',
+  'env_secret_assignment',
   'canary',
   'high_entropy_run',
   'credential_field_name',

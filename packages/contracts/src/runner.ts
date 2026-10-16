@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AUTH_METHODS, CAPABILITY_AUTH_MODES, ENGINE_SLUG_RE, NATIVE_MEMORY_POLICY, ProbeOutcome } from './engine.ts';
 import { ULID_RE } from './ids.ts';
+import { MEASURE_KINDS } from './sessions.ts';
 
 // Giao thức ga-app ↔ ga-runner (chạy TRONG container Role / hệ thống) — BUILD-PLAN §B.5, §B.7; CNS-168.
 //
@@ -41,14 +42,21 @@ export type EngineSlugList = readonly [string, ...string[]];
 
 /**
  * id model lấy từ capability registry: bắt đầu bằng chữ / số (không bao giờ dạng cờ `-…`), chỉ `[A-Za-z0-9._:/-]`, ≤ 96 ký tự
- * (không khoảng trắng, `=`, nháy, ký tự điều khiển). Adapter còn kiểm thuộc registry và chỉ đặt làm GIÁ TRỊ của cờ khai.
+ * (không khoảng trắng, `=`, nháy, ký tự điều khiển), + hậu tố hẹp tuỳ chọn `[<1–8 chữ thường / số>]` ở CUỐI (vd biến thể
+ * ngữ cảnh `…[1m]`; L-ENG đề xuất, Gen duyệt). Giá trị đi vào argv thành một phần tử riêng (không qua shell). Adapter còn
+ * kiểm thuộc registry và chỉ đặt làm GIÁ TRỊ của cờ khai.
  */
-export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,95}$/;
+export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,95}(?:\[[0-9a-z]{1,8}\])?$/;
+export const MODEL_ID_MAX = 106;
 /** Mức effort: chữ thường bắt đầu, ≤ 16 ký tự. */
 export const EFFORT_RE = /^[a-z][a-z0-9_-]{0,15}$/;
 
+/** Tên cờ CLI quét được (capability `flag:*`): `-x` / `--long-flag`, ≤ 65 ký tự, không `=` / khoảng trắng. */
+export const DETECTED_FLAG_RE = /^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+export const DetectedFlags = z.array(z.string().max(65).regex(DETECTED_FLAG_RE)).max(256);
+
 export const TurnParams = z.strictObject({
-  model: z.string().max(96).regex(MODEL_ID_RE).nullable(),
+  model: z.string().max(MODEL_ID_MAX).regex(MODEL_ID_RE).nullable(),
   effort: z.string().max(16).regex(EFFORT_RE).nullable(),
 });
 export type TurnParams = z.infer<typeof TurnParams>;
@@ -88,6 +96,13 @@ function buildRunnerBundles<Slug extends z.ZodType<string>>(engineSlug: Slug) {
     engineSlug,
     engineAccount: EngineAccount,
     params: TurnParams,
+    /** Cách đăng nhập của tài khoản (adapter cấu hình CLI theo đó). */
+    authMethod: z.enum(AUTH_METHODS),
+    /**
+     * Cờ đã quét của phiên bản CLI đang cài — CHỈ làm cổng (cơ chế giới hạn công cụ phải có đủ cờ), không bao giờ vào argv
+     * (argv chỉ từ flagTable; engineArgvViolations). Ngoại lệ có chủ đích duy nhất của luật "bundle không có mảng chuỗi".
+     */
+    detectedFlags: DetectedFlags,
     prompt: z
       .strictObject({ user: PromptFile, system: PromptFile.nullable() })
       .refine(
@@ -95,6 +110,8 @@ function buildRunnerBundles<Slug extends z.ZodType<string>>(engineSlug: Slug) {
         'prompt user / system phải là hai tệp khác nhau',
       ),
     timeoutMs: z.number().int().positive().max(3_600_000),
+    /** Phiên đo (CNS-178): 'overhead_bare' ⇒ adapter dựng plan KHÔNG có cấu hình MCP / tool gateway. null = lượt thường. */
+    measure: z.enum(MEASURE_KINDS).nullable(),
     nativeMemoryPolicy: z.literal(NATIVE_MEMORY_POLICY),
     /** Hết hạn cùng vé lượt. */
     expiresAt: DbTs,
