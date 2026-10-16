@@ -18,6 +18,7 @@ import {
   engineEnvViolations,
   execEnv,
   execStdinPayload,
+  FORBIDDEN_ARGV0_NAMES,
   InstallEngineRequest,
   isAllowedExecArgv,
   isForbiddenArgv0Name,
@@ -319,6 +320,98 @@ describe('argv do runner dựng: argv[0] dưới /opt/engines/<slug>/, cấm she
       expect(isForbiddenArgv0Name(n), n).toBe(true);
     }
     for (const n of ['vendor-cli', 'shell-tool', 'nodex', 'envoy']) expect(isForbiddenArgv0Name(n), n).toBe(false);
+  });
+
+  it('danh sách cấm chung ⊇ danh sách gốc của runner (L-RT 2b19a58); mỗi tên bổ sung bị isSafeEngineArgv0 chặn', () => {
+    // fixture = FORBIDDEN_ARGV0 của apps/runner/src/paths.ts @ 2b19a58 (feat/m1-rt) — không sửa, chỉ thêm
+    const RUNNER_2B19A58 = [
+      'sh',
+      'bash',
+      'dash',
+      'ash',
+      'zsh',
+      'ksh',
+      'mksh',
+      'csh',
+      'tcsh',
+      'fish',
+      'busybox',
+      'toybox',
+      'env',
+      'node',
+      'nodejs',
+      'deno',
+      'bun',
+      'python',
+      'python2',
+      'python3',
+      'perl',
+      'ruby',
+      'php',
+      'lua',
+      'tclsh',
+      'wish',
+      'awk',
+      'gawk',
+      'mawk',
+      'nawk',
+      'sed',
+      'xargs',
+      'find',
+      'script',
+      'expect',
+      'su',
+      'sudo',
+      'doas',
+      'nohup',
+      'timeout',
+      'nice',
+      'ionice',
+      'setsid',
+      'stdbuf',
+      'chroot',
+      'unshare',
+      'nsenter',
+      'strace',
+      'gdb',
+      'socat',
+      'nc',
+      'ncat',
+      'netcat',
+      'curl',
+      'wget',
+      'ssh',
+      'scp',
+      'docker',
+      'ga-runner',
+      'ga-engine-install',
+    ];
+    expect(RUNNER_2B19A58.filter((n) => !FORBIDDEN_ARGV0_NAMES.has(n))).toEqual([]);
+    for (const n of RUNNER_2B19A58) {
+      expect(isForbiddenArgv0Name(n), n).toBe(true);
+      expect(isSafeEngineArgv0(`/opt/engines/alpha/current/${n}`, 'alpha'), n).toBe(false);
+    }
+    const added = [
+      'ionice',
+      'socat',
+      'nc',
+      'ncat',
+      'netcat',
+      'curl',
+      'wget',
+      'ssh',
+      'scp',
+      'docker',
+      'ga-runner',
+      'ga-engine-install',
+    ];
+    for (const n of added) {
+      expect(isSafeEngineArgv0(`/opt/engines/alpha/bin/${n}`, 'alpha'), n).toBe(false);
+      expect(engineArgvViolations([`/opt/engines/alpha/bin/${n}`], 'alpha', table).length, n).toBeGreaterThan(0);
+    }
+    // mọi chương trình của hệ (ga-*) đều cấm, kể cả tên mới
+    expect(isForbiddenArgv0Name('ga-supervisor')).toBe(true);
+    expect(isForbiddenArgv0Name('curl8')).toBe(true);
   });
 
   it('chỉ cờ / lệnh con trong bảng; giá trị không dạng cờ; toán hạng không bắt đầu bằng -', () => {

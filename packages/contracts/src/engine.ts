@@ -50,7 +50,8 @@ export const ENGINE_SLUG_RE = /^[a-z][a-z0-9-]{0,31}$/;
 /**
  * Tên chương trình KHÔNG BAO GIỜ được làm argv[0] (shell, interpreter, trình bọc chạy lệnh khác), so sánh không phân biệt hoa
  * thường, sau khi bỏ hậu tố phiên bản (`python3.12` → `python`, `node22` → `node`). CLI viết bằng ngôn ngữ thông dịch phải
- * được exec qua tệp vào có shebang, không qua `<interpreter> <script>`.
+ * được exec qua tệp vào có shebang, không qua `<interpreter> <script>`. Gồm cả công cụ mạng / container (thoát egress) và
+ * chương trình của chính hệ (`ga-*`, kiểm riêng theo tiền tố) — ⊇ danh sách gốc của runner (L-RT 2b19a58, test giữ fixture).
  */
 export const FORBIDDEN_ARGV0_NAMES: ReadonlySet<string> = new Set([
   'sh',
@@ -116,15 +117,30 @@ export const FORBIDDEN_ARGV0_NAMES: ReadonlySet<string> = new Set([
   'sed',
   'find',
   'make',
+  'python2',
+  'python3',
+  'ionice',
+  'socat',
+  'nc',
+  'ncat',
+  'netcat',
+  'curl',
+  'wget',
+  'ssh',
+  'scp',
+  'docker',
+  'ga-runner',
+  'ga-engine-install',
 ]);
 
 /** Một đoạn đường dưới /opt/engines/<slug>/: bắt đầu bằng chữ/số (không `.`, `..`, rỗng, không bắt đầu bằng `-`). */
 const ENGINE_PATH_SEGMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
 const ENGINE_PATH_MAX_SEGMENTS = 8;
 
-/** Tên chương trình (basename) có thuộc nhóm cấm không — đã bỏ hậu tố phiên bản `[0-9.]` ở cuối. */
+/** Tên chương trình (basename) có thuộc nhóm cấm không — đã bỏ hậu tố phiên bản `[0-9.]` ở cuối; mọi `ga-*` đều cấm. */
 export function isForbiddenArgv0Name(basename: string): boolean {
   const lower = basename.toLowerCase();
+  if (lower.startsWith('ga-')) return true;
   let end = lower.length;
   while (end > 0 && '0123456789.'.includes(lower[end - 1] ?? '')) end--;
   return FORBIDDEN_ARGV0_NAMES.has(lower) || FORBIDDEN_ARGV0_NAMES.has(lower.slice(0, end));
