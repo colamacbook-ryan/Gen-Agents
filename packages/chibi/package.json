@@ -1,0 +1,25 @@
+{
+  "name": "@ga/chibi",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Engine chibi vẽ bằng code (SVG + CSS): khung xương chung + tham số JSON có schema (BUILD-PLAN §D.5, port từ spike4 v3).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./identity": "./src/identity.ts"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs",
+    "typecheck": "tsc -b",
+    "skin:seal": "node scripts/seal-skin.ts"
+  },
+  "dependencies": {
+    "@ga/contracts": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}
