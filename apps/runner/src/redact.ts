@@ -1,4 +1,4 @@
-import { CREDENTIAL_KEY_NAMES, findCredentialLike } from '@ga/contracts';
+import { CREDENTIAL_KEY_NAMES, findCredentialLike, normalizeCredentialName } from '@ga/contracts';
 import { detectCredential, SCAN_MAX_CHARS } from '@ga/security';
 
 // Che credential trong stdout / stderr của CLI trước khi rời container (BUILD-PLAN §B.5 bước 6, DATABASE §9.5 bước 7).
@@ -8,7 +8,8 @@ import { detectCredential, SCAN_MAX_CHARS } from '@ga/security';
 //   1. `detectCredential(line)` — bộ dùng chung @ga/security (giải escape ≤ 3 lớp, mẫu token, phép gán giá trị ≥ 8 ký tự);
 //   2. dòng parse được JSON ⇒ `findCredentialLike(parsed)` của contracts (duyệt KHOÁ: bắt khoá credential bất kể độ dài giá trị);
 //   3. `credentialKeyAssignment(line)` — rào bổ sung, CHỈ THÊM che (không bao giờ nới bộ 1–2): tên khoá trong
-//      contracts CREDENTIAL_KEY_NAMES, theo sau (bỏ qua nháy / `\` / khoảng trắng / `"`…) là `:` hoặc `=` rồi một giá trị
+//      contracts CREDENTIAL_KEY_NAMES, so theo `normalizeCredentialName` của contracts (mọi kiểu viết: refreshToken,
+//      Refresh-Token, REFRESH_TOKEN…), theo sau (bỏ qua nháy / `\` / khoảng trắng / `"`…) là `:` hoặc `=` rồi một giá trị
 //      không rỗng ⇒ bắt, bất kể độ dài giá trị và tiền tố dòng (vd `INFO {"access_token":"x.y z"}`, JSON lồng nhiều lớp).
 // Mọi bước tuyến tính theo độ dài dòng.
 
@@ -18,13 +19,14 @@ export function redactedMarker(patternId: string): string {
   return JSON.stringify({ $ga: 'line_redacted', patternId: patternId.replace(/[^a-z0-9_]/gi, '_') });
 }
 
-const KEY_NAMES: readonly string[] = CREDENTIAL_KEY_NAMES.map((n) => n.toLowerCase());
+/** Tên khoá đã chuẩn hoá như contracts (bỏ `_` / `-`, chữ thường) — dòng được chuẩn hoá cùng cách trước khi tìm. */
+const KEY_NAMES: readonly string[] = [...new Set(CREDENTIAL_KEY_NAMES.map(normalizeCredentialName))];
 /** Trần số ký tự bỏ qua mỗi phía của dấu `:` / `=` (giữ tuyến tính: mỗi lần khớp tên tốn O(1)). */
 const MAX_SKIP = 64;
 
 const isHex = (c: number) => (c >= 48 && c <= 57) || (c >= 97 && c <= 102);
 
-/** `\u` + 4 hex (chữ thường — dòng đã hạ chữ) bắt đầu tại i ⇒ mã ký tự, ngược lại -1. */
+/** `\u` + 4 hex (chữ thường — dòng đã chuẩn hoá) bắt đầu tại i ⇒ mã ký tự, ngược lại -1. */
 function unicodeEscapeAt(s: string, i: number): number {
   if (s.charCodeAt(i) !== 117 || i + 4 >= s.length) return -1;
   for (let k = 1; k <= 4; k++) if (!isHex(s.charCodeAt(i + k))) return -1;
@@ -64,7 +66,7 @@ const escapeLen = (s: string, p: number) => (s.charCodeAt(p) === 92 && unicodeEs
 
 /** Rào 3: có phép gán `<tên khoá credential> : / = <giá trị không rỗng>` ở đâu đó trong dòng (mọi dạng nháy / escape). */
 export function credentialKeyAssignment(line: string): boolean {
-  const lower = line.toLowerCase();
+  const lower = normalizeCredentialName(line);
   for (const name of KEY_NAMES) {
     let from = 0;
     for (;;) {

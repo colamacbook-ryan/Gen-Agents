@@ -53,6 +53,9 @@ describe('redactLine — phát hiện ⇒ thay CẢ dòng (fail-closed, không c
     ['header HTTP trong log', 'GET / x-api-key: k1', 'k1'],
     ['tên khoá có tiền tố', 'new_access_token: q', ': q'],
     ['password ≥ 8 ký tự (bộ chung)', 'login password=hunter2hunter2 ok', 'hunter2'],
+    ['camelCase có tiền tố', 'INFO {"refreshToken":"a.b"}', 'a.b'],
+    ['kebab-case chữ hoa', 'Refresh-Token: q1', 'q1'],
+    ['api_token (tên mới của contracts)', 'x {"api_token":"t"}', '"t"'],
   ])('%s ⇒ thay cả dòng', (_n, line, secret) => {
     expect(credentialInLine(line), line).not.toBeNull();
     expectWholeLineReplaced(line, secret);
