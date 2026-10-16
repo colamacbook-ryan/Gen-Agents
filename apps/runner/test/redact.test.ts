@@ -53,6 +53,9 @@ describe('redactLine — phát hiện ⇒ thay CẢ dòng (fail-closed, không c
     ['header HTTP trong log', 'GET / x-api-key: k1', 'k1'],
     ['tên khoá có tiền tố', 'new_access_token: q', ': q'],
     ['password ≥ 8 ký tự (bộ chung)', 'login password=hunter2hunter2 ok', 'hunter2'],
+    // bộ chung CỐ Ý không bắt password=<ngắn> (khớp contracts); output CLI chặt hơn ⇒ rào 3 của runner vẫn bắt (Gen quyết)
+    ['password=x (giá trị 1 ký tự)', 'password=x', 'password=x'],
+    ['passwd ngắn có tiền tố', 'cfg passwd: pw', 'pw'],
     ['camelCase có tiền tố', 'INFO {"refreshToken":"a.b"}', 'a.b'],
     ['kebab-case chữ hoa', 'Refresh-Token: q1', 'q1'],
     ['api_token (tên mới của contracts)', 'x {"api_token":"t"}', '"t"'],
