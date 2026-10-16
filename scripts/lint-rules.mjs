@@ -215,7 +215,8 @@ const BOUNDARIES = {
   'apps/supervisor': ['packages/contracts', 'packages/security'],
   'apps/updater': ['packages/contracts', 'packages/security'],
   'apps/egress': ['packages/contracts', 'packages/security'], // [ĐỀ XUẤT — L0]
-  'apps/runner': ['packages/contracts', 'packages/security'], // [ĐỀ XUẤT — L0]
+  // Gen quyết 2026-10-16 (HIGH allowlist-semantic-escape): runner dựng argv từ adapter @ga/engines đóng sẵn trong image
+  'apps/runner': ['packages/contracts', 'packages/security', 'packages/engines'],
   'apps/web': ['packages/contracts', 'packages/ui', 'packages/chibi', 'packages/i18n'],
 };
 /** Chỉ import KIỂU (import type) — web lấy AppType của control-plane cho client `hc`. */
@@ -422,6 +423,25 @@ export const RULES = [
           .filter((m) => !inWrite(m.index))
           .map((m) => ({ line: lineOf(code, m.index), msg: `ghi DB ngoài conn.write(): "${m[0]}"` })),
       );
+    },
+  },
+  {
+    id: 'engine-plans-only-in-runner',
+    why: 'turnPlan / loginCheck / capabilityScan / loginArgv chỉ được gọi trong apps/runner (và packages/engines, testkit): control plane gửi ý định, không dựng argv (HIGH allowlist-semantic-escape, Gen quyết 2026-10-16)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      /^(apps|packages)\//.test(rel) &&
+      !isTest(rel) &&
+      !rel.startsWith('apps/runner/') &&
+      !rel.startsWith('packages/engines/') &&
+      !rel.startsWith('packages/testkit/') &&
+      !rel.startsWith('packages/contracts/'),
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      return findAll(code, /\.(?:turnPlan|loginCheck|capabilityScan|loginArgv)\s*\(/).map((m) => ({
+        line: lineOf(code, m.index),
+        msg: `dựng plan / argv engine ngoài ga-runner: "${m[0]}"`,
+      }));
     },
   },
   {

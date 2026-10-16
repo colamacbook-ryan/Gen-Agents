@@ -1,56 +1,190 @@
 import { z } from 'zod';
-import { NATIVE_MEMORY_POLICY, ProbeOutcome, ProbePlan, TurnPlan } from './engine.ts';
+import { AUTH_METHODS, CAPABILITY_AUTH_MODES, ENGINE_SLUG_RE, NATIVE_MEMORY_POLICY, ProbeOutcome } from './engine.ts';
+import { ULID_RE } from './ids.ts';
 
 // Giao thức ga-app ↔ ga-runner (chạy TRONG container Role / hệ thống) — BUILD-PLAN §B.5, §B.7; CNS-168.
-// Mọi lần chạy CLI đi qua một trong các lệnh con dưới đây, cùng một chính sách:
-//   tmpfs riêng của lần chạy (/run/ga/<id>/ hoặc /run/ga/probe-<id>/) làm cwd + HOME; nối (không đọc) tệp authAllowlist từ
-//   /auth/<en> vào HOME; spawn plan (stdin đóng, không TTY, timeout); xoá tmpfs; auth-gc /auth/<en> theo allowlist
-//   ('unknown' ⇒ không xoá gì, native_memory = 'unknown'). Supervisor chỉ exec `ga-runner <lệnh>` / `ga-engine-install`.
+//
+// Gen quyết 2026-10-16 (HIGH allowlist-semantic-escape): bundle KHÔNG mang argv / lệnh / tên tệp credential. ga-app chỉ gửi
+// Ý ĐỊNH có schema đóng: slug engine, loại thao tác, id tài khoản, tham số đã chuẩn hoá (model / effort theo pattern chặt),
+// tệp prompt (đường tương đối dưới thư mục prompt của tmpfs). ga-runner tự dựng argv từ adapter @ga/engines đóng sẵn trong
+// image runner, kiểm bằng engineArgvViolations() (argv[0] dưới /opt/engines/<slug>/, cấm shell / interpreter, chỉ cờ trong
+// bảng đóng của adapter), lấy authAllowlist của chính adapter. ga-app bị chiếm cũng không chọn được chương trình hay cờ.
+//
+// Hai mức schema cùng một hình:
+//   - RunnerBundles (module-level): slug chỉ kiểm định dạng — dùng ở supervisor (không phụ thuộc @ga/engines) để chuyển tiếp.
+//   - runnerBundleSchemas(slugs): slug là ENUM lấy từ registry adapter — ga-runner (và ga-app trước khi gửi) PHẢI dùng bản này.
+//
+// Chính sách chạy (không đổi): tmpfs riêng của lần chạy (/run/ga/<id>/ hoặc /run/ga/probe-<id>/) làm cwd + HOME; nối (không
+// đọc) tệp authAllowlist của adapter từ /auth/<en> vào HOME; spawn (stdin đóng, không TTY, timeout); xoá tmpfs; auth-gc.
 
-const Ulid = z.string().length(26);
-const EngineAccount = z.string().regex(/^EN-\d{4,}$/);
-const AuthAllowlist = z.union([z.array(z.string().min(1)), z.literal('unknown')]);
+const Ulid = z.string().regex(ULID_RE);
+const EngineAccount = z.string().regex(/^EN-\d{4,12}$/);
+/** ts DB 24 ký tự. */
+const DbTs = z.string().length(24);
 
-export const RUNNER_COMMANDS = ['turn', 'login-check', 'probe', 'auth-gc'] as const;
+export const RUNNER_COMMANDS = ['turn', 'login-check', 'probe', 'auth-gc', 'login'] as const;
 export type RunnerCommand = (typeof RUNNER_COMMANDS)[number];
 export const ENGINE_INSTALL_COMMANDS = ['install', 'status'] as const;
 
-/** Bundle của một lượt: phản hồi `GET /turn/bundle` của gateway (runner gửi vé lượt đọc từ tệp tmpfs). */
-export const TurnBundle = z.strictObject({
-  v: z.literal(1),
-  turnId: Ulid,
-  sessionId: Ulid,
-  engineSlug: z.string().min(1),
-  engineAccount: EngineAccount,
-  plan: TurnPlan,
-  authAllowlist: AuthAllowlist,
-  nativeMemoryPolicy: z.literal(NATIVE_MEMORY_POLICY),
-  /** Hết hạn cùng vé lượt (ts DB 24 ký tự). */
-  expiresAt: z.string().length(24),
-});
-export type TurnBundle = z.infer<typeof TurnBundle>;
-
-export const PROBE_KINDS = ['login_check', 'capability_scan'] as const;
+// ---------------------------------------------------------------- loại thao tác
+export const PROBE_KINDS = ['capability_scan'] as const;
 export type ProbeKind = (typeof PROBE_KINDS)[number];
+/** `turn` | `login_check` | `probe:<kind>` — enum đóng; thao tác mới = thêm vào đây + adapter + test. */
+export const RUNNER_OPS = ['turn', 'login_check', 'probe:capability_scan'] as const;
+export type RunnerOp = (typeof RUNNER_OPS)[number];
+export type ProbeOp = Exclude<RunnerOp, 'turn'>;
+
+// ---------------------------------------------------------------- tham số đã chuẩn hoá
+/** Định dạng slug (không enum) — mức chuyển tiếp. */
+export const EngineSlugFormat = z.string().max(32).regex(ENGINE_SLUG_RE);
+export type EngineSlugList = readonly [string, ...string[]];
 
 /**
- * Bundle của một lần kiểm đăng nhập / quét khả năng — đi qua STDIN của exec (không qua env, không qua URL).
- * Không chứa bí mật: env của plan đã qua EnvMap (cấm *SESSION*, *_OAUTH_TOKEN, khoá nội bộ, HOME).
+ * id model lấy từ capability registry: bắt đầu bằng chữ / số (không bao giờ dạng cờ `-…`), chỉ `[A-Za-z0-9._:/-]`, ≤ 96 ký tự
+ * (không khoảng trắng, `=`, nháy, ký tự điều khiển). Adapter còn kiểm thuộc registry và chỉ đặt làm GIÁ TRỊ của cờ khai.
  */
-export const ProbeBundle = z
-  .strictObject({
-    v: z.literal(1),
-    probeId: Ulid,
-    kind: z.enum(PROBE_KINDS),
-    engineSlug: z.string().min(1),
-    engineAccount: EngineAccount,
-    plans: z.array(ProbePlan).min(1).max(16),
-    authAllowlist: AuthAllowlist,
-    expiresAt: z.string().length(24),
-  })
-  .refine((b) => b.kind !== 'login_check' || b.plans.length === 1, 'login_check có đúng một plan');
-export type ProbeBundle = z.infer<typeof ProbeBundle>;
+export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,95}$/;
+/** Mức effort: chữ thường bắt đầu, ≤ 16 ký tự. */
+export const EFFORT_RE = /^[a-z][a-z0-9_-]{0,15}$/;
 
+export const TurnParams = z.strictObject({
+  model: z.string().max(96).regex(MODEL_ID_RE).nullable(),
+  effort: z.string().max(16).regex(EFFORT_RE).nullable(),
+});
+export type TurnParams = z.infer<typeof TurnParams>;
+
+// ---------------------------------------------------------------- tệp prompt
+/**
+ * Tệp prompt nằm dưới `/run/ga/<turnId>/prompt/` — thư mục RIÊNG, tách khỏi `ticket` và `home/` (không ghi đè được vé hay
+ * cấu hình CLI trong HOME). Đường tương đối, ≤ 4 đoạn; mỗi đoạn bắt đầu bằng chữ / số ⇒ không tuyệt đối, không `.` / `..`,
+ * không rỗng, không dạng cờ.
+ */
+export const PROMPT_DIR = 'prompt' as const;
+const PROMPT_PATH_SEGMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const PROMPT_PATH_MAX_SEGMENTS = 4;
+/** Trần nội dung một tệp prompt (đơn vị UTF-16 của JS) — giới hạn trước khi xử lý. */
+export const PROMPT_FILE_MAX_CHARS = 4_000_000;
+
+export function isSafePromptPath(path: string): boolean {
+  if (path.length === 0 || path.length > 255) return false;
+  const segments = path.split('/');
+  return segments.length <= PROMPT_PATH_MAX_SEGMENTS && segments.every((s) => PROMPT_PATH_SEGMENT_RE.test(s));
+}
+
+export const PromptFile = z.strictObject({
+  path: z.string().max(255).refine(isSafePromptPath, 'đường tệp prompt phải tương đối, an toàn, ≤ 4 đoạn'),
+  content: z.string().max(PROMPT_FILE_MAX_CHARS),
+});
+export type PromptFile = z.infer<typeof PromptFile>;
+
+// ---------------------------------------------------------------- bundle (ý định) theo slug
+function buildRunnerBundles<Slug extends z.ZodType<string>>(engineSlug: Slug) {
+  /** Bundle của một lượt: phản hồi `GET /turn/bundle` của gateway (runner gửi vé lượt đọc từ tệp tmpfs). */
+  const TurnBundle = z.strictObject({
+    v: z.literal(2),
+    op: z.literal('turn'),
+    turnId: Ulid,
+    sessionId: Ulid,
+    engineSlug,
+    engineAccount: EngineAccount,
+    params: TurnParams,
+    prompt: z
+      .strictObject({ user: PromptFile, system: PromptFile.nullable() })
+      .refine(
+        (p) => p.system === null || p.system.path !== p.user.path,
+        'prompt user / system phải là hai tệp khác nhau',
+      ),
+    timeoutMs: z.number().int().positive().max(3_600_000),
+    nativeMemoryPolicy: z.literal(NATIVE_MEMORY_POLICY),
+    /** Hết hạn cùng vé lượt. */
+    expiresAt: DbTs,
+  });
+
+  const LoginCheckBundle = z.strictObject({
+    v: z.literal(2),
+    op: z.literal('login_check'),
+    probeId: Ulid,
+    engineSlug,
+    engineAccount: EngineAccount,
+    authMethod: z.enum(AUTH_METHODS),
+    expiresAt: DbTs,
+  });
+
+  const CapabilityScanBundle = z.strictObject({
+    v: z.literal(2),
+    op: z.literal('probe:capability_scan'),
+    probeId: Ulid,
+    engineSlug,
+    engineAccount: EngineAccount,
+    authMode: z.enum(CAPABILITY_AUTH_MODES),
+    expiresAt: DbTs,
+  });
+
+  /** Kiểm đăng nhập / quét khả năng — đi qua STDIN của exec (không qua env, không qua URL). */
+  const ProbeBundle = z.discriminatedUnion('op', [LoginCheckBundle, CapabilityScanBundle]);
+
+  /** `ga-runner auth-gc` (stdin): runner dọn /auth/<en> theo authAllowlist CỦA ADAPTER — ga-app không gửi danh sách tệp. */
+  const AuthGcBundle = z.strictObject({ v: z.literal(2), engineSlug, engineAccount: EngineAccount });
+
+  /** `ga-engine-install install|status` (stdin). `fake` chỉ có ở image test (testkit) — image phát hành từ chối. */
+  const EngineInstallBundle = z.strictObject({
+    v: z.literal(2),
+    engineSlug,
+    source: z.enum(['official', 'fake']),
+  });
+
+  /** `ga-runner login` (PTY, TTY): lấy từ claims của vé PTY đã ký, đi qua env LOGIN_EXEC.env; runner dựng loginArgv. */
+  const LoginBundle = z.strictObject({
+    v: z.literal(2),
+    engineSlug,
+    engineAccount: EngineAccount,
+    authMethod: z.enum(AUTH_METHODS),
+  });
+
+  return {
+    EngineSlug: engineSlug,
+    TurnBundle,
+    LoginCheckBundle,
+    CapabilityScanBundle,
+    ProbeBundle,
+    AuthGcBundle,
+    EngineInstallBundle,
+    LoginBundle,
+  };
+}
+
+/** Mức chuyển tiếp (slug chỉ kiểm định dạng). Runner KHÔNG dùng bản này để quyết chạy gì. */
+export const RunnerBundles = buildRunnerBundles(EngineSlugFormat);
+
+/**
+ * Bản có enum slug từ registry adapter (vd `runnerBundleSchemas(BUILTIN_ADAPTERS.map(a => a.slug))` trong ga-runner).
+ * Danh sách rỗng, trùng, hoặc slug sai định dạng ⇒ ném lỗi khi khởi tạo (fail-closed).
+ */
+export function runnerBundleSchemas(engineSlugs: readonly string[]) {
+  const [first, ...rest] = engineSlugs;
+  if (first === undefined) throw new Error('registry engine rỗng');
+  if (new Set(engineSlugs).size !== engineSlugs.length) throw new Error('registry engine có slug trùng');
+  for (const s of engineSlugs) if (!ENGINE_SLUG_RE.test(s)) throw new Error(`slug engine sai định dạng: ${s}`);
+  const slugs: EngineSlugList = [first, ...rest];
+  return buildRunnerBundles(z.enum(slugs));
+}
+
+export const TurnBundle = RunnerBundles.TurnBundle;
+export type TurnBundle = z.infer<typeof TurnBundle>;
+export const LoginCheckBundle = RunnerBundles.LoginCheckBundle;
+export type LoginCheckBundle = z.infer<typeof LoginCheckBundle>;
+export const CapabilityScanBundle = RunnerBundles.CapabilityScanBundle;
+export type CapabilityScanBundle = z.infer<typeof CapabilityScanBundle>;
+export const ProbeBundle = RunnerBundles.ProbeBundle;
+export type ProbeBundle = z.infer<typeof ProbeBundle>;
+export const AuthGcBundle = RunnerBundles.AuthGcBundle;
+export type AuthGcBundle = z.infer<typeof AuthGcBundle>;
+export const EngineInstallBundle = RunnerBundles.EngineInstallBundle;
+export type EngineInstallBundle = z.infer<typeof EngineInstallBundle>;
+export const LoginBundle = RunnerBundles.LoginBundle;
+export type LoginBundle = z.infer<typeof LoginBundle>;
+
+// ---------------------------------------------------------------- kết quả
 export const AuthGcResult = z.strictObject({
   /** Chỉ đếm, không trả tên tệp / nội dung. */
   removed: z.number().int().nonnegative(),
@@ -91,10 +225,18 @@ export const RunnerReport = z.discriminatedUnion('command', [
 ]);
 export type RunnerReport = z.infer<typeof RunnerReport>;
 
-/** Lệnh exec + đường tmpfs cho kiểm đăng nhập / quét khả năng (tương đương TURN_EXEC của lượt). */
+// ---------------------------------------------------------------- đường tmpfs + env
+/** Env + đường tmpfs cho kiểm đăng nhập / quét khả năng (tương đương TURN_EXEC của lượt). */
 export const PROBE_EXEC = {
-  argv: (kind: ProbeKind) => ['ga-runner', kind === 'login_check' ? 'login-check' : 'probe'] as const,
   envProbeId: 'GA_PROBE_ID',
   probeDir: (probeId: string) => `/run/ga/probe-${probeId}`,
   homeDir: (probeId: string) => `/run/ga/probe-${probeId}/home`,
+} as const;
+
+/** Thư mục tệp prompt của lượt: /run/ga/<turnId>/prompt — runner ghép `PromptFile.path` dưới thư mục này. */
+export const promptDir = (turnId: string) => `/run/ga/${turnId}/${PROMPT_DIR}`;
+
+/** `ga-runner login` (PTY): bundle đi qua đúng ba biến env này (stdin là terminal); runner kiểm bằng LoginBundle có enum. */
+export const LOGIN_EXEC = {
+  env: { engineSlug: 'GA_ENGINE_SLUG', engineAccount: 'GA_ENGINE_ACCOUNT', authMethod: 'GA_AUTH_METHOD' },
 } as const;

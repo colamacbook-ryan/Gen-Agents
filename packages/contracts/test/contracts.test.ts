@@ -6,9 +6,13 @@ import {
   EngineInstallStatus,
   EnvMap,
   ExecRequest,
+  execEnv,
+  execStdinPayload,
   extractTermTicket,
   formatDisplayId,
   isEntityPrefix,
+  LOGIN_EXEC,
+  loginExecEnv,
   mapDbError,
   PTY,
   PTY_CLOSE_REASONS,
@@ -77,7 +81,7 @@ describe('engine — env tiêm vào container (CNS-142)', () => {
       kind: 'cli',
       files: [{ path: 'prompt.md', content: 'x', mode: 0o400 }],
       argv: ['tool', '-p'],
-      env: { LANG: 'C.UTF-8' },
+      env: { NO_COLOR: '1' },
       timeoutMs: 1000,
     });
     expect(cli.kind).toBe('cli');
@@ -116,22 +120,19 @@ describe('engine — env tiêm vào container (CNS-142)', () => {
 });
 
 describe('supervisor — exec + vé lượt qua stdin', () => {
-  const base = {
-    container: { name: 'ga-role-rl-0001' },
-    env: { [TURN_EXEC.envTurnId]: ULID, [TURN_EXEC.envGatewayUrl]: 'http://ga-app:7410/mcp' },
-    timeoutMs: 60_000,
-  };
-  it('lượt: argv ga-runner turn, vé ở stdin, env không chứa vé', () => {
-    const req = ExecRequest.parse({
-      ...base,
-      argv: [...TURN_EXEC.argv],
-      stdin: { kind: 'turn-ticket', ticket: 'x'.repeat(43) },
-    });
-    expect(Object.values(req.env).some((v) => v.includes('x'.repeat(43)))).toBe(false);
+  const base = { container: { name: 'ga-role-rl-0001' }, timeoutMs: 60_000 };
+  it('lượt: argv cố định ga-runner turn, vé ở stdin, env do supervisor đặt không chứa vé', () => {
+    const req = ExecRequest.parse({ ...base, run: { command: 'turn', turnId: ULID, ticket: 'x'.repeat(43) } });
+    const env = execEnv(req.run, 'http://ga-app:7410/mcp');
+    expect(Object.keys(env).sort()).toEqual([TURN_EXEC.envGatewayUrl, TURN_EXEC.envTurnId].sort());
+    expect(Object.values(env).some((v) => v.includes('x'.repeat(43)))).toBe(false);
+    expect(execStdinPayload(req.run)).toBe('x'.repeat(43));
     expect(TURN_EXEC.ticketFile(ULID)).toBe(`/run/ga/${ULID}/ticket`);
   });
-  it('argv[0] ngoài allowlist bị từ chối', () => {
-    expect(ExecRequest.safeParse({ ...base, argv: ['sh', '-c', 'id'], stdin: { kind: 'none' } }).success).toBe(false);
+  it('ga-app không gửi được argv / env', () => {
+    const run = { command: 'turn', turnId: ULID, ticket: 'x'.repeat(43) };
+    expect(ExecRequest.safeParse({ ...base, run, argv: ['sh', '-c', 'id'] }).success).toBe(false);
+    expect(ExecRequest.safeParse({ ...base, run, env: { LD_PRELOAD: '/tmp/x.so' } }).success).toBe(false);
   });
 });
 
@@ -155,25 +156,35 @@ describe('PTY — vé trong subprotocol, không trong URL (CNS-134)', () => {
     expect(PTY.loginCheckIntervalSeconds).toBe(5);
     expect(PTY.ticketTtlSeconds).toBe(60);
   });
-  it('claims của vé chứa argv đăng nhập, không chứa token', () => {
-    const claims = TermTicketClaims.parse({
-      v: 1,
+  it('claims của vé chứa Ý ĐỊNH đăng nhập (slug + cách), không chứa argv / token', () => {
+    const raw = {
+      v: 2,
       acc: 'EN-0001',
       container: 'ga-sys-7k2q',
-      argvLogin: ['login-cmd'],
+      engineSlug: 'x',
+      authMethod: 'subscription',
       guiSessionHash: 'a'.repeat(64),
       exp: 1_800_000_000,
       nonce: 'n'.repeat(22),
-    });
+    };
+    const claims = TermTicketClaims.parse(raw);
     expect(Object.keys(claims).sort()).toEqual([
       'acc',
-      'argvLogin',
+      'authMethod',
       'container',
+      'engineSlug',
       'exp',
       'guiSessionHash',
       'nonce',
       'v',
     ]);
+    expect(TermTicketClaims.safeParse({ ...raw, argvLogin: ['sh'] }).success).toBe(false);
+    expect(TermTicketClaims.safeParse({ ...raw, v: 1 }).success).toBe(false);
+    expect(loginExecEnv(claims)).toEqual({
+      [LOGIN_EXEC.env.engineSlug]: 'x',
+      [LOGIN_EXEC.env.engineAccount]: 'EN-0001',
+      [LOGIN_EXEC.env.authMethod]: 'subscription',
+    });
   });
 });
 
