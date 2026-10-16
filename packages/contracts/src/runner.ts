@@ -193,7 +193,8 @@ export const AuthGcResult = z.strictObject({
 export type AuthGcResult = z.infer<typeof AuthGcResult>;
 
 /**
- * Báo cáo cuối của ga-runner: DÒNG CUỐI của stdout, một object JSON có `$ga: 'report'` (để tách khỏi luồng JSONL của CLI).
+ * Báo cáo cuối của ga-runner: DÒNG CUỐI của stdout (dạng `$ga: 'report'`). Mọi dòng khác là `$ga: 'line'` bọc dòng CLI —
+ * xem giao thức stdout bên dưới (parseRunnerStdout).
  */
 export const RunnerReport = z.discriminatedUnion('command', [
   z.strictObject({
@@ -240,3 +241,88 @@ export const promptDir = (turnId: string) => `/run/ga/${turnId}/${PROMPT_DIR}`;
 export const LOGIN_EXEC = {
   env: { engineSlug: 'GA_ENGINE_SLUG', engineAccount: 'GA_ENGINE_ACCOUNT', authMethod: 'GA_AUTH_METHOD' },
 } as const;
+
+// ---------------------------------------------------------------- giao thức stdout của ga-runner (phương án B — bọc mọi dòng)
+// Gen quyết 2026-10-16 (security review MEDIUM output-injection): MỌI dòng runner ghi ra stdout là JSON do runner dựng bằng
+// JSON.stringify, thuộc đúng một trong hai dạng:
+//   {"$ga":"line","l":"<dòng CLI nguyên văn, đã che bí mật>"}   — nội dung CLI (model kiểm soát) LUÔN nằm trong một chuỗi
+//   {"$ga":"report",…}                                            — RunnerReport, đúng một lần, là dòng cuối
+// ⇒ CLI không giả được object cấp trên (`{"$ga":"report",…}` do CLI in ra chỉ là giá trị của `l`). Bên đọc (supervisor /
+// ga-app) dùng parseRunnerStdout: fail-closed, chặn kích thước trước khi parse, chỉ nhận JSON dạng chuẩn (không khoá trùng).
+
+/** Trần một dòng CLI sau khi che (runner cắt / tách dòng dài hơn trước khi bọc). */
+export const RUNNER_CLI_LINE_MAX_CHARS = 262_144;
+/** Trần một dòng stdout (đã bọc) — kiểm TRƯỚC khi parse; đủ cho dòng CLI tối đa sau escape JSON (≤ 6 ký tự / ký tự). */
+export const RUNNER_STDOUT_LINE_MAX_CHARS = 6 * RUNNER_CLI_LINE_MAX_CHARS + 64;
+/** Trần số dòng một lần chạy. */
+export const RUNNER_STDOUT_MAX_LINES = 200_000;
+
+export const RunnerStdoutLine = z.strictObject({
+  $ga: z.literal('line'),
+  l: z.string().max(RUNNER_CLI_LINE_MAX_CHARS),
+});
+export type RunnerStdoutLine = z.infer<typeof RunnerStdoutLine>;
+
+/** Runner: bọc một dòng CLI (đã che) — luôn dùng hàm này, không ghi dòng thô. */
+export function runnerStdoutLine(cliLine: string): string {
+  return JSON.stringify(RunnerStdoutLine.parse({ $ga: 'line', l: cliLine }));
+}
+
+/** Runner: dòng report (dòng cuối cùng). */
+export function runnerReportLine(report: RunnerReport): string {
+  return JSON.stringify(RunnerReport.parse(report));
+}
+
+export type RunnerStdoutParse =
+  | { ok: true; lines: string[]; report: RunnerReport }
+  | { ok: false; code: 'runner_protocol_error'; reason: string; lineNo: number | null };
+
+const protocolError = (reason: string, lineNo: number | null): RunnerStdoutParse => ({
+  ok: false,
+  code: 'runner_protocol_error',
+  reason,
+  lineNo,
+});
+
+/**
+ * Đọc stdout của ga-runner (đã tách theo '\n', KHÔNG gồm phần rỗng sau '\n' cuối). Mỗi dòng phải là JSON dạng chuẩn
+ * (= JSON.stringify(JSON.parse(dòng)) — chặn khoá trùng, khoảng trắng, escape lạ) và đúng một trong hai dạng; phải có ĐÚNG
+ * MỘT report và nó là dòng cuối. Mọi lệch ⇒ `runner_protocol_error` (không trả report nào — fail-closed).
+ */
+export function parseRunnerStdout(lines: readonly string[]): RunnerStdoutParse {
+  if (lines.length > RUNNER_STDOUT_MAX_LINES) return protocolError(`quá ${RUNNER_STDOUT_MAX_LINES} dòng`, null);
+  const out: string[] = [];
+  let report: RunnerReport | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i] as string;
+    const lineNo = i + 1;
+    if (raw.length > RUNNER_STDOUT_LINE_MAX_CHARS) return protocolError('dòng quá cỡ', lineNo);
+    let value: unknown;
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return protocolError('dòng không phải JSON do runner dựng', lineNo);
+    }
+    if (JSON.stringify(value) !== raw)
+      return protocolError('JSON không ở dạng chuẩn (khoá trùng / khoảng trắng / escape)', lineNo);
+    const kind =
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? (value as { $ga?: unknown }).$ga
+        : undefined;
+    if (kind === 'line') {
+      const parsed = RunnerStdoutLine.safeParse(value);
+      if (!parsed.success) return protocolError('dòng `line` sai schema', lineNo);
+      if (report !== null) return protocolError('report không phải dòng cuối', lineNo);
+      out.push(parsed.data.l);
+    } else if (kind === 'report') {
+      if (report !== null) return protocolError('nhiều hơn một report', lineNo);
+      const parsed = RunnerReport.safeParse(value);
+      if (!parsed.success) return protocolError('report sai schema', lineNo);
+      report = parsed.data;
+    } else {
+      return protocolError('dòng lạ (không phải line / report)', lineNo);
+    }
+  }
+  if (report === null) return protocolError('thiếu report', null);
+  return { ok: true, lines: out, report };
+}
