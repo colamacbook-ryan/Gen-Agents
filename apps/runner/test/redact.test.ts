@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DROPPED_LINE_MARKER, RedactingLineWriter } from '../src/lines.ts';
-import { credentialInLine, MAX_SCAN_CHARS, redactLine } from '../src/redact.ts';
+import { credentialInLine, MAX_SCAN_CHARS, normalizeEscapes, redactLine } from '../src/redact.ts';
 
 // Mẫu credential dựng LÚC CHẠY từ mảnh ghép (không có chuỗi giống khoá thật trong repo — gitleaks).
 const j = (...p: string[]) => p.join('');
@@ -63,6 +63,36 @@ describe('redactLine — dùng bộ phát hiện tham chiếu của contracts, t
     ['escape + tab', '{\\"refresh_token\\"\t:\t\\"abc\\"}'],
   ])('refresh_token dạng %s ⇒ bắt', (_n, line) => {
     expect(credentialInLine(line)).not.toBeNull();
+  });
+
+  it.each([
+    ['tiền tố + JSON nhúng', 'INFO {"refresh_token":"abc"}'],
+    ['tiền tố + JSON nhúng escape 1 lớp', 'INFO {\\"refresh_token\\":\\"abc\\"}'],
+    ['tiền tố + JSON nhúng escape 2 lớp', 'INFO {\\\\\\"refresh_token\\\\\\":\\\\\\"abc\\\\\\"}'],
+    ['escape unicode \\u0022', 'log {\\u0022refresh_token\\u0022:\\u0022abc\\u0022}'],
+    ['escape unicode 2 lớp \\\\u0022', 'log {\\\\u0022refresh_token\\\\u0022:\\\\u0022abc\\\\u0022}'],
+    ['key=value giữa dòng', 'retry with refresh_token=abc123 now'],
+  ])('%s ⇒ bắt', (_n, line) => {
+    expect(credentialInLine(line), line).not.toBeNull();
+  });
+
+  it.each([
+    'Rotate your refresh_token regularly',
+    'docs: access_token and id_token are described here',
+    '{"field":"refresh_token"}',
+  ])('ca âm — chỉ nhắc tên khoá, không có giá trị: %j', (line) => {
+    expect(credentialInLine(line)).toBeNull();
+  });
+
+  it('normalizeEscapes: giải \\+uXXXX tối đa 3 lớp rồi bỏ \\ còn lại; tuyến tính', () => {
+    expect(normalizeEscapes('\\u0022a\\u0022')).toBe('"a"');
+    expect(normalizeEscapes('\\\\u0022x')).toBe('"x');
+    expect(normalizeEscapes('a\\"b\\\\c')).toBe('a"bc');
+    expect(normalizeEscapes('\\u00')).toBe('u00');
+    const t0 = performance.now();
+    normalizeEscapes('\\'.repeat(500_000) + 'u0022'.repeat(100_000));
+    normalizeEscapes('\\u005c'.repeat(150_000));
+    expect(performance.now() - t0).toBeLessThan(500);
   });
 
   it.todo('khoá `password` — bộ tham chiếu contracts chưa có (CREDENTIAL_KEY_RE); chờ @ga/security / đề xuất L0');

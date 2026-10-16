@@ -6,7 +6,8 @@ import { findCredentialLike } from '@ga/contracts';
 // Vì bộ tham chiếu chỉ trả có / không (không trả vị trí), runner thay CẢ DÒNG bằng một dòng đánh dấu — không cố che từng
 // đoạn bằng parser riêng (nguồn của lệch parser). Dòng khớp nếu MỘT trong các dạng sau khớp bộ tham chiếu:
 //   (a) dòng thô;
-//   (b) dòng đã bỏ mọi dấu `\` (JSON lồng 1, 2, 3… lớp escape: `\"refresh_token\":` → `"refresh_token":`);
+//   (b) dòng đã CHUẨN HOÁ escape (`normalizeEscapes`: giải `\…\uXXXX` thành ký tự, lặp ≤ 3 lớp, rồi bỏ mọi `\` còn lại —
+//       JSON lồng 1, 2, 3 lớp: `\"refresh_token\":` → `"refresh_token":`, `\u0022refresh_token\u0022:` → `"refresh_token":`);
 //   (c) nếu dòng là JSON: giá trị đã parse (bộ tham chiếu duyệt cả KHOÁ — refresh_token / access_token / id_token /
 //       client_secret / private_key), và mọi chuỗi trong đó trông như JSON được parse tiếp tối đa 3 lớp.
 // Chặn kích thước TRƯỚC khi quét (dòng > 1 MiB ⇒ thay bằng dấu hiệu, không quét). Mọi bước tuyến tính theo độ dài dòng.
@@ -18,6 +19,52 @@ const NESTED_JSON_DEPTH = 3;
 
 export function redactedMarker(patternId: string): string {
   return JSON.stringify({ $ga: 'line_redacted', patternId: patternId.replace(/[^a-z0-9_]/gi, '_') });
+}
+
+const isHex = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102);
+
+/** Một lượt: mọi chuỗi `\+uXXXX` (một hay nhiều dấu `\`) ⇒ ký tự tương ứng. Tuyến tính. */
+function decodeUnicodeEscapesOnce(s: string): string {
+  let out = '';
+  let i = 0;
+  let last = 0;
+  while (i < s.length) {
+    if (s.charCodeAt(i) !== 92) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < s.length && s.charCodeAt(j) === 92) j++;
+    if (
+      s.charCodeAt(j) === 117 &&
+      j + 4 < s.length &&
+      isHex(s.charCodeAt(j + 1)) &&
+      isHex(s.charCodeAt(j + 2)) &&
+      isHex(s.charCodeAt(j + 3)) &&
+      isHex(s.charCodeAt(j + 4))
+    ) {
+      out += s.slice(last, i) + String.fromCharCode(Number.parseInt(s.slice(j + 1, j + 5), 16));
+      i = j + 5;
+      last = i;
+    } else {
+      i = j;
+    }
+  }
+  return last === 0 ? s : out + s.slice(last);
+}
+
+/**
+ * Chuẩn hoá escape để bộ tham chiếu thấy được khoá / giá trị bị escape nhiều lớp: giải `\+uXXXX` (lặp tối đa 3 lớp, dừng sớm
+ * khi không đổi) rồi bỏ mọi `\` còn lại. Mỗi lượt O(n) ⇒ tổng O(n).
+ */
+export function normalizeEscapes(s: string): string {
+  let cur = s;
+  for (let round = 0; round < 3; round++) {
+    const next = decodeUnicodeEscapesOnce(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return cur.split('\\').join('');
 }
 
 function looksLikeJson(s: string): boolean {
@@ -58,8 +105,8 @@ export function credentialInLine(line: string): string | null {
   const raw = findCredentialLike(line);
   if (raw) return raw.patternId;
   if (line.includes('\\')) {
-    const unescaped = findCredentialLike(line.split('\\').join(''));
-    if (unescaped) return unescaped.patternId;
+    const normalized = findCredentialLike(normalizeEscapes(line));
+    if (normalized) return normalized.patternId;
   }
   if (looksLikeJson(line)) {
     let parsed: unknown;
