@@ -337,9 +337,9 @@ const pemPrivateKey: Detector = {
 
 // ---------------------------------------------------------------- cặp khoá–giá trị, Bearer, userinfo URL
 /**
- * MỘT nguồn luật cho tên credential trong VĂN BẢN (contracts 0a2bfff, Gen 2026-10-16): tên = `CREDENTIAL_KEY_NAMES` của
- * contracts, so KHÔNG phụ thuộc kiểu viết như `normalizeCredentialName` (bỏ `_` / `-`, không phân biệt hoa thường) ⇒ giữa
- * các phần của tên cho `[_-]*` (literal kề `[_-]*` khác lớp ⇒ không backtrack), khớp ở MỌI vị trí như tham chiếu
+ * MỘT nguồn luật cho tên credential trong VĂN BẢN (contracts 0a2bfff / fd1fd84, Gen 2026-10-16): tên = `CREDENTIAL_KEY_NAMES`
+ * của contracts; vế trái phép gán trong chuỗi thô theo đúng ngữ pháp của contracts — giữa các phần của tên cho `[_-]*`
+ * (literal kề `[_-]*` khác lớp ⇒ không backtrack), không phân biệt hoa thường, khớp ở MỌI vị trí như tham chiếu
  * `credential_assignment` (`refreshToken`, `Refresh-Token`, `REFRESH__TOKEN`, `xapi_key` đều khớp). Thêm tên ở contracts ⇒
  * bộ này tự phủ (test đối chiếu lấy chính danh sách contracts làm corpus).
  */
@@ -347,7 +347,7 @@ const REFERENCE_FIELD_SRC = [...new Set(CREDENTIAL_KEY_NAMES)]
   .map((n) => n.split(/[_-]/).map(escapeRe).join('[_-]*'))
   .join('|');
 /** Phần thêm RIÊNG của security (ngoài contracts): tên chung chung ⇒ cần ranh giới trước (tránh chặn câu văn). */
-const SECURITY_EXTRA_FIELD_SRC = ['passw(?:or)?d', 'set[_-]*cookie', 'cookie', 'bearer', 'auth[_-]*code'].join('|');
+const SECURITY_EXTRA_FIELD_SRC = ['set[_-]*cookie', 'cookie', 'bearer', 'auth[_-]*code'].join('|');
 /** Lọc trước có / không: mọi tên khoá (contracts + phần thêm + authorization) đều chứa một trong các mảnh này. */
 const FIELD_HINT_RE = /token|secret|key|passw|authorization|cookie|bearer|code/i;
 const VALUE_MIN = 8;
@@ -412,7 +412,16 @@ const credentialField: Detector = {
 };
 
 /** Khoá = đúng một tên credential (ranh giới hai phía) + dấu gán; nhóm 1 = khoá. Lookaround một ký tự, không quantifier. */
-const KEY_ASSIGN_RE_SRC = `(?<![A-Za-z0-9_-])(${REFERENCE_FIELD_SRC})(?![A-Za-z0-9_-])${SEP_SRC}`;
+/**
+ * Tên credential cũng là từ thường trong câu văn — contracts 3af4e6a (Gen duyệt): `password` / `passwd` chỉ bắt khi là
+ * KHOÁ object hoặc phép gán giá trị ≥ 8 ("password: tối thiểu 12 ký tự", "password = short" không chặn) ⇒ không áp luật
+ * giá trị ngắn bên dưới (luật ≥ 8 của credential_assignment vẫn áp).
+ */
+const PROSE_CREDENTIAL_NAMES: ReadonlySet<string> = new Set(['password', 'passwd']);
+const SHORT_VALUE_FIELD_SRC = CREDENTIAL_KEY_NAMES.filter((n) => !PROSE_CREDENTIAL_NAMES.has(n))
+  .map((n) => n.split(/[_-]/).map(escapeRe).join('[_-]*'))
+  .join('|');
+const KEY_ASSIGN_RE_SRC = `(?<![A-Za-z0-9_-])(${SHORT_VALUE_FIELD_SRC})(?![A-Za-z0-9_-])${SEP_SRC}`;
 /** Giá trị có nháy: tới nháy đóng cùng loại (trần 4096). */
 const DQ_VALUE_RE = /[^"]{0,4096}/y;
 const SQ_VALUE_RE = /[^']{0,4096}/y;
@@ -420,7 +429,8 @@ const SQ_VALUE_RE = /[^']{0,4096}/y;
 const JSON_LITERAL_RE = /(?:null|true|false)(?![A-Za-z0-9_])/y;
 
 /**
- * Phép gán mà KHOÁ là đúng một tên credential theo `isCredentialKeyName` của contracts (cả khoá — `MAX_TOKEN`,
+ * Phép gán mà KHOÁ là đúng một tên credential theo `isCredentialKeyName` của contracts (trừ PROSE_CREDENTIAL_NAMES; cả
+ * khoá — `MAX_TOKEN`,
  * `my_access_token`, `apikeys` không tính), giá trị dài BẤT KỲ, kể cả < 8 ký tự (L-RT 2026-10-16: runner bỏ rào riêng
  * `credentialKeyAssignment`, chỉ còn một nguồn). Dạng khoá rõ ràng: `"name": "…"` / `'name': '…'` (kể cả `\"` của JSON
  * lồng), `name=…`, `name: …`. Chữ trong tên viết `\uXXXX` ⇒ bước giải (≤ 3 lớp) đưa về các dạng này. Không có giá trị
@@ -1136,6 +1146,8 @@ export type TextScanResult =
   | { status: 'match'; patternId: string; spans: CredentialSpan[] }
   | { status: 'too_large'; length: number };
 
+/** Có ký tự ngoài ASCII in được (+ TAB / LF / CR) — chỉ khi đó NFKC mới có thể đổi chuỗi. */
+const NON_ASCII_RE = /[^\t\n\r\x20-\x7e]/;
 /** Khoảng trắng Unicode cần gập (lớp ký tự dựng lúc chạy từ UNICODE_SPACE_CHARS, không có ký tự lạ trong mã nguồn). */
 const UNICODE_SPACE_G_RE = new RegExp(`[${UNICODE_SPACE_CHARS.join('')}]`, 'g');
 
@@ -1189,6 +1201,30 @@ function collect(raw: string, firstOnly: boolean): CredentialSpan[] {
         });
       if (spans.length === before) spans.push({ start: 0, end: s.length, patternId: quickHit });
       if (stop || firstOnly) return spans;
+    }
+  }
+
+  // NFKC (contracts testWithNfkc): ký tự tương thích — fullwidth ngoài trần 64 Ki của bước gập, chữ khoanh tròn, chữ in
+  // trên / dưới, chữ ghép… ⇒ quét thêm bản NFKC để PHÁT HIỆN. Vị trí không ánh xạ được (NFKC đổi độ dài) ⇒ bản NFKC có
+  // nhiều đoạn của một id hơn các lượt trước thì che CẢ chuỗi (mặc định chặn).
+  if (NON_ASCII_RE.test(s)) {
+    const nf = s.normalize('NFKC');
+    if (nf !== s) {
+      const before = new Map<string, number>();
+      for (const sp of spans) before.set(sp.patternId, (before.get(sp.patternId) ?? 0) + 1);
+      const seen = new Map<string, number>();
+      let extra: string | null = null;
+      runDetectors(nf, (_a, _b, id) => {
+        const c = (seen.get(id) ?? 0) + 1;
+        seen.set(id, c);
+        if (c <= (before.get(id) ?? 0)) return false;
+        extra = id;
+        return true;
+      });
+      if (extra !== null) {
+        spans.push({ start: 0, end: s.length, patternId: extra });
+        if (firstOnly) return spans;
+      }
     }
   }
 

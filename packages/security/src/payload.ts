@@ -3,9 +3,10 @@
 // trường nào được miễn. Kết quả `denied` mang id mẫu — KHÔNG mang payload / đoạn khớp / hash (contracts CREDENTIAL_BLOCKED:
 // audit chỉ {patternId, tool}). Lần chặn ⇒ audit `credential.blocked`, cảnh báo owner, KHÔNG phạt (CNS-169).
 import {
-  CREDENTIAL_KEY_NAMES,
+  CREDENTIAL_KEY_NAMES_NORMALIZED,
   type CredentialPatternId,
-  isCredentialKeyName,
+  credentialKeyMatches,
+  normalizeCredentialName,
   TOOL_PAYLOAD_LIMITS,
 } from '@ga/contracts';
 import { auditPatternId, scanText } from './credential-detector.ts';
@@ -17,27 +18,8 @@ export interface PayloadLimits {
   maxNodes: number;
 }
 
-/**
- * Chuẩn hoá CHẶT tên khoá (security review MEDIUM, Gen xác nhận): NFKC (gập fullwidth…) + chữ thường + bỏ MỌI ký tự ngoài
- * a–z0–9 ⇒ `api key`, `api.key`, `api:key`, `api_key ` (khoảng trắng cuối), `api_key` viết fullwidth (U+FF41…) đều = `apikey`.
- * TẠM: L0 đang đưa đúng luật này vào `normalizeCredentialName` của contracts — khi merge về, bỏ hàm này, dùng của contracts
- * (một nguồn).
- */
-export const normalizeKeyStrict = (key: string): string =>
-  key
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-
-/**
- * Tên khoá mang credential: `isCredentialKeyName` của contracts (tên `CREDENTIAL_KEY_NAMES` mọi kiểu viết) HOẶC tên trong
- * `SENSITIVE_KEY_NAMES` (contracts + phần thêm của security) so sau `normalizeKeyStrict` — luật chặt bao luật contracts.
- */
-
 /** Phần thêm RIÊNG của security (ngoài contracts): tên chung chung chỉ chặn khi là KHOÁ object, không chặn câu văn. */
 export const SECURITY_EXTRA_KEY_NAMES = [
-  'password',
-  'passwd',
   'secret',
   'token',
   'oauth_token',
@@ -49,12 +31,19 @@ export const SECURITY_EXTRA_KEY_NAMES = [
   'auth_code',
 ] as const;
 
-export const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set(
-  [...CREDENTIAL_KEY_NAMES, ...SECURITY_EXTRA_KEY_NAMES].map(normalizeKeyStrict),
-);
+/**
+ * Tên khoá mang credential — MỘT nguồn (contracts fd1fd84, Gen 2026-10-16): `CREDENTIAL_KEY_NAMES_NORMALIZED` của contracts
+ * + tên thêm của security (chuẩn hoá bằng chính `normalizeCredentialName` của contracts: NFKC + chữ thường + bỏ MỌI ký tự
+ * ngoài a–z0–9 ⇒ `api key`, `api.key`, `api:key`, `api_key `, fullwidth đều = `apikey`). So bằng `credentialKeyMatches` của
+ * contracts (cả dạng NFKC lẫn dạng không NFKC; khoá dài quá trần ⇒ coi là khớp — fail-closed, không ném RangeError).
+ */
+export const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set([
+  ...CREDENTIAL_KEY_NAMES_NORMALIZED,
+  ...SECURITY_EXTRA_KEY_NAMES.map(normalizeCredentialName),
+]);
 
 export function isSensitiveKey(key: string): boolean {
-  return isCredentialKeyName(key) || SENSITIVE_KEY_NAMES.has(normalizeKeyStrict(key));
+  return credentialKeyMatches(key, SENSITIVE_KEY_NAMES);
 }
 
 export type PayloadScreenResult =

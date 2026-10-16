@@ -56,7 +56,6 @@ describe('ca âm từng luật (chỉ chính luật đó lẽ ra phải bắt �
     credential_assignment: [
       'Bạn đổi password: ở trang cài đặt',
       'token: ok',
-      'xpassword=abcdefghijkl',
       'api_key field is required',
       'access_token',
     ],
@@ -229,8 +228,9 @@ describe('gán credential theo tên khoá trên DÒNG THÔ (Gen 2026-10-16, revi
     // giá trị < 8 ký tự với tên credential của contracts (`access_token=short`) NAY bị bắt bởi credential_field_name
     expect(detectCredential('access_token=short')).toBe('credential_field_name');
     expect(detectCredential('client_secret: "1234567"')).toBe('credential_field_name');
+    // `password` / `passwd` là tên credential của contracts (3af4e6a): khớp MỌI vị trí như tham chiếu, giá trị ≥ 8
+    expect(detectCredential('xpassword=abcdefghijkl')).toBe('credential_assignment');
     for (const s of [
-      'xpassword=abcdefghijkl',
       '\\u0073efresh_token=abcdefghijk',
       'refresh_token is documented here',
       '\\\\u0072efresh_tokens and more',
@@ -740,5 +740,49 @@ describe('phép gán khoá credential, giá trị NGẮN (credential_field_name 
     ]) {
       expect(detectCredential(line), line).toBeNull();
     }
+  });
+});
+
+describe('contracts fd1fd84 / 3af4e6a: password / passwd, NFKC, trần độ dài tên (không ném RangeError)', () => {
+  it('password / passwd: khoá object, phép gán giá trị ≥ 8 ⇒ bắt; câu văn / giá trị ngắn ⇒ không (như contracts)', () => {
+    const v = ['pAsS', '1w0rD', 'pAsS'].join('');
+    expect(screenPayload({ password: 'x' })).toMatchObject({ patternId: 'credential_field_name' });
+    expect(screenPayload({ Passwd: v })).toMatchObject({ patternId: 'credential_field_name' });
+    for (const s of [`password=${v}`, `"password": "${v}"`, `login with passwd: '${v}'`]) {
+      expect(detectCredential(s), s).not.toBeNull();
+      expect(redactText(s), s).not.toContain(v);
+    }
+    for (const s of [
+      'Quên password? Bấm "Đặt lại mật khẩu"',
+      'password: tối thiểu 12 ký tự',
+      'Đổi password mỗi 90 ngày, không dùng lại passwd cũ',
+      'the password field is required',
+      'password=****',
+      'password = short',
+    ]) {
+      expect(detectCredential(s), s).toBeNull();
+    }
+  });
+  it('NFKC: tên credential viết fullwidth trong chuỗi > 64 Ki ký tự, chữ khoanh tròn ⇒ vẫn bắt (che cả chuỗi)', () => {
+    const fw = (t: string) => [...t].map((c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)).join('');
+    const circledA = String.fromCharCode(0x24d0);
+    const value = ['abcd', '1234', 'XYZ'].join('');
+    const big = `${'văn bản thường '.repeat(5000)}${fw('api_key')}=${value} hết`;
+    expect(big.length).toBeGreaterThan(65_536);
+    expect(detectCredential(big)).not.toBeNull();
+    expect(redactText(big)).not.toContain(value);
+    const circled = `log ${circledA}ccess_token=${value}`;
+    expect(detectCredential(circled)).not.toBeNull();
+    expect(redactText(circled)).not.toContain(value);
+  });
+  it('khoá / tên dài quá trần: không ném lỗi, coi là nhạy cảm (fail-closed)', () => {
+    const hugeKey = `api${'_'.repeat(20_000)}key`;
+    expect(isSensitiveKey(hugeKey)).toBe(true);
+    expect(isSensitiveKey('x'.repeat(20_000))).toBe(true);
+    expect(() => redactValue({ [hugeKey]: 'v4lue-x' })).not.toThrow();
+    expect(JSON.stringify(redactValue({ [hugeKey]: 'v4lue-x' }))).not.toContain('v4lue-x');
+    expect(() => detectCredential(`${hugeKey}=v`)).not.toThrow();
+    expect(detectCredential(`${hugeKey}=v`)).not.toBeNull();
+    expect(() => redactText(`${hugeKey}: v ${'refresh_token '.repeat(10)}`)).not.toThrow();
   });
 });

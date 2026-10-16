@@ -32,13 +32,18 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp }> = [
     ),
   },
   /**
-   * Khoá = đúng một tên credential (ranh giới hai phía) + dấu gán + giá trị NGẮN bất kỳ ≥ 1 ký tự (L-RT 2026-10-16): nháy
+   * Khoá = đúng một tên credential (ranh giới hai phía; trừ password / passwd — contracts 3af4e6a: từ thường trong câu văn,
+   * chỉ bắt khi giá trị ≥ 8) + dấu gán + giá trị NGẮN bất kỳ ≥ 1 ký tự (L-RT 2026-10-16): nháy
    * mở rồi một ký tự không phải nháy, hoặc một ký tự không phải khoảng trắng / phân cách; trừ null / true / false.
    */
   {
     id: 'credential_key_assignment',
     re: new RegExp(
-      `(?<![A-Za-z0-9_-])(?:${CREDENTIAL_KEY_NAMES.map((n) => n.split(/[_-]/).join('[_-]*')).join('|')})(?![A-Za-z0-9_-])["']?\\s*[:=]\\s*(?!(?:null|true|false)(?![A-Za-z0-9_]))(?:"[^"]|'[^']|[^\\s"',;}\\])])`,
+      `(?<![A-Za-z0-9_-])(?:${CREDENTIAL_KEY_NAMES.filter((n) => n !== 'password' && n !== 'passwd')
+        .map((n) => n.split(/[_-]/).join('[_-]*'))
+        .join(
+          '|',
+        )})(?![A-Za-z0-9_-])["']?\\s*[:=]\\s*(?!(?:null|true|false)(?![A-Za-z0-9_]))(?:"[^"]|'[^']|[^\\s"',;}\\])])`,
       'i',
     ),
   },

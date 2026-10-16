@@ -1,9 +1,9 @@
 {
   "files": [],
   "references": [
+    { "path": "apps/control-plane" },
     { "path": "packages/contracts" },
     { "path": "packages/db" },
-    { "path": "packages/security" },
-    { "path": "apps/control-plane" }
+    { "path": "packages/security" }
   ]
 }
