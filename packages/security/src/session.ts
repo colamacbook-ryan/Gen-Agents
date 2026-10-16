@@ -13,9 +13,9 @@ export const SESSION = {
   tokenBytes: 32,
   cookieSecure: '__Host-ga_sid',
   cookieInsecure: 'ga_sid',
-  /** Hạn tuyệt đối của phiên. [ĐỀ XUẤT — L-SEC] */
+  /** Hạn tuyệt đối của phiên. [Gen duyệt 2026-10-16] */
   absoluteTtlSeconds: 7 * 24 * 3600,
-  /** Không hoạt động quá lâu ⇒ phiên hết hạn. [ĐỀ XUẤT — L-SEC] */
+  /** Không hoạt động quá lâu ⇒ phiên hết hạn. [Gen duyệt 2026-10-16] */
   idleTtlSeconds: 12 * 3600,
   /** Ghi last_seen_at tối đa mỗi ngần này giây (không ghi DB ở mọi request). */
   touchEverySeconds: 60,

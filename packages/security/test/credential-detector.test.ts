@@ -62,7 +62,14 @@ describe('ca âm từng luật (chỉ chính luật đó lẽ ra phải bắt �
       'https://user@host.example.com/',
       'https://u:@h.example.com/',
     ],
-    env_secret_assignment: ['MY_TOKEN_COUNT=5', 'TOKEN=abc', 'the_key is here', 'API_KEY =', 'MAX_TOKENS=4096'],
+    env_secret_assignment: [
+      'MY_TOKEN_COUNT=5',
+      'TOKEN=abcdefghij',
+      'the_key is here',
+      'API_KEY =',
+      'MAX_TOKENS=4096',
+      'MAX_TOKEN=4096',
+    ],
     canary: ['GA-CANARY-', 'GA-CANARY-xyz', 'GA CANARY 3f2b9c1e'],
     high_entropy_run: [
       'abcdefghijklmnopqrstuvwxyzabcdefgh',
@@ -406,18 +413,30 @@ describe('sửa sau review MEDIUM (2026-10-16)', () => {
       }
     }
   });
-  it('env_secret_assignment: UPPER_SNAKE …_SECRET/TOKEN/PASSWORD/KEY/PAT = giá trị ≥ 1 ký tự; hậu tố chữ thường thì không', () => {
+  it('env_secret_assignment khớp contracts: …_SECRET/TOKEN/PASSWORD/KEY/PAT = giá trị ≥ 8 ký tự; cấu hình ngắn KHÔNG chặn', () => {
     for (const s of [
-      'DB_PASSWORD=hunter2',
-      'export GITHUB_PAT=ab',
-      'AWS_SECRET_ACCESS_KEY="zz"',
-      'JWT_SIGNING_KEY = k',
-      'X_TOKEN="',
+      'DB_PASSWORD=hunter2024',
+      'export GITHUB_PAT=abcd1234',
+      'AWS_SECRET_ACCESS_KEY="zzzzzzzz"',
+      'JWT_SIGNING_KEY = k1k2k3k4k5',
+      "X_TOKEN: 'abcdefgh'",
+      'x_SECRET=abcdefgh',
     ]) {
       expect(detectCredential(s), s).not.toBeNull();
     }
-    expect(redactText('DB_PASSWORD=hunter2 next')).toBe('DB_PASSWORD=[REDACTED:env_secret_assignment] next');
-    // ca âm có chủ đích: hậu tố chữ thường + giá trị ngắn (câu văn / mã nguồn kiểu `primary_key: id`) không chặn
-    for (const s of ['app_secret: x', 'primary_key: id', 'sort_key=name']) expect(detectCredential(s), s).toBeNull();
+    expect(redactText('MY_APP_PAT=hunter2024 next')).toBe('MY_APP_PAT=[REDACTED:env_secret_assignment] next');
+    expect(redactText('DB_PASSWORD=hunter2024 next')).not.toContain('hunter2024');
+    // ca âm có chủ đích (Gen 2026-10-16): cấu hình bình thường, giá trị < 8 ký tự, hậu tố chữ thường, không có giá trị
+    for (const s of [
+      'MAX_TOKEN=4096',
+      'MAX_TOKENS=4096',
+      'DB_PASSWORD=hunter2',
+      'X_TOKEN="',
+      'API_KEY =',
+      'app_secret: abcdefghij',
+      'primary_key: id',
+    ]) {
+      expect(detectCredential(s), s).toBeNull();
+    }
   });
 });

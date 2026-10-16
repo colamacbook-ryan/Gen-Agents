@@ -30,8 +30,11 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp }> = [
     ),
   },
   { id: 'aws_access_key_id', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}/ },
-  /** Dự đoán `env_secret_assignment` của L0 (UPPER_SNAKE …_SECRET/TOKEN/PASSWORD/KEY/PAT=) — bản thật vào contracts thì (B) phủ. */
-  { id: 'env_secret_assignment', re: /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|KEY|PAT)\s*=\s*\S/ },
+  /** = contracts `env_secret_assignment` (c4285e8). */
+  {
+    id: 'env_secret_assignment',
+    re: /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\s*[:=]\s*["']?[^\s"']{8}/,
+  },
   { id: 'canary', re: /GA-CANARY-[0-9a-f-]{8,}/i },
   {
     id: 'high_entropy',
@@ -167,10 +170,11 @@ function corpus(): string[] {
     }
   }
   // gán biến môi trường bí mật: tên UPPER_SNAKE (+ chữ thường) × hậu tố × dấu gán × giá trị 0–3 ký tự
-  for (const suffix of ['SECRET', 'TOKEN', 'PASSWORD', 'KEY', 'PAT', 'secret', 'token']) {
+  for (const suffix of ['SECRET', 'TOKEN', 'PASSWORD', 'PASSWD', 'KEY', 'PAT', 'secret', 'token', 'TOKENS']) {
     for (const name of ['DB', 'GITHUB', 'MY_APP', 'X1', 'aws_secret_ACCESS']) {
       for (const sep of ['=', ' = ', ':', '="']) {
         out.push(`${pick(['', 'export ', ' '])}${name}_${suffix}${sep}${run(int(0, 3), VALUE)}`);
+        out.push(`${pick(['', 'export ', ' ', 'x'])}${name}_${suffix}${sep}${run(int(6, 10), VALUE)}`);
       }
     }
   }

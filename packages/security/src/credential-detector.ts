@@ -407,13 +407,14 @@ function valueStart(s: string, i: number, skipScheme: boolean): number {
 }
 
 /**
- * Gán biến môi trường bí mật: `<TÊN>_(SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)` + [:=] + ≥ 1 ký tự không trắng (kiểu `.env`,
- * `export GITHUB_PAT=…`, YAML `API_KEY: …`). L0 đang thêm `env_secret_assignment` vào contracts (UPPER_SNAKE): bộ này đòi
- * hậu tố VIẾT HOA (như tham chiếu), tên phía trước bất kỳ, giá trị chỉ cần 1 ký tự ⇒ ⊇ tham chiếu UPPER_SNAKE mà không chặn
- * câu văn kiểu `primary_key: id`. Nếu bản thật của L0 không phân biệt hoa thường, test đối chiếu (B) sẽ đỏ khi gộp.
- * Regex bắt đầu bằng hậu tố literal `_SECRET`… ⇒ tuyến tính.
+ * Gán biến môi trường bí mật (contracts `env_secret_assignment`, c4285e8):
+ *   `\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\s*[:=]\s*["']?[^\s"']{8}`
+ * Bộ này ⊇ tham chiếu: bắt đầu từ hậu tố literal (tên phía trước bất kỳ, không đòi chữ hoa đầu), cho thêm `\"` / nháy
+ * quanh tên của JSON lồng; giá trị PHẢI ≥ 8 ký tự [^\s"'] như tham chiếu — `MAX_TOKEN=4096` là cấu hình, không chặn.
+ * Regex bắt đầu bằng hậu tố literal, `{8}` có trần ⇒ tuyến tính.
  */
-const ENV_SECRET_RE = /_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\\?["']?\s*[:=]\s*\S/g;
+const ENV_SECRET_RE = /_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\\?["']?\s*[:=]\s*\\?["']?[^\s"']{8}/g;
+const ENV_VALUE_RE = /[^\s"']*/y;
 
 const envSecretAssignment: Detector = {
   id: 'env_secret_assignment',
@@ -423,23 +424,14 @@ const envSecretAssignment: Detector = {
     const s = v.s;
     const re = new RegExp(ENV_SECRET_RE.source, 'g');
     for (let m = re.exec(s); m; m = re.exec(s)) {
-      const vs = valueStart(s, m.index + m[0].length - 1, false);
-      const e = stickyEnd(VALUE_RE, s, vs);
-      // giá trị rỗng (chỉ có dấu nháy) ⇒ vẫn là khớp; che phần hậu tố tên (không nuốt dấu nháy của JSON)
-      const hit =
-        e > vs ? emit(vs, e, this.id) : emit(m.index + 1, m.index + 1 + suffixLength(s, m.index + 1), this.id);
-      if (hit) return true;
+      const vs = m.index + m[0].length - 8;
+      const e = stickyEnd(ENV_VALUE_RE, s, vs);
+      if (emit(vs, e, this.id)) return true;
       re.lastIndex = Math.max(re.lastIndex, e);
     }
     return false;
   },
 };
-
-function suffixLength(s: string, at: number): number {
-  let k = at;
-  while (k < s.length && s.charCodeAt(k) >= 65 && s.charCodeAt(k) <= 90) k++;
-  return k - at;
-}
 
 const BEARER_TOKEN_RE = /[0-9A-Za-z_.~+/=-]*/y;
 

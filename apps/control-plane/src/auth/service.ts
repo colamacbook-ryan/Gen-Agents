@@ -10,6 +10,8 @@ import { randomBytes } from 'node:crypto';
 import { rmSync, writeFileSync } from 'node:fs';
 import type { Clock } from '@ga/contracts';
 import {
+  ACCOUNT_LOCKOUT,
+  type AccountLockoutPolicy,
   accountLockSeconds,
   checkRequestOrigin,
   csrfTokenFor,
@@ -35,12 +37,32 @@ import {
 } from '@ga/security';
 import type { AuthStore, AuthUser } from './store.ts';
 
-/** [ĐỀ XUẤT — L-SEC] Giới hạn tần suất đăng nhập / đổi mật khẩu. */
+/** [Gen duyệt 2026-10-16] Giới hạn tần suất đăng nhập / đổi mật khẩu. */
 export const LOGIN_LIMITS = {
   perIp: { limit: 10, windowMs: 15 * 60_000 },
   perAccount: { limit: 10, windowMs: 15 * 60_000 },
   global: { limit: 120, windowMs: 60_000 },
 } as const;
+
+/**
+ * Chính sách đăng nhập [Gen duyệt 2026-10-16]. Là THAM SỐ (không đóng cứng trong luồng): DB / contracts hiện chưa có khoá
+ * setting tương ứng; khi lane DB thêm khoá `auth.*`, tầng dựng app đọc setting rồi truyền vào `AuthServiceOptions.policy`.
+ */
+export interface AuthPolicy {
+  limits: { [K in keyof typeof LOGIN_LIMITS]: { limit: number; windowMs: number } };
+  lockout: AccountLockoutPolicy;
+  sessionAbsoluteTtlSeconds: number;
+  sessionIdleTtlSeconds: number;
+  passwordMinChars: number;
+}
+
+export const DEFAULT_AUTH_POLICY: AuthPolicy = {
+  limits: LOGIN_LIMITS,
+  lockout: ACCOUNT_LOCKOUT,
+  sessionAbsoluteTtlSeconds: SESSION.absoluteTtlSeconds,
+  sessionIdleTtlSeconds: SESSION.idleTtlSeconds,
+  passwordMinChars: PASSWORD_RULES.minChars,
+};
 
 export const OWNER_USERNAME = 'admin';
 export const FIRST_PASSWORD_PATH = '/data/run/first-password';
@@ -129,6 +151,8 @@ export interface AuthServiceOptions {
   /** Origin hợp lệ của GUI (vd `http://localhost:7400`, `https://agents.example.com`). */
   allowedOrigins: readonly string[];
   firstPassword?: FirstPasswordSink;
+  /** Mặc định DEFAULT_AUTH_POLICY; từng trường ghi đè được (nguồn: setting khi DB có khoá). */
+  policy?: Partial<AuthPolicy>;
 }
 
 /** Tên đăng nhập: NFC, bỏ khoảng trắng hai đầu, chữ thường; rỗng / dài / ký tự điều khiển ⇒ null. */
@@ -141,15 +165,18 @@ export function normalizeUsername(raw: unknown): string | null {
 
 export class AuthService {
   private readonly o: AuthServiceOptions;
+  private readonly policy: AuthPolicy;
   private readonly ipLimiter: SlidingWindowLimiter;
   private readonly accountLimiter: SlidingWindowLimiter;
   private readonly globalLimiter: SlidingWindowLimiter;
 
   constructor(opts: AuthServiceOptions) {
     this.o = opts;
-    this.ipLimiter = new SlidingWindowLimiter({ ...LOGIN_LIMITS.perIp, clock: opts.clock });
-    this.accountLimiter = new SlidingWindowLimiter({ ...LOGIN_LIMITS.perAccount, clock: opts.clock });
-    this.globalLimiter = new SlidingWindowLimiter({ ...LOGIN_LIMITS.global, clock: opts.clock });
+    this.policy = { ...DEFAULT_AUTH_POLICY, ...opts.policy };
+    const l = this.policy.limits;
+    this.ipLimiter = new SlidingWindowLimiter({ ...l.perIp, clock: opts.clock });
+    this.accountLimiter = new SlidingWindowLimiter({ ...l.perAccount, clock: opts.clock });
+    this.globalLimiter = new SlidingWindowLimiter({ ...l.global, clock: opts.clock });
   }
 
   private now(): Date {
@@ -216,12 +243,15 @@ export class AuthService {
       userId: user.id,
       tokenHash,
       at,
-      expiresAt: new Date(at.getTime() + SESSION.absoluteTtlSeconds * 1000),
+      expiresAt: new Date(at.getTime() + this.policy.sessionAbsoluteTtlSeconds * 1000),
       ip,
       userAgent: userAgent ? userAgent.slice(0, USER_AGENT_MAX) : null,
     });
     return {
-      setCookie: serializeSessionCookie(token, { secure: this.o.secureCookies }),
+      setCookie: serializeSessionCookie(token, {
+        secure: this.o.secureCookies,
+        maxAgeSeconds: this.policy.sessionAbsoluteTtlSeconds,
+      }),
       csrfToken: csrfTokenFor(this.o.csrfKey, tokenHash),
     };
   }
@@ -257,7 +287,9 @@ export class AuthService {
     }
     if (!ok || !user) {
       if (user && !user.disabledAt) {
-        const r = this.o.store.registerFailedLogin(user.id, this.now(), accountLockSeconds);
+        const r = this.o.store.registerFailedLogin(user.id, this.now(), (n) =>
+          accountLockSeconds(n, this.policy.lockout),
+        );
         if (r.lockedUntil) return { ok: false, code: 'locked', retryAfterSeconds: this.lockedFor({ ...user, ...r }) };
       }
       return { ok: false, code: 'invalid_credentials' };
@@ -289,7 +321,7 @@ export class AuthService {
       !session ||
       session.revokedAt !== null ||
       Date.parse(session.expiresAt) <= nowMs ||
-      (session.lastSeenAt !== null && nowMs - Date.parse(session.lastSeenAt) > SESSION.idleTtlSeconds * 1000)
+      (session.lastSeenAt !== null && nowMs - Date.parse(session.lastSeenAt) > this.policy.sessionIdleTtlSeconds * 1000)
     ) {
       return { ok: false, code: 'auth.required', clearCookie: clear };
     }
@@ -336,11 +368,17 @@ export class AuthService {
     const locked = this.lockedFor(user);
     if (locked > 0) return { ok: false, code: 'locked', retryAfterSeconds: locked };
     if (!(await verifyPassword(currentPassword, user.passwordHash))) {
-      const r = this.o.store.registerFailedLogin(user.id, this.now(), accountLockSeconds);
+      const r = this.o.store.registerFailedLogin(user.id, this.now(), (n) =>
+        accountLockSeconds(n, this.policy.lockout),
+      );
       if (r.lockedUntil) return { ok: false, code: 'locked', retryAfterSeconds: this.lockedFor({ ...user, ...r }) };
       return { ok: false, code: 'invalid_credentials' };
     }
-    const policy = validateNewPassword(newPassword, { username: user.username, currentPassword });
+    const policy = validateNewPassword(newPassword, {
+      username: user.username,
+      currentPassword,
+      minChars: this.policy.passwordMinChars,
+    });
     if (!policy.ok) return { ok: false, code: 'weak_password', reason: policy.reason };
     const at = this.now();
     this.o.store.setPasswordHash(user.id, await hashPassword(newPassword), { mustChange: false, at });

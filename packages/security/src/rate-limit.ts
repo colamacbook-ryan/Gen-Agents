@@ -81,14 +81,19 @@ export class SlidingWindowLimiter {
 }
 
 /**
- * Khoá tạm tài khoản sau nhiều lần sai liên tiếp (FS G1: "Khoá tạm sau nhiều lần sai (đếm ngược)"). [ĐỀ XUẤT — L-SEC]
+ * Khoá tạm tài khoản sau nhiều lần sai liên tiếp (FS G1: "Khoá tạm sau nhiều lần sai (đếm ngược)"). [Gen duyệt 2026-10-16]
  * 5 lần sai đầu không khoá; từ lần thứ 5: 30 s, nhân đôi mỗi lần sai thêm, trần 15 phút. Trần thấp có chủ đích: kẻ ngoài
  * mạng chỉ khoá được owner tối đa 15 phút mỗi lần, còn đoán mật khẩu vẫn bị chặn bởi giới hạn IP + toàn cục.
  */
 export const ACCOUNT_LOCKOUT = { freeFailures: 4, baseSeconds: 30, maxSeconds: 15 * 60 } as const;
 
-export function accountLockSeconds(consecutiveFailures: number): number {
-  const n = consecutiveFailures - ACCOUNT_LOCKOUT.freeFailures;
+export type AccountLockoutPolicy = { freeFailures: number; baseSeconds: number; maxSeconds: number };
+
+export function accountLockSeconds(
+  consecutiveFailures: number,
+  policy: AccountLockoutPolicy = ACCOUNT_LOCKOUT,
+): number {
+  const n = consecutiveFailures - policy.freeFailures;
   if (n <= 0) return 0;
-  return Math.min(ACCOUNT_LOCKOUT.maxSeconds, ACCOUNT_LOCKOUT.baseSeconds * 2 ** Math.min(n - 1, 20));
+  return Math.min(policy.maxSeconds, policy.baseSeconds * 2 ** Math.min(n - 1, 20));
 }
