@@ -124,3 +124,32 @@ describe('pty-kill — đóng exec PTY dù CLI bỏ qua SIGHUP / SIGTERM và đ�
     await expect(ptyKill(sb.roots, '../../etc')).rejects.toThrow();
   });
 });
+
+describe('resolveCliBin — danh sách cấm gốc của runner nay nằm trong contracts (một nguồn luật, review MEDIUM)', () => {
+  const OLD = [
+    'ionice',
+    'socat',
+    'nc',
+    'ncat',
+    'netcat',
+    'curl',
+    'wget',
+    'ssh',
+    'scp',
+    'docker',
+    'ga-runner',
+    'ga-engine-install',
+  ];
+  it.each(OLD)('%s (đã cài trong /opt/engines/<slug>/) ⇒ bad_cli', (name) => {
+    writeFileSync(join(sb.roots.engines, 'fake', 'current', name), '#!/bin/true\n', { mode: 0o755 });
+    for (const argv0 of [name, `/opt/engines/fake/current/${name}`]) {
+      let code = '';
+      try {
+        resolveCliBin(sb.roots, 'fake', argv0);
+      } catch (e) {
+        code = (e as { code?: string }).code ?? '';
+      }
+      expect(code, argv0).toBe('bad_cli');
+    }
+  });
+});
