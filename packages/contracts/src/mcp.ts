@@ -382,9 +382,25 @@ export const CREDENTIAL_KEY_NAMES = [
   'api_key',
   'apikey',
   'x-api-key',
+  'api_secret',
+  'api_token',
   'aws_secret_access_key',
 ] as const;
-const CREDENTIAL_NAMES_ALT = CREDENTIAL_KEY_NAMES.map((n) => n.replace('-', '\\-')).join('|');
+
+/**
+ * So tên KHÔNG phụ thuộc kiểu viết (review tay M0, LOW): chuẩn hoá = bỏ `_` / `-`, hạ chữ thường ⇒ `refreshToken`,
+ * `Refresh-Token`, `REFRESH_TOKEN`, `refresh__token` cùng là `refreshtoken`. Regex: giữa các phần của tên cho `[_-]*`
+ * (không lồng; phần sau là chữ cái cố định ⇒ tuyến tính), cờ `i`.
+ */
+export function normalizeCredentialName(name: string): string {
+  return name.replace(/[_-]/g, '').toLowerCase();
+}
+const CREDENTIAL_NAMES_ALT = [...new Set(CREDENTIAL_KEY_NAMES.map(normalizeCredentialName))]
+  .map((n) => {
+    const raw = CREDENTIAL_KEY_NAMES.find((k) => normalizeCredentialName(k) === n) as string;
+    return raw.split(/[_-]/).join('[_-]*');
+  })
+  .join('|');
 
 /**
  * Chuỗi thô chứa phép gán credential (security review L-RT — parser-differential: khoá JSON NHÚNG trong chuỗi, vd log
@@ -404,10 +420,12 @@ const LONG_TOKEN_RUN_RE = /(?<![0-9A-Za-z_-])[0-9A-Za-z_-]{32,}/g;
 
 /**
  * Đoạn token liền ≥ 32 ký tự có CẢ chữ hoa, chữ thường VÀ chữ số (Gen quyết 2026-10-16, CNS-169). Đoạn chỉ gồm chữ số hex
- * + '-' (hex mọi độ dài / hoa thường, UUID) KHÔNG bị chặn — mã commit, checksum, UUID là dữ liệu làm việc hợp lệ.
- * Miễn hex vì CNS-169 (commit hash / checksum là dữ liệu lõi của agent code; sink MCP do owner kiểm soát; lối ra ngoài
- * qua egress allowlist). Chỗ key hex / chữ thường hay nằm được BÙ bằng `credential_assignment` (tên credential + gán) và
- * `env_secret_assignment` (dòng kiểu `.env`: `ABC_SECRET=…`, `X_API_KEY=…`).
+ * + '-' (hex mọi độ dài / hoa thường, UUID) KHÔNG bị chặn — mã commit, checksum, UUID là dữ liệu làm việc hợp lệ (sink MCP
+ * do owner kiểm soát; lối ra ngoài qua egress allowlist).
+ * Phần bù cho key hex / chữ thường: chỉ khi nó đứng cạnh TÊN — `credential_assignment` (tên credential mọi kiểu viết
+ * snake / camel / kebab + `:` / `=` + ≥ 8 ký tự), khoá object tên credential (`credential_field_name`, cùng chuẩn hoá) và
+ * `env_secret_assignment` (`ABC_SECRET=…`). Secret base64 có `+` / `/` (bị cắt thành đoạn ngắn ở đây) do `base64_secret_run`.
+ * KHÔNG bù (rủi ro chấp nhận theo CNS-169): key hex / chỉ chữ thường đứng một mình, không tên, không tiền tố hãng.
  */
 function hasHighEntropyRun(s: string): boolean {
   const re = LONG_TOKEN_RUN_RE;
@@ -492,6 +510,48 @@ function hasUrlUserinfo(raw: string): boolean {
   return false;
 }
 
+/** Đoạn tối đại trên lớp base64 [A-Za-z0-9+/=_-] ≥ 40 (lookbehind một ký tự ⇒ chỉ thử ở đầu đoạn, tuyến tính). */
+const BASE64_RUN_RE = /(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/=_-]{40,}/g;
+
+/**
+ * Secret base64 chuẩn có `+` / `/` (vd secret 40 ký tự kiểu AWS) — high_entropy_run không thấy vì `+` / `/` cắt nó thành
+ * đoạn < 32 (review tay M0, LOW: ~58 % mẫu 40 ký tự lọt). Bắt khi đoạn [A-Za-z0-9+/=_-] ≥ 40 có `+` hoặc `/` VÀ có một
+ * đoạn con giữa hai `/` dài ≥ 10, đủ hoa + thường + số, có chữ ngoài hex, mật độ đổi lớp (hoa ↔ thường ↔ số giữa hai ký tự
+ * chữ / số liền kề) ≥ 1/4. Base64 ngẫu nhiên đổi lớp ~65 %; đoạn của đường dẫn / URL là từ / mã (`ASSET_MANIFEST`,
+ * `CNS-2026-10-15-coreagent-r5`, đổi lớp < 10 %) hoặc mã commit hex. Đo: 99,73 % secret base64 40 ký tự có + / bị chặn
+ * (cùng các detector khác); 0 báo nhầm trên 2 168 đường tệp + URL GitHub / raw (repo này + Second-Brain). Lần đo đầu
+ * (mật độ tính trên CẢ đoạn) báo nhầm 24 URL chứa mã commit ⇒ đổi sang tính theo đoạn con. Một lượt mỗi đoạn ⇒ tuyến tính.
+ */
+function hasBase64SecretRun(s: string): boolean {
+  const re = BASE64_RUN_RE;
+  re.lastIndex = 0;
+  for (let m = re.exec(s); m !== null; m = re.exec(s)) {
+    const r = m[0];
+    if (!/[+/]/.test(r)) continue;
+    // đường dẫn / URL: mỗi đoạn giữa '/' là từ / mã (ít đổi lớp) hoặc hex — base64 có đoạn ≥ 10 đổi lớp dày, đủ 3 lớp
+    for (const seg of r.split('/')) if (seg.length >= 10 && isBase64LikeSegment(seg)) return true;
+  }
+  return false;
+}
+
+/** Đủ hoa + thường + số, có chữ ngoài hex, và ≥ 1/4 cặp chữ / số liền kề đổi lớp (hoa ↔ thường ↔ số). */
+function isBase64LikeSegment(seg: string): boolean {
+  if (!/\d/.test(seg) || !/[a-z]/.test(seg) || !/[A-Z]/.test(seg) || !/[G-Zg-z]/.test(seg)) return false;
+  let pairs = 0;
+  let changes = 0;
+  let prev = -1; // 0 = hoa, 1 = thường, 2 = số, -1 = ký tự khác
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg.charCodeAt(i);
+    const cls = c >= 65 && c <= 90 ? 0 : c >= 97 && c <= 122 ? 1 : c >= 48 && c <= 57 ? 2 : -1;
+    if (cls >= 0 && prev >= 0) {
+      pairs++;
+      if (cls !== prev) changes++;
+    }
+    prev = cls;
+  }
+  return pairs > 0 && changes * 4 >= pairs;
+}
+
 /** Tiền tố của canary do CLI giả ghi: `GA-CANARY-<uuid>` — bằng chứng chắc duy nhất (chỉ có trong test). */
 export const CANARY_PREFIX = 'GA-CANARY-';
 
@@ -526,7 +586,7 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   { id: 'telegram_bot_token', test: (s) => /\b\d{8,10}:[0-9A-Za-z_-]{35}/.test(s) },
   { id: 'pem_private_key', test: hasPemPrivateKey },
   // tiền tố cố định + MỘT quantifier (\s*) ⇒ tuyến tính; refresh_token + phép gán ⇒ chặn bất kể giá trị (giữ từ v0)
-  { id: 'refresh_token_field', test: (s) => /refresh_token["']?\s*[:=]/i.test(s) },
+  { id: 'refresh_token_field', test: (s) => /refresh[_-]*token["']?\s*[:=]/i.test(s) },
   { id: 'credential_assignment', test: (s) => CREDENTIAL_ASSIGNMENT_RE.test(s) },
   /**
    * Gán kiểu `.env` (Gen, security review "miễn hex làm lọt key hãng không prefix"): tên UPPER_SNAKE kết thúc bằng
@@ -539,10 +599,16 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   },
   { id: 'canary', test: (s) => /GA-CANARY-[0-9a-f-]{8}/i.test(s) },
   { id: 'high_entropy_run', test: hasHighEntropyRun },
+  { id: 'base64_secret_run', test: hasBase64SecretRun },
 ];
 
 /** Tên khoá JSON mang credential: payload có khoá này (bất kể giá trị) ⇒ chặn. */
 export const CREDENTIAL_KEY_RE = new RegExp(`^(?:${CREDENTIAL_NAMES_ALT})$`, 'i');
+
+/** Khoá object có phải tên credential không (mọi kiểu viết; độ dài khoá đã chặn bởi payloadLimitExceeded). */
+export function isCredentialKeyName(key: string): boolean {
+  return CREDENTIAL_KEY_RE.test(key);
+}
 
 /** Mọi patternId có thể trả về (audit `credential.blocked` chỉ mang id này, không mang payload). */
 /**
@@ -573,6 +639,7 @@ export const CREDENTIAL_PATTERN_IDS = [
   'env_secret_assignment',
   'canary',
   'high_entropy_run',
+  'base64_secret_run',
   'encoded_marker_flood',
   'credential_field_name',
   'too_deep',
@@ -598,7 +665,7 @@ export function findCredentialLike(value: unknown, depth = 0): { patternId: stri
   }
   if (value !== null && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
-      if (CREDENTIAL_KEY_RE.test(k)) return { patternId: 'credential_field_name' };
+      if (isCredentialKeyName(k)) return { patternId: 'credential_field_name' };
       const hit = findCredentialLike(k, depth + 1) ?? findCredentialLike(v, depth + 1);
       if (hit) return hit;
     }

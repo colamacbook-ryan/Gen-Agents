@@ -3,6 +3,8 @@
 // (2) tool "chỉ nhận anchor" được miễn quét trong khi slug anchor 40 ký tự vẫn chở được token chữ thường / hex.
 // CNS-169 (Gen quyết 2026-10-16): hex / UUID / đoạn thiếu một lớp ký tự CỐ Ý không chặn (trừ khi có tiền tố đã biết);
 // lần chặn ⇒ audit `credential.blocked` (cảnh báo owner), không phải harness.violation.
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -14,7 +16,9 @@ import {
   CREDENTIAL_PATTERN_IDS,
   findCredentialLike,
   freeFormFields,
+  isCredentialKeyName,
   MCP_TOOLS,
+  normalizeCredentialName,
   PENALTY_EVIDENCE_ACTIONS,
   payloadLimitExceeded,
   SseEvent,
@@ -26,6 +30,12 @@ import {
 } from '../src/index.ts';
 
 const CANARY = 'GA-CANARY-3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11';
+
+/** Đường tệp đã theo dõi của repo (dữ liệu thật cho đo báo nhầm). */
+function listRepoFiles(): string[] {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  return execFileSync('git', ['-C', root, 'ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+}
 /**
  * Giá trị GIẢ dựng lúc chạy (luật lane: không để chuỗi giống credential nằm nguyên văn trong mã nguồn — gitleaks quét lịch
  * sử). `fake(n, bảng)` lặp bảng ký tự cho đủ n; `kv(tên, dấu, giá trị)` ghép phép gán.
@@ -33,6 +43,10 @@ const CANARY = 'GA-CANARY-3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11';
 const fake = (n: number, alphabet = '0123456789abcdef') =>
   Array.from({ length: n }, (_, i) => alphabet[(i * 7 + 3) % alphabet.length]).join('');
 const kv = (name: readonly string[], sep: string, value: string) => `${name.join('_')}${sep}${value}`;
+/** Chuỗi base64 chuẩn GIẢ, tất định, luôn có '+' và '/' (dựng lúc chạy). */
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const b64 = (n: number, salt = 0) =>
+  Array.from({ length: n }, (_, i) => (i === 7 ? '/' : i === 19 ? '+' : B64[(i * 37 + salt * 11 + 5) % 64])).join('');
 const FAKE_JWT = `eyJhbGciOiJIUzI1NiJ9.${'eyJzdWIiOiJ4In0'}.${'c2lnbmF0dXJlLXRlc3Q'}`;
 const FAKE_ACCESS = `ya29.${'A0ARrdaM-test-only-0123456789'}`;
 const ANCHOR = 'grid:skills/row:SK-0004/col:C';
@@ -401,6 +415,76 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     expect(misses.slice(0, 5)).toEqual([]);
   });
 
+  it('tên credential mọi kiểu viết (camel / kebab / snake / HOA) + giá trị hex / chữ thường ⇒ chặn (review tay M0)', () => {
+    const hex40 = fake(40);
+    const lower40 = fake(40, 'abcdefghijklmnopqrstuvwxyz');
+    // 8 ca lọt reviewer nêu (5 tên camel / kebab + 3 secret base64 có + /)
+    const leaks: unknown[] = [
+      { [['refresh', 'Token'].join('')]: hex40 },
+      { [['client', 'Secret'].join('')]: hex40 },
+      { [['access', 'Token'].join('')]: lower40 },
+      `${['api', 'key'].join('-')}: ${hex40}`,
+      `${['api', 'Secret'].join('')}=${hex40}`,
+      `aws secret: ${b64(40, 1)}`,
+      `"${b64(40, 2)}"`,
+      `K=${b64(44, 3)}`,
+    ];
+    for (const v of leaks) {
+      expect(findCredentialLike(v), JSON.stringify(v).slice(0, 70)).not.toBeNull();
+    }
+    for (const k of ['refreshToken', 'Refresh-Token', 'REFRESH_TOKEN', 'refresh__token', 'X-Api-Key', 'apiToken']) {
+      expect(isCredentialKeyName(k), k).toBe(true);
+      expect(findCredentialLike(`${k}=${hex40}`), k).not.toBeNull();
+    }
+    for (const k of ['refresh', 'token', 'tokenCount', 'apikeys', 'secretary', 'accessTokenCount']) {
+      expect(isCredentialKeyName(k), k).toBe(false);
+    }
+    expect(normalizeCredentialName('Refresh-Token')).toBe('refreshtoken');
+  });
+
+  it('base64_secret_run: bắt base64 có + / (≥ 99 % mẫu 40 ký tự); 0 báo nhầm trên đường tệp / URL thật', () => {
+    // độ phủ: 2 000 secret base64 40 ký tự ngẫu nhiên tất định, đủ '+' hoặc '/'
+    let seed = 7;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed / 4294967296;
+    };
+    let total = 0;
+    let caught = 0;
+    while (total < 2000) {
+      const v = Array.from({ length: 40 }, () => B64[Math.floor(rnd() * 64)]).join('');
+      if (!/[+/]/.test(v)) continue;
+      total++;
+      if (findCredentialLike(`k ${v} `) !== null) caught++;
+    }
+    expect(caught / total).toBeGreaterThanOrEqual(0.99);
+    // báo nhầm: mọi đường tệp của repo (tương đối + tuyệt đối) + URL GitHub / raw / có query dựng từ chúng + URL mẫu
+    const repoFiles = listRepoFiles();
+    const sha = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b';
+    const samples: string[] = [
+      'https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions',
+      'https://vnexpress.net/gia-vang-hom-nay-16-10-2026-4801234.html?utm_source=Facebook&utm_medium=Social&utm_campaign=Feed2026',
+      'https://www.npmjs.com/package/@biomejs/biome/v/2.5.15?activeTab=versions',
+      'https://stackoverflow.com/questions/12345678/how-to-escape-a-Forward-Slash-in-JavaScript-RegExp-2026',
+      '/usr/lib/node_modules/corepack/dist/lib/corepack.cjs:12345',
+      'C:/Users/RyanNguyen/AppData/Local/Programs/Microsoft VS Code/resources/app/out/vs/workbench/Workbench2026.js',
+      '/home/user/Second-Brain/01-projects/gen-agents/audit/CNS-2026-10-16-closure-m0.md',
+    ];
+    for (const f of repoFiles) {
+      samples.push(
+        f,
+        `/home/user/gen-agents/${f}`,
+        `https://github.com/example-org/gen-agents/blob/${sha}/${f}`,
+        `https://raw.githubusercontent.com/example-org/gen-agents/${sha}/${f}?token=&plain=1#L10-L20`,
+      );
+    }
+    const fp = samples.filter((x) => CREDENTIAL_DETECTORS.find((d) => d.id === 'base64_secret_run')?.test(x));
+    expect(samples.length).toBeGreaterThan(200);
+    expect(fp).toEqual([]);
+    // chuỗi base64 ngắn (< 40) không bắt
+    expect(findCredentialLike(`v=${b64(36)}`)).toBeNull();
+  });
+
   it('npm / hf / GOCSPX / Bearer / URL có mật khẩu (L-SEC) — ca âm không bắt', () => {
     for (const s of [
       'the bearer of this note',
@@ -450,6 +534,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       google_oauth_client_secret: `GOCSPX-${fake(28, 'zX1cV2bN3m-_')}`,
       bearer_token: `Authorization: ${['Bear', 'er'].join('')} ${fake(24, 'abc.def~123+/=')}`,
       url_userinfo: `postgres://app:${fake(12, 'pAsS-w0rd')}@db.internal:5432/x`,
+      base64_secret_run: `secret ${b64(40)}`,
     };
     for (const p of CREDENTIAL_DETECTORS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
     expect(findCredentialLike({ Refresh_Token: 'bất kỳ' })).toEqual({ patternId: 'credential_field_name' });
@@ -514,6 +599,9 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
     'https: + 1 MiB gạch': `https:${'/'.repeat(MB)}`,
     'x// lặp': 'x://'.repeat(Math.floor(MB / 4)),
     'TAB lặp giữa scheme': 'ht\ttps:'.repeat(Math.floor(MB / 8)),
+    'base64 1 MiB (+ / thưa, ít đổi lớp)': `${'aaaaAAAA1111/'.repeat(Math.floor(MB / 13))}`,
+    'base64 đoạn 39 lặp': `${'Ab1+'.repeat(9)}Ab1 `.repeat(Math.floor(MB / 40)),
+    'refresh-_-token lặp': 'refresh-_-_-_-'.repeat(Math.floor(MB / 14)),
     '://u:p lặp (không @)': '://u:pppppppppp '.repeat(Math.floor(MB / 16)),
     'Bearer lặp': 'Bearer '.repeat(Math.floor(MB / 7)),
     'bearer + 1 MiB tab': `bearer${'\t'.repeat(MB)}`,
