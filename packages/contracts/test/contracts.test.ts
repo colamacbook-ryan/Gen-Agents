@@ -18,9 +18,12 @@ import {
   PTY_CLOSE_REASONS,
   parseDisplayId,
   parseSettingValue,
+  remoteAnchorAuthority,
   SETTINGS,
   SseEvent,
   sessionStatusFor,
+  settingValueJson,
+  settingWritableBy,
   TermTicketClaims,
   TURN_EXEC,
   TurnPlan,
@@ -237,11 +240,36 @@ describe('sessions', () => {
 describe('mcp + settings + errors + events', () => {
   it('mặc định settings hợp lệ với chính schema của nó', () => {
     for (const [key, def] of Object.entries(SETTINGS)) {
-      if (def.default === 'seed') continue;
+      if (def.default === 'seed' || def.default === 'absent') continue;
       expect(def.schema.safeParse(def.default).success, key).toBe(true);
     }
     expect(() => parseSettingValue('chat.attachment_max_bytes', 0)).toThrow();
     expect(() => parseSettingValue('economy.penalty.harness_bp', 5000)).toThrow();
+  });
+  it('backup.remote_anchor: chỉ owner / actor system ghi (admin không); URL HTTPS hẹp; đúng 2 khoá (CNS-176)', () => {
+    expect(SETTINGS['backup.remote_anchor'].writers).toEqual(['owner', 'system']);
+    expect(settingWritableBy('backup.remote_anchor', 'admin')).toBe(false);
+    expect(settingWritableBy('backup.remote_anchor', 'owner')).toBe(true);
+    expect(settingWritableBy('chat.attachment_max_bytes', 'admin')).toBe(true);
+    const ok = { url: 'https://git.example.com/afi/anchors.git', secret_id: ULID };
+    expect(settingValueJson('backup.remote_anchor', ok)).toBe(JSON.stringify(ok));
+    expect(remoteAnchorAuthority(ok.url)).toBe('git.example.com');
+    expect(remoteAnchorAuthority('https://git.example.com')).toBe('git.example.com');
+    for (const url of [
+      'http://git.example.com/x',
+      'ssh://git@git.example.com/x',
+      'https://user:tok@git.example.com/x',
+      'https://git.example.com/a b',
+      'https://git.example.com/%2e%2e',
+      'https://git.example.com\\@evil.com/',
+      'https:///x',
+      'https://git.example.com/x\n',
+    ]) {
+      expect(() => parseSettingValue('backup.remote_anchor', { url, secret_id: ULID }), url).toThrow();
+      expect(remoteAnchorAuthority(url), url).toBeNull();
+    }
+    expect(() => parseSettingValue('backup.remote_anchor', { ...ok, token: 'x' })).toThrow();
+    expect(() => parseSettingValue('backup.remote_anchor', { ...ok, secret_id: 'SEC-0001' })).toThrow();
   });
   it('lỗi DB ánh xạ theo tiền tố, còn lại về db.rule_violation', () => {
     expect(mapDbError('append-only/write-once: proactive_sends')).toBe('db.append_only');

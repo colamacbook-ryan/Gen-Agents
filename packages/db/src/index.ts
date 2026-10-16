@@ -9,6 +9,8 @@ export type { DB } from './generated/schema.ts';
 export { TABLES, VIEWS } from './generated/schema.ts';
 export { SYNC } from './generated/sync.ts';
 export * from './runner/index.ts';
+export * from './seed/reference.ts';
+export * from './stamp.ts';
 
 /** Query builder có kiểu trên một kết nối đã qua hợp đồng (writer / reader). Cấm `.orReplace()` (lint no-or-replace). */
 export function createKysely(conn: AppConnection): Kysely<DB> {
