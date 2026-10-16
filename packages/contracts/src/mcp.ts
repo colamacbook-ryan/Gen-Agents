@@ -419,6 +419,51 @@ function hasHighEntropyRun(s: string): boolean {
   return false;
 }
 
+/** `\s` của regex JS (WhiteSpace + LineTerminator), so mã ký tự. */
+function isJsSpace(c: number): boolean {
+  return (
+    (c >= 9 && c <= 13) ||
+    c === 32 ||
+    c === 0xa0 ||
+    c === 0x1680 ||
+    (c >= 0x2000 && c <= 0x200a) ||
+    c === 0x2028 ||
+    c === 0x2029 ||
+    c === 0x202f ||
+    c === 0x205f ||
+    c === 0x3000 ||
+    c === 0xfeff
+  );
+}
+
+/**
+ * Mật khẩu trong URL `scheme://user:password@host` — tách authority NHƯ parser URL (security review, parser-differential:
+ * bản regex cũ loại `"'<>` và có trần 1024 ⇒ mật khẩu chứa `"` / `<` hay userinfo dài lọt, trong khi `new URL()` vẫn coi
+ * là userinfo). Sau mỗi `://`: authority kéo tới ký tự đầu tiên trong `/ ? #` hoặc khoảng trắng (TAB / LF / CR bị parser URL
+ * bỏ qua ⇒ đi xuyên qua); có `@` và đoạn trước `@` CUỐI CÙNG chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng). Một lượt duyệt mỗi
+ * authority, các authority không chồng nhau ⇒ tuyến tính (kích thước đã chặn trước khi quét).
+ */
+function hasUrlUserinfo(s: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = s.indexOf('://', from);
+    if (at < 0) return false;
+    let firstColon = -1;
+    let lastAt = -1;
+    let i = at + 3;
+    for (; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c === 9 || c === 10 || c === 13) continue;
+      if (c === 47 || c === 63 || c === 35 || isJsSpace(c)) break;
+      if (c === 58 && firstColon < 0) firstColon = i;
+      else if (c === 64) lastAt = i;
+    }
+    if (lastAt >= 0 && firstColon >= 0 && firstColon < lastAt) return true;
+    // `://` kế tiếp nằm SAU authority này (authority không chứa '/'), trừ khi nó bắt đầu ngay tại ký tự dừng
+    from = Math.max(at + 1, i - 1);
+  }
+}
+
 /** Tiền tố của canary do CLI giả ghi: `GA-CANARY-<uuid>` — bằng chứng chắc duy nhất (chỉ có trong test). */
 export const CANARY_PREFIX = 'GA-CANARY-';
 
@@ -448,14 +493,7 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   { id: 'google_oauth_client_secret', test: (s) => /(?<![0-9A-Za-z])GOCSPX-[0-9A-Za-z_-]{20}/.test(s) },
   /** Header `Authorization: Bearer <token ≥ 16>` trong log / payload; "the bearer of …" / "Bearer short" không bắt. */
   { id: 'bearer_token', test: (s) => /(?<![0-9A-Za-z])bearer[ \t]{1,16}[0-9A-Za-z_.~+/=-]{16}/i.test(s) },
-  /**
-   * Mật khẩu trong URL `scheme://user:password@host` (tên đăng nhập có thể rỗng). Chỉ thử ở mỗi `://`; hai đoạn có trần
-   * ({0,1024} / {1,1024}), đoạn user không chứa ':' ⇒ tuyến tính.
-   */
-  {
-    id: 'url_userinfo',
-    test: (s) => /:\/\/[^\s/?#@"'<>:]{0,1024}:[^\s/?#@"'<>]{1,1024}@/.test(s),
-  },
+  { id: 'url_userinfo', test: hasUrlUserinfo },
   { id: 'aws_access_key_id', test: (s) => /\b(?:AKIA|ASIA)[0-9A-Z]{16}/.test(s) },
   { id: 'telegram_bot_token', test: (s) => /\b\d{8,10}:[0-9A-Za-z_-]{35}/.test(s) },
   { id: 'pem_private_key', test: hasPemPrivateKey },
