@@ -1,0 +1,46 @@
+{
+  "source_repo": "colamacbook-ryan/Second-Brain",
+  "rev": "f54d06a46c8adb547f181bb5891a2625eb7cc7e1",
+  "source_dir": "01-projects/gen-agents/spec/db-v2.2",
+  "database_version": "2.3.0",
+  "database_md": {
+    "path": "01-projects/gen-agents/spec/DATABASE.md",
+    "sha256": "ba7432d43151413283344b62e54d98a3a2378cdb91566523743e2f697f3cfd14"
+  },
+  "files": {
+    "schema_v2_2.py": {
+      "source": "01-projects/gen-agents/spec/db-v2.2/schema_v2_2.py",
+      "sha256": "ccf407d1cfdefb6c640d4476cec2ad36ef5d55354e3ac330956d730610adda7b"
+    },
+    "schema_v2_2.sql": {
+      "source": "01-projects/gen-agents/spec/db-v2.2/schema_v2_2.sql",
+      "sha256": "ada99f623d1c2749b8f19c1226d4ae957de720328f01fe3fe1e8e9ad1e388702"
+    },
+    "views_v2_2.sql": {
+      "source": "01-projects/gen-agents/spec/db-v2.2/views_v2_2.sql",
+      "sha256": "9989d6a91826bc7b0e1baa285cf7f69a3198a7c94e7e8ec8578e54113649ae9d"
+    },
+    "tests_v2_2.py": {
+      "source": "01-projects/gen-agents/spec/db-v2.2/tests_v2_2.py",
+      "sha256": "676805f81e5cb02d80bbb49f76a116275b8d17e729c23b127f29592c927852e6"
+    }
+  },
+  "app_functions": [
+    "app_local_time",
+    "app_maint",
+    "app_now"
+  ],
+  "counts": {
+    "tables": 80,
+    "virtual_tables": 1,
+    "indexes": 283,
+    "triggers": 402,
+    "views": 29
+  },
+  "python_tests": {
+    "passed": 94,
+    "total": 94,
+    "sqlite": "3.45.1"
+  },
+  "synced_at": "2026-10-16T11:13:26Z"
+}
