@@ -13,14 +13,16 @@ export function chromiumPath(): string | null {
 }
 
 /**
- * Test trình duyệt chạy khi tìm thấy Chromium. Không có thì SKIP hiển thị rõ trong báo cáo vitest — trừ khi CHIBI_REQUIRE_BROWSER=1
- * (CI của lane component đặt biến này) thì thiếu Chromium là LỖI. CHIBI_BROWSER=skip tắt hẳn (máy không có trình duyệt).
+ * Test trình duyệt chạy khi tìm thấy Chromium. Không có thì SKIP hiển thị rõ trong báo cáo vitest (máy dev không có trình duyệt).
+ * CHIBI_REQUIRE_BROWSER=1 (CI đặt biến này) thì thiếu Chromium là LỖI, và CHIBI_BROWSER=skip bị bỏ qua: CI không được xanh
+ * khi chưa chạy test trình duyệt. CHIBI_BROWSER=skip chỉ tắt ở máy dev.
  */
 export const browserTestsEnabled = (): boolean => {
-  if (process.env.CHIBI_BROWSER === 'skip') return false;
+  const required = process.env.CHIBI_REQUIRE_BROWSER === '1';
+  if (!required && process.env.CHIBI_BROWSER === 'skip') return false;
   if (chromiumPath()) return true;
-  if (process.env.CHIBI_REQUIRE_BROWSER === '1')
-    throw new Error('CHIBI_REQUIRE_BROWSER=1 nhưng không tìm thấy Chromium');
+  if (required)
+    throw new Error('CHIBI_REQUIRE_BROWSER=1 nhưng không tìm thấy Chromium (CI: playwright-core install chromium)');
   return false;
 };
 
