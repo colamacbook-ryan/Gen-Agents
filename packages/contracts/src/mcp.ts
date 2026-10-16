@@ -152,7 +152,11 @@ export const ToolArgs = {
     /** Role tự khai chưa chắc (nguồn chat_messages.certainty / avatar 'unsure', G-13). */
     certainty: z.enum(CERTAINTY_LEVELS).nullable(),
   }),
-  send_telegram: z.strictObject({ chatRef: z.string().min(1), text: z.string().min(1).max(4096) }),
+  /**
+   * chatRef = display_id của một hàng telegram_allowlist (AL-…) — gateway tự tra chat_id từ allowlist, KHÔNG BAO GIỜ nhận
+   * chat_id / username từ Role (review tay M0, LOW: không định tuyến bằng chuỗi tự do).
+   */
+  send_telegram: z.strictObject({ chatRef: z.string().regex(/^AL-\d{4,8}$/), text: z.string().min(1).max(4096) }),
   propose_change: z.strictObject({ title: z.string().min(1).max(200), items: z.array(z.json()).min(1) }),
   highlight: z.strictObject({ anchor: Anchor, label: z.string().max(120).nullable() }),
   navigate: z.strictObject({ anchor: Anchor }),

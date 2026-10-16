@@ -133,7 +133,7 @@ describe('mọi tool đều bị quét — không có ngoại lệ', () => {
 describe('canary đủ dạng (STD-11 1.10)', () => {
   it('canary chữ hoa / chữ thường / hex hoa ⇒ denied qua mọi kiểu trường', () => {
     for (const c of [CANARY, CANARY.toLowerCase(), `GA-CANARY-${'3F2B9C1E8D4A4F6B'}`]) {
-      expect(screenToolPayload('send_telegram', { chatRef: 'c', text: c }).status, c).toBe('denied');
+      expect(screenToolPayload('send_telegram', { chatRef: 'AL-0001', text: c }).status, c).toBe('denied');
       expect(screenToolPayload('propose_change', { title: 't', items: [{ [c]: 1 }] }).status, `khoá ${c}`).toBe(
         'denied',
       );
@@ -285,7 +285,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
   });
 
   it('lần chặn ⇒ audit credential.blocked (cảnh báo owner), KHÔNG phải án phạt; không mang payload', () => {
-    const r = screenToolPayload('send_telegram', { chatRef: 'c', text: `token ${BLOCKED_TOKENS.highEntropy}` });
+    const r = screenToolPayload('send_telegram', { chatRef: 'AL-0001', text: `token ${BLOCKED_TOKENS.highEntropy}` });
     expect(r.status).toBe('denied');
     if (r.status !== 'denied' || r.code !== 'credential_like_payload') throw new Error('phải bị chặn');
     expect(r.audit).toEqual({
