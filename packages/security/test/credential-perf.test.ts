@@ -1,15 +1,16 @@
 // Hiệu năng bộ quét (STD-11 1.10: ReDoS — chạy tuyến tính, test chuỗi 1 MiB). Runner CI chậm và dao động ⇒ trần tuyệt đối
-// thấp (50 ms) đỏ giả (Gen 2026-10-16, PR #5). Thứ phân biệt quét tuyến tính với ReDoS là TỈ LỆ: mỗi ca đo ở 256 KiB và
-// 1 MiB (trung vị 3 lần chạy, mỗi lần lấy min(thời gian thực, thời gian CPU)), tỉ lệ 1 MiB / 256 KiB phải < 8 (tuyến tính
-// ≈ 4, bậc hai ≈ 16) + trần tuyệt đối 250 ms cho 1 MiB (khớp mức L0). Thời gian 256 KiB được lấy sàn FLOOR_MS khi tính tỉ lệ
-// — dưới mức đó đo là nhiễu (1 MiB < 8 × FLOOR_MS = 20 ms coi như đạt).
+// thấp (50 ms) đỏ giả (Gen 2026-10-16, PR #5). Thứ phân biệt quét tuyến tính với ReDoS là TỈ LỆ: mỗi ca đo ở 128 KiB và
+// 1 MiB (trung vị 5 lần chạy, mỗi lần lấy min(thời gian thực, thời gian CPU)). Kích thước gấp 8 ⇒ tuyến tính ≈ 8, bậc hai
+// ≈ 64: ngưỡng tỉ lệ 24 (= 3 × tuyến tính) tách rõ hai loại mà không đỏ giả khi CI ồn (bản trước 256 KiB / 1 MiB ngưỡng 8
+// = 2 × tuyến tính đỏ giả ở tỉ lệ 8.1 trên CI). + trần tuyệt đối 250 ms cho 1 MiB (khớp mức L0). Thời gian 128 KiB lấy sàn
+// FLOOR_MS khi tính tỉ lệ — dưới mức đó đo là nhiễu.
 import { describe, expect, it } from 'vitest';
 import { detectCredential, redactText, screenPayload } from '../src/index.ts';
 
 const MB = 1024 * 1024;
-const KB256 = MB / 4;
+const SMALL = MB / 8;
 const CAP_MS = 250;
-const MAX_RATIO = 8;
+const MAX_RATIO = 24;
 const FLOOR_MS = 2.5;
 const fill = (unit: string, size: number) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
 const NBSP = String.fromCharCode(0xa0);
@@ -26,20 +27,20 @@ function once(fn: () => unknown): number {
   return Math.min(wall, (c.user + c.system) / 1000);
 }
 
-/** Trung vị 3 lần chạy (sau một lần chạy làm nóng JIT). */
-function median3(fn: () => unknown): number {
+/** Trung vị 5 lần chạy (sau một lần chạy làm nóng JIT). */
+function median5(fn: () => unknown): number {
   fn();
-  const xs = [once(fn), once(fn), once(fn)].sort((a, b) => a - b);
-  return xs[1] as number;
+  const xs = [once(fn), once(fn), once(fn), once(fn), once(fn)].sort((a, b) => a - b);
+  return xs[2] as number;
 }
 
-/** Đo ở 256 KiB và 1 MiB; kiểm tỉ lệ < 8 và 1 MiB < 250 ms. Trả thông điệp số đo (in khi fail / console). */
+/** Đo ở 128 KiB và 1 MiB; kiểm tỉ lệ < MAX_RATIO và 1 MiB < 250 ms. Trả thông điệp số đo (in khi fail / console). */
 function expectLinear(name: string, run: (s: string) => unknown, gen: (size: number) => string): string {
-  const small = gen(KB256);
+  const small = gen(SMALL);
   const big = gen(MB);
-  const ts = median3(() => run(small));
-  const tb = median3(() => run(big));
-  const msg = `${name}: 256 KiB ${ts.toFixed(1)} ms, 1 MiB ${tb.toFixed(1)} ms, tỉ lệ ${(tb / Math.max(ts, 0.1)).toFixed(1)}`;
+  const ts = median5(() => run(small));
+  const tb = median5(() => run(big));
+  const msg = `${name}: 128 KiB ${ts.toFixed(1)} ms, 1 MiB ${tb.toFixed(1)} ms, tỉ lệ ${(tb / Math.max(ts, 0.1)).toFixed(1)}`;
   expect(tb, msg).toBeLessThan(CAP_MS);
   expect(tb, msg).toBeLessThan(MAX_RATIO * Math.max(ts, FLOOR_MS));
   return msg;
@@ -108,7 +109,7 @@ const adversarial: Record<string, (n: number) => string> = {
   'U+3000 + password= lặp': (n) => fill(`password${IDEO_SPACE}=${IDEO_SPACE}x `, n),
 };
 
-describe(`chuỗi đối kháng — chặn (dừng ở mẫu đầu): tỉ lệ 1 MiB / 256 KiB < ${MAX_RATIO}, 1 MiB < ${CAP_MS} ms`, () => {
+describe(`chuỗi đối kháng — chặn (dừng ở mẫu đầu): tỉ lệ 1 MiB / 128 KiB < ${MAX_RATIO}, 1 MiB < ${CAP_MS} ms`, () => {
   for (const [name, gen] of Object.entries(adversarial)) {
     it(name, () => {
       expectLinear(name, (s) => detectCredential(s), gen);
@@ -186,7 +187,7 @@ describe(`chuẩn hoá (giải tới 3 lớp) với chuỗi thoát dồn dập: 
 describe('payload: chặn kích thước trước — 1 MiB không bị quét', () => {
   it('chuỗi 1 MiB trong payload ⇒ payload_too_large, nhanh (không quét)', () => {
     let r: ReturnType<typeof screenPayload> | undefined;
-    const ms = median3(() => {
+    const ms = median5(() => {
       r = screenPayload({ newValue: 'a0'.repeat(MB / 2) });
     });
     expect(r).toMatchObject({ status: 'denied', code: 'payload_too_large' });
@@ -194,7 +195,7 @@ describe('payload: chặn kích thước trước — 1 MiB không bị quét', 
   });
   it('payload tối đa trong trần (64 Ki ký tự, mảng chuỗi 16 Ki) quét < 250 ms', () => {
     const value = Array.from({ length: 4 }, (_, i) => fill(`chuỗi ${i} bình thường `, 16_000));
-    const ms = median3(() => screenPayload({ items: value }));
+    const ms = median5(() => screenPayload({ items: value }));
     expect(screenPayload({ items: value })).toEqual({ status: 'ok' });
     expect(ms).toBeLessThan(CAP_MS);
   });
