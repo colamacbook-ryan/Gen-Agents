@@ -129,9 +129,10 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
       'TMPDIR',
     ]);
     expect(envLine.values.join('\n')).not.toContain(TICKET);
-    // canary trong output CLI ⇒ đoạn bị che bởi bộ che chung (@ga/security), dòng JSON vẫn hợp lệ
+    // canary trong output CLI ⇒ CẢ dòng bị thay bằng dòng đánh dấu (fail-closed)
     expect(stdout.data).not.toContain('GA-CANARY-');
-    expect(lines).toContainEqual({ type: 'text', text: 'canary [REDACTED:canary] lọt?' });
+    expect(stdout.data).not.toContain('lọt?');
+    expect(lines).toContainEqual({ $ga: 'line_redacted', patternId: 'canary' });
     const report = lastReport(stdout);
     expect(report).toMatchObject({ command: 'turn', turnId: TURN_ID, exit: { exitCode: 0 } });
     expect(report.authGc).toEqual({ removed: 1, nativeMemory: 'off' });
