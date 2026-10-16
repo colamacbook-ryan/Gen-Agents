@@ -531,6 +531,22 @@ export const RULES = [
     },
   },
   {
+    id: 'no-chibi-testing-import',
+    why: 'apps/** và packages/*/src/** không import @ga/chibi/testing (svg() chuỗi mang style nội tuyến — chỉ cho test / script của chibi; L-CHIBI, CSP chặt)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      (rel.startsWith('apps/') || /^packages\/[^/]+\/src\//.test(rel)) &&
+      rel !== 'packages/chibi/src/testing.ts',
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      // = importsChibiTesting của packages/chibi/test/boundary.test.ts (feat/m3-chibi): import / require / import() động /
+      // đường tương đối tới chibi/src/testing
+      const re =
+        /['"`](?:@ga\/chibi\/testing|@ga\/chibi\/src\/testing(?:\.ts)?|(?:\.{1,2}\/)+(?:packages\/)?chibi\/src\/testing(?:\.ts)?)['"`]/g;
+      return findAll(code, re).map((m) => ({ line: lineOf(code, m.index), msg: `import chibi testing: ${m[0]}` }));
+    },
+  },
+  {
     id: 'no-redos-regex',
     why: 'regex không được có lookaround chứa * / + hoặc quantifier lồng — nguy cơ ReDoS (STD-11 1.10, L-20261016-30)',
     applies: (rel) => CODE_EXT.test(rel) && /^(apps|packages)\//.test(rel) && !isTest(rel),
