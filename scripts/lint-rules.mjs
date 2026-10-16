@@ -200,6 +200,15 @@ export function redosRisk(body) {
   return null;
 }
 
+// ---------------------------------------------------------------- ký tự vô hình / fullwidth
+/**
+ * Độ rộng 0 (200B–200D, 2060–2064, FEFF, 180E), điều khiển hướng bidi (200E/200F, 202A–202E, 2066–2069, 061C), khoảng
+ * trắng lạ (00A0, 2000–200A, 202F, 205F, 3000, 1680), gạch mềm 00AD, ngắt dòng 2028/2029, và fullwidth FF01–FF5E.
+ * Regex viết bằng escape để chính tệp này không chứa ký tự cấm.
+ */
+const INVISIBLE_RE =
+  /[\u00a0\u00ad\u061c\u1680\u180e\u2000-\u200f\u2028-\u202f\u205f-\u2064\u2066-\u2069\u3000\ufeff\uff01-\uff5e]/g;
+
 // ---------------------------------------------------------------- ranh giới module (BUILD-PLAN §D.2)
 // Ô ghi [ĐỀ XUẤT — L0] là đơn vị §D.2 chưa khai — Gen duyệt.
 const BOUNDARIES = {
@@ -500,6 +509,25 @@ export const RULES = [
         line: lineOf(code, m.index),
         msg: `dựng plan / argv engine ngoài ga-runner: "${m[0]}"`,
       }));
+    },
+  },
+  {
+    id: 'no-invisible-chars',
+    why: 'cấm ký tự vô hình (độ rộng 0, điều khiển bidi, khoảng trắng lạ như NBSP, BOM) và ký tự fullwidth trong mã nguồn apps/ + packages/ — chỉ được viết dạng escape (\\u200b…) (trojan-source, homoglyph)',
+    applies: (rel) => TEXT_EXT.test(rel) && /^(apps|packages)\//.test(rel),
+    check(_rel, text) {
+      const out = [];
+      const lines = text.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        for (const m of (lines[i] ?? '').matchAll(INVISIBLE_RE)) {
+          const cp = m[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
+          out.push({
+            line: i + 1,
+            msg: `ký tự U+${cp} ở cột ${m.index + 1} — viết dạng escape \\u${cp.toLowerCase()}`,
+          });
+        }
+      }
+      return out;
     },
   },
   {
