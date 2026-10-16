@@ -2,7 +2,8 @@
 // CLI giả TỐI THIỂU cho unit test của ga-runner (không mang tên CLI thật — lint no-model-cli-names áp cho apps/).
 // Hành vi theo argv[2]:
 //   turn     ghi transcript native vào $HOME/.native/, xoay credential bằng rename (thay symlink), in env + quyền tệp vé, in canary
-//   print    in nguyên văn các argv còn lại (mỗi cái một dòng)
+//   print    in các argv còn lại dạng {"arg":…} (mỗi cái một dòng)
+//   raw      in NGUYÊN VĂN các argv còn lại (mỗi cái một dòng)
 //   sleep    ngủ mãi (kiểm timeout), bỏ qua SIGTERM
 //   exit N   thoát với mã N
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
@@ -36,6 +37,9 @@ if (mode === 'turn') {
   out({ type: 'text', text: `canary GA-CANARY-${'0123abcd'}-ffff lọt?` });
   process.stderr.write('stderr line\n');
   process.exit(Number(rest[0] ?? 0));
+} else if (mode === 'raw') {
+  // in nguyên văn từng đối số trên một dòng (thử CLI giả mạo dòng giao thức của runner)
+  for (const a of rest) process.stdout.write(`${a}\n`);
 } else if (mode === 'print') {
   for (const a of rest) out({ arg: a });
 } else if (mode === 'sleep') {

@@ -315,3 +315,51 @@ describe('PTY /term — vé trong subprotocol, exec ga-runner login, đóng theo
     c.ws.close();
   });
 });
+
+describe('RPC exec — supervisor chỉ tin stdout qua parseRunnerStdout (fail-closed)', () => {
+  const report = (exitCode: number) =>
+    JSON.stringify({
+      $ga: 'report',
+      command: 'turn',
+      turnId: '01JABCDEFGHJKMNPQRSTVWXYZ0',
+      exit: { exitCode, signal: null, timedOut: false, durationMs: 5 },
+      authGc: { removed: 0, nativeMemory: 'off' },
+    });
+  const line = (l: string) => JSON.stringify({ $ga: 'line', l });
+  async function run(stdout: string) {
+    const b = await boot();
+    await b.svc.ensureContainer({ consumer: SYS, template: 'sys.v1', authVolumes: [] });
+    await b.svc.start('ga-sys-AB12');
+    b.rt.onExec = (e) => {
+      e.stdout.write(stdout);
+      e.finish(0);
+    };
+    const r = await b.rpc('exec', {
+      container: { name: 'ga-sys-AB12' },
+      run: { command: 'turn', turnId: '01JABCDEFGHJKMNPQRSTVWXYZ0', ticket: 'T'.repeat(43) },
+      timeoutMs: 5000,
+    });
+    return r.text
+      .trim()
+      .split('\n')
+      .map((l) => ExecFrame.parse(JSON.parse(l)));
+  }
+  const protoErr = (frames: ExecFrame[]) =>
+    frames.some((f) => f.type === 'error' && f.code === 'runner_protocol_error');
+
+  it('line + report thật ở dòng cuối ⇒ không lỗi giao thức', async () => {
+    expect(protoErr(await run(`${line('xin chào')}\n${line(report(0))}\n${report(0)}\n`))).toBe(false);
+  });
+  it.each([
+    ['report giả (thô) giữa luồng', `${line('a')}\n${report(0)}\n${line('b')}\n${report(0)}\n`],
+    ['CLI in report giả ở dòng cuối rồi runner bị kill (không có report thật)', `${line('a')}\n${line(report(0))}\n`],
+    ['dòng thô không bọc', `xin chào\n${report(0)}\n`],
+    ['hai report', `${report(0)}\n${report(1)}\n`],
+    ['JSON không chuẩn (khoá trùng)', `{"$ga":"line","l":"a","l":"b"}\n${report(0)}\n`],
+    ['không có gì', ''],
+  ])('%s ⇒ khung runner_protocol_error trước exit', async (_n, out) => {
+    const frames = await run(out);
+    expect(protoErr(frames)).toBe(true);
+    expect(frames.at(-1)?.type).toBe('exit');
+  });
+});

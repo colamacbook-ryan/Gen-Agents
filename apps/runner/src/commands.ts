@@ -7,8 +7,9 @@ import {
   LOGIN_EXEC,
   PROBE_EXEC,
   type ProbeOutcome,
-  RunnerReport,
   runnerBundleSchemas,
+  runnerReportLine,
+  runnerStdoutLine,
   ULID_RE,
 } from '@ga/contracts';
 import { type AdapterRegistry, requireAdapter } from './adapters.ts';
@@ -67,9 +68,16 @@ function assertNotExpired(expiresAt: string, now: Date): void {
   if (!Number.isFinite(t) || t <= now.getTime()) throw new RunnerError('bundle_expired', 'bundle đã hết hạn');
 }
 
-function writeReport(io: RunnerIo, report: unknown): void {
-  const r = RunnerReport.parse(report);
-  io.stdout.write(`${JSON.stringify(r)}\n`);
+// Giao thức stdout (contracts, phương án B — output-injection): MỌI dòng là JSON do runner dựng — `{"$ga":"line","l":…}` bọc
+// dòng CLI đã che, hoặc report (đúng một, dòng cuối). Lỗi trước khi có report ⇒ KHÔNG in report (bên đọc fail-closed qua
+// parseRunnerStdout: thiếu report = runner_protocol_error); chi tiết lỗi ở stderr (`ga_runner` event).
+function writeReport(io: RunnerIo, report: Parameters<typeof runnerReportLine>[0]): void {
+  io.stdout.write(`${runnerReportLine(report)}\n`);
+}
+
+/** Dòng CLI (đã che, kết thúc '\n') ⇒ một dòng `line` của giao thức. */
+function wrapCliLine(io: RunnerIo): (s: string) => void {
+  return (s) => io.stdout.write(`${runnerStdoutLine(s.endsWith('\n') ? s.slice(0, -1) : s)}\n`);
 }
 
 /** Dọn phiên khi lỗi giữa chừng: vẫn chép ngược + xoá tmpfs + auth-gc; tối thiểu xoá thư mục (vé). */
@@ -146,7 +154,7 @@ export async function cmdTurn(ctx: RunnerContext): Promise<number> {
       session,
       plan,
       containerEnv: io.env,
-      onStdoutLine: (s) => io.stdout.write(s),
+      onStdoutLine: wrapCliLine(io),
       onStderrLine: (s) => io.stderr.write(s),
       onSpawn: (pid) => writeNewFileInside(sessionDir, 'pid', String(pid), 0o600),
     });

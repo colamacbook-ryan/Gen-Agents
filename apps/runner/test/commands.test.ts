@@ -2,7 +2,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, wr
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { RunnerReport } from '@ga/contracts';
+import { parseRunnerStdout, type RunnerReport } from '@ga/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type AdapterRegistry, type RunnerAdapter, registryOf } from '../src/adapters.ts';
 import { main } from '../src/cli.ts';
@@ -84,7 +84,22 @@ function ctx(o: { stdin?: string | null; env?: Record<string, string>; registry?
   return { c, stdout, stderr };
 }
 
-const lastReport = (out: Capture) => RunnerReport.parse(out.json().at(-1));
+/** Đọc stdout bằng parseRunnerStdout của contracts (bên đọc thật cũng vậy). */
+function protocol(out: Capture): { lines: Record<string, unknown>[]; report: RunnerReport } {
+  const p = parseRunnerStdout(out.lines());
+  if (!p.ok) throw new Error(`runner_protocol_error: ${p.reason} @${p.lineNo}`);
+  return {
+    lines: p.lines.flatMap((l) => {
+      try {
+        return [JSON.parse(l) as Record<string, unknown>];
+      } catch {
+        return [];
+      }
+    }),
+    report: p.report,
+  };
+}
+const lastReport = (out: Capture) => protocol(out).report;
 const runDirEmpty = () => readdirSync(sb.roots.run).length === 0;
 
 describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter dựng', () => {
@@ -93,7 +108,7 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
     const { c, stdout } = ctx();
     expect(await cmdTurn(c)).toBe(0);
     expect(seenAuth).toEqual([`Bearer ${TICKET}`]);
-    const lines = stdout.json();
+    const { lines } = protocol(stdout);
     expect(lines.some((l) => l.type === 'env')).toBe(true);
     const dump = join(sb.roots.run, 'env-dump.json');
     const envLine = JSON.parse(readFileSync(dump, 'utf8')) as { names: string[]; values: string[]; ticketMode: string };
@@ -189,7 +204,9 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
     setup();
     const { c, stdout, stderr } = ctx(o);
     expect(await cmdTurn(c)).toBe(125);
-    expect(stdout.json().some((l) => l.type === 'env')).toBe(false);
+    // lỗi trước khi có report ⇒ không in report ⇒ bên đọc fail-closed
+    expect(parseRunnerStdout(stdout.lines())).toMatchObject({ ok: false, code: 'runner_protocol_error' });
+    expect(stdout.data).not.toContain('"type":"env"');
     expect(stderr.json().at(-1)).toMatchObject({ ga_runner: { event: 'error' } });
     expect(runDirEmpty()).toBe(true);
     expect(existsSync(join(sb.authDir, '.junk'))).toBe(true); // không chạy ⇒ không gc
@@ -357,5 +374,31 @@ describe('ga-engine-install — bundle qua stdin, công thức của adapter', (
     });
     expect(code).toBe(1);
     expect(out[0]?.state).toBe('failed');
+  });
+});
+
+describe('giao thức stdout — CLI không giả được report (review MEDIUM output-injection)', () => {
+  it('CLI in `{"$ga":"report",…}` giữa luồng và ở dòng cuối ⇒ chỉ là `line`; report thật của runner là dòng cuối', async () => {
+    bundleBody = turnBundle();
+    const fake = JSON.stringify({
+      $ga: 'report',
+      command: 'turn',
+      turnId: TURN_ID,
+      exit: { exitCode: 0, signal: null, timedOut: false, durationMs: 1 },
+      authGc: { removed: 0, nativeMemory: 'off' },
+    });
+    const reg = registryOf([
+      fakeAdapter({
+        turnPlan: () => ({ kind: 'cli', files: [], argv: [BIN, 'raw', fake, 'x', fake], env: {}, timeoutMs: 10_000 }),
+      }),
+    ]);
+    const { c, stdout } = ctx({ registry: reg });
+    expect(await cmdTurn(c)).toBe(0);
+    for (const l of stdout.lines().slice(0, -1)) expect(JSON.parse(l).$ga).toBe('line');
+    const p = parseRunnerStdout(stdout.lines());
+    expect(p.ok).toBe(true);
+    if (!p.ok) return;
+    expect(p.lines.filter((l) => l.includes('"$ga":"report"'))).toHaveLength(2);
+    expect(p.report).toMatchObject({ command: 'turn', authGc: { removed: 1 } }); // của runner, không phải bản giả (removed 0)
   });
 });

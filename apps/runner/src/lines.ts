@@ -1,11 +1,12 @@
 import { StringDecoder } from 'node:string_decoder';
+import { RUNNER_CLI_LINE_MAX_CHARS } from '@ga/contracts';
 import { MAX_SCAN_CHARS, redactLine } from './redact.ts';
 
 // Tách luồng byte thành dòng, che credential từng dòng rồi mới ghi ra. Dòng vượt trần bị BỎ (không cắt đôi — cắt đôi có thể
 // tách một token làm hai nửa lọt qua bộ che).
 
-/** Trần một dòng = trần quét của bộ che (chặn kích thước trước khi quét). */
-export const MAX_LINE_CHARS = MAX_SCAN_CHARS;
+/** Trần một dòng = min(trần quét của bộ che, trần dòng CLI của giao thức stdout — contracts RUNNER_CLI_LINE_MAX_CHARS). */
+export const MAX_LINE_CHARS = Math.min(MAX_SCAN_CHARS, RUNNER_CLI_LINE_MAX_CHARS);
 export const DROPPED_LINE_MARKER = '{"$ga":"line_dropped","reason":"too_long"}';
 
 export class RedactingLineWriter {

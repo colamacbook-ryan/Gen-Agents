@@ -10,6 +10,7 @@ import {
   type ExecRequest,
   execEnv,
   execStdinPayload,
+  parseRunnerStdout,
 } from '@ga/contracts';
 import type { z } from 'zod';
 import { SupervisorError } from './errors.ts';
@@ -47,6 +48,20 @@ function viewOf(c: ContainerInfo | null, name: string, rolesNetwork: string): En
   };
 }
 
+/** Chờ luồng stdout đã phát hết dữ liệu (exec kết thúc có thể tới trước sự kiện 'data' cuối). Trần 5 s. */
+function drained(r: NodeJS.ReadableStream & { readableEnded?: boolean; destroyed?: boolean }): Promise<void> {
+  if (r.readableEnded || r.destroyed) return Promise.resolve();
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, 5000);
+    const done = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    r.once('end', done);
+    r.once('close', done);
+  });
+}
+
 /** Một lần exec nội bộ: ghi stdin, gom stdout có trần, chờ xong / hết giờ. */
 export async function runCollect(
   broker: Broker,
@@ -81,6 +96,7 @@ export async function runCollect(
     s.destroy();
   }, timeoutMs);
   await s.done;
+  await drained(s.stdout);
   clearTimeout(timer);
   const i = timedOut ? { exitCode: null } : await s.inspect();
   return { stdout, exitCode: i.exitCode, timedOut };
@@ -241,9 +257,16 @@ export class SupervisorService {
     s.write(`${execStdinPayload(req.run)}\n`);
     const out = new StringDecoder('utf8');
     const err = new StringDecoder('utf8');
+    // giữ stdout để kiểm giao thức của runner (parseRunnerStdout) khi xong; quá trần ⇒ coi là lỗi giao thức
+    const MAX_KEEP = 64 * 1024 * 1024;
+    let kept = '';
+    let overflow = false;
     s.stdout.on('data', (b: Buffer) => {
       const data = out.write(b);
-      if (data) emit({ type: 'stdout', data });
+      if (!data) return;
+      if (!overflow && kept.length + data.length <= MAX_KEEP) kept += data;
+      else overflow = true;
+      emit({ type: 'stdout', data });
     });
     s.stderr?.on('data', (b: Buffer) => {
       const data = err.write(b);
@@ -257,6 +280,7 @@ export class SupervisorService {
     const onAbort = () => s.destroy();
     abort.addEventListener('abort', onAbort);
     await s.done;
+    await drained(s.stdout);
     clearTimeout(timer);
     abort.removeEventListener('abort', onAbort);
     let exitCode: number | null = null;
@@ -266,6 +290,16 @@ export class SupervisorService {
       } catch {
         exitCode = null;
       }
+    }
+    // Bên đọc chỉ tin stdout qua parseRunnerStdout (contracts, fail-closed): đúng MỘT report ở dòng cuối, mọi dòng khác là
+    // `line` do runner bọc. Lệch ⇒ khung error `runner_protocol_error` TRƯỚC khung exit — ga-app coi lượt là thất bại.
+    kept += out.end();
+    const lines = kept.endsWith('\n') ? kept.slice(0, -1).split('\n') : kept.length ? kept.split('\n') : [];
+    const p = overflow ? null : parseRunnerStdout(lines);
+    if (!p?.ok) {
+      const reason = p && !p.ok ? p.reason : 'stdout quá trần';
+      this.log.log('warn', 'runner_protocol_error', { container: c.name, command: req.run.command, reason });
+      emit({ type: 'error', code: 'runner_protocol_error', message: reason });
     }
     emit({
       type: 'exit',
@@ -289,11 +323,15 @@ export class SupervisorService {
       `${JSON.stringify({ v: 2, engineSlug: req.engineSlug, engineAccount: req.engineAccount })}\n`,
       60_000,
     );
-    const line = r.stdout.trim().split('\n').at(-1) ?? '';
-    let parsed: unknown;
+    // auth-gc không chạy CLI ⇒ stdout phải là ĐÚNG MỘT dòng AuthGcResult ở dạng JSON chuẩn (không lấy "dòng cuối" tuỳ ý)
+    const lines = r.stdout.endsWith('\n') ? r.stdout.slice(0, -1).split('\n') : [r.stdout];
+    let parsed: unknown = null;
     try {
-      parsed = JSON.parse(line);
+      parsed = lines.length === 1 ? JSON.parse(lines[0] as string) : null;
     } catch {
+      parsed = null;
+    }
+    if (parsed === null || JSON.stringify(parsed) !== lines[0]) {
       throw new SupervisorError('internal', 'ga-runner auth-gc không trả kết quả hợp lệ');
     }
     const res = AuthGcResult.safeParse(parsed);

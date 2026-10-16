@@ -29,7 +29,11 @@ export function fakeAdapter(over: Partial<RunnerAdapter> = {}): RunnerAdapter {
       selfUpdate: 'unknown',
       egressDomains: ['vendor.invalid'],
     },
-    flagTable: { subcommands: ['turn', 'print', 'sleep', 'exit'], flags: { '--model': 'value' }, env: ['NO_COLOR'] },
+    flagTable: {
+      subcommands: ['turn', 'print', 'raw', 'sleep', 'exit'],
+      flags: { '--model': 'value' },
+      env: ['NO_COLOR'],
+    },
     loginArgv: () => [BIN, 'print', 'login'],
     loginCheck: (_i: ProbePlanInput) => ({
       plan: cli([BIN, 'print', 'logged-in']),
