@@ -20,7 +20,8 @@ pnpm test
 |---|---|
 | `pnpm lint` | Biome + luật riêng của repo (`scripts/lint-rules.mjs`: cấm `OR REPLACE`, tên CLI/model ngoài adapter, tên owner, env `*SESSION*`/`*_OAUTH_TOKEN`, `console.log` ở apps, dockerode ngoài supervisor, I/O trong transaction, ghi DB ngoài `conn.write(actor, fn)`, regex nguy cơ ReDoS, component trùng tên, ranh giới import, ký tự vô hình / bidi / fullwidth, …; danh sách: `node scripts/lint-rules.mjs --list`) |
 | `pnpm lint:rules --selftest` | mỗi luật phải bắt đúng tệp mồi của nó |
-| `pnpm typecheck` | `tsc -b` (TS project references) |
+| `pnpm typecheck` | kiểm `tsconfig.json` gốc tham chiếu đủ mọi project workspace (`packages/*`, `apps/*`, `testing/…`) rồi `tsc -b`; lệch thì chạy `pnpm tsconfig:refs` |
+| `pnpm test:it:runtime` | IT runtime của supervisor (Docker thật; không có package `@ga/supervisor` ⇒ đỏ, không im lặng) |
 | `pnpm test` | Vitest: contracts, hợp đồng kết nối DB, runner migration, parity, selftest lint / license |
 | `pnpm db:test` | 94 ca Python của DB chạy nguyên văn trên bản vendor + parity runner TS ≡ Python |
 | `pnpm db:mutation --sample 20` | DROP từng trigger → bộ test phải đỏ; có lượt đối chứng (`--all`, `--changed`, `--only <trigger>`) |
