@@ -56,6 +56,8 @@ describe('redactLine — phát hiện ⇒ thay CẢ dòng (fail-closed, không c
     ['camelCase có tiền tố', 'INFO {"refreshToken":"a.b"}', 'a.b'],
     ['kebab-case chữ hoa', 'Refresh-Token: q1', 'q1'],
     ['api_token (tên mới của contracts)', 'x {"api_token":"t"}', '"t"'],
+    // fullwidth: dòng được gập NFKC trước khi tìm tên khoá (contracts fd1fd84 đổi normalizeCredentialName)
+    ['tên khoá fullwidth', 'x \uff41\uff43\uff43\uff45\uff53\uff53_token: q2', 'q2'],
   ])('%s ⇒ thay cả dòng', (_n, line, secret) => {
     expect(credentialInLine(line), line).not.toBeNull();
     expectWholeLineReplaced(line, secret);

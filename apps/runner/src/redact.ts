@@ -19,8 +19,16 @@ export function redactedMarker(patternId: string): string {
   return JSON.stringify({ $ga: 'line_redacted', patternId: patternId.replace(/[^a-z0-9_]/gi, '_') });
 }
 
-/** Tên khoá đã chuẩn hoá như contracts (bỏ `_` / `-`, chữ thường) — dòng được chuẩn hoá cùng cách trước khi tìm. */
+/** Tên khoá đã chuẩn hoá theo contracts (`normalizeCredentialName`: NFKC, chữ thường, chỉ còn a–z0–9). */
 const KEY_NAMES: readonly string[] = [...new Set(CREDENTIAL_KEY_NAMES.map(normalizeCredentialName))];
+
+/**
+ * Gập CẢ DÒNG để tìm tên khoá: NFKC + chữ thường + bỏ `_` / `-`. KHÔNG dùng `normalizeCredentialName` cho cả dòng — hàm đó
+ * bỏ mọi ký tự ngoài a–z0–9 (mất `:` / `=` / nháy cần cho bước sau) và ném lỗi khi vượt trần tên khoá.
+ */
+function foldLine(line: string): string {
+  return line.normalize('NFKC').toLowerCase().replace(/[_-]/g, '');
+}
 /** Trần số ký tự bỏ qua mỗi phía của dấu `:` / `=` (giữ tuyến tính: mỗi lần khớp tên tốn O(1)). */
 const MAX_SKIP = 64;
 
@@ -66,7 +74,7 @@ const escapeLen = (s: string, p: number) => (s.charCodeAt(p) === 92 && unicodeEs
 
 /** Rào 3: có phép gán `<tên khoá credential> : / = <giá trị không rỗng>` ở đâu đó trong dòng (mọi dạng nháy / escape). */
 export function credentialKeyAssignment(line: string): boolean {
-  const lower = normalizeCredentialName(line);
+  const lower = foldLine(line);
   for (const name of KEY_NAMES) {
     let from = 0;
     for (;;) {
