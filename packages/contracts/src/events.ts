@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { EngineInstallStatus } from './engine.ts';
-import { UI_TOOLS } from './mcp.ts';
+import { CREDENTIAL_PATTERN_IDS, MCP_TOOLS, UI_TOOLS } from './mcp.ts';
 import { PtyCloseReason } from './supervisor.ts';
 import { UPDATE_STEPS } from './update.ts';
 
@@ -108,6 +108,16 @@ export const SseEvent = z.discriminatedUnion('type', [
   }),
   z.strictObject({ ...base, type: z.literal('engine.install'), engineSlug: z.string(), status: EngineInstallStatus }),
   z.strictObject({ ...base, type: z.literal('pty.closed'), engineAccountId: Ulid, reason: PtyCloseReason }),
+  /** Cảnh báo owner (A0) khi gateway chặn payload giống credential (CNS-169) — không mang payload, không phải án phạt. */
+  z.strictObject({
+    ...base,
+    type: z.literal('credential.blocked'),
+    roleId: Ulid,
+    tool: z.union([z.enum(MCP_TOOLS), z.literal('unknown')]),
+    patternId: z.enum(CREDENTIAL_PATTERN_IDS),
+    severity: z.literal('warn'),
+    auditDisplayId: z.string(),
+  }),
 ]);
 export type SseEvent = z.infer<typeof SseEvent>;
 export type SseEventType = SseEvent['type'];
