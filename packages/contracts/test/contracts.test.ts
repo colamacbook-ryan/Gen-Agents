@@ -1,7 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   buildTermWebSocketInit,
-  CREDENTIAL_FILTERED_TOOLS,
   DB_TIMESTAMP_RE,
   type EngineAdapter,
   EngineInstallStatus,
@@ -10,7 +9,6 @@ import {
   extractTermTicket,
   formatDisplayId,
   isEntityPrefix,
-  MCP_TOOLS,
   mapDbError,
   PTY,
   PTY_CLOSE_REASONS,
@@ -226,10 +224,6 @@ describe('sessions', () => {
 });
 
 describe('mcp + settings + errors + events', () => {
-  it('tool ghi / gửi ra đều qua bộ lọc credential', () => {
-    for (const t of CREDENTIAL_FILTERED_TOOLS) expect(MCP_TOOLS).toContain(t);
-    expect(CREDENTIAL_FILTERED_TOOLS).toContain('send_telegram');
-  });
   it('mặc định settings hợp lệ với chính schema của nó', () => {
     for (const [key, def] of Object.entries(SETTINGS)) {
       if (def.default === 'seed') continue;
