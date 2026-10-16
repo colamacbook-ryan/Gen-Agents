@@ -9,7 +9,13 @@ import { SYSTEM_WORKSPACE_ID } from '@ga/contracts';
 import { type AppConnection, migrate, openWriter, SQLITE_MIGRATIONS_DIR } from '@ga/db';
 import { CSRF_HEADER, deriveSubkey, passwordHasherRuns } from '@ga/security';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AuthService, createAuthHandlers, firstPasswordFile, LOGIN_LIMITS, SqliteAuthStore } from '../index.ts';
+import {
+  AuthService,
+  createAuthHandlers,
+  firstPasswordFile,
+  LOGIN_LIMITS,
+  SqliteAuthStore,
+} from '../src/auth/index.ts';
 
 class FakeClock implements Clock {
   private t = Date.parse('2026-10-16T08:00:00.000Z');

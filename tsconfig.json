@@ -4,6 +4,8 @@
     { "path": "packages/contracts" },
     { "path": "packages/db" },
     { "path": "packages/engines" },
-    { "path": "testing/fakes" }
+    { "path": "packages/security" },
+    { "path": "testing/fakes" },
+    { "path": "apps/control-plane" }
   ]
 }

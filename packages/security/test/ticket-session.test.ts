@@ -265,6 +265,6 @@ describe('giới hạn tần suất', () => {
     expect(() => new SlidingWindowLimiter({ limit: 0, windowMs: 1, clock })).toThrow(RangeError);
   });
   it('khoá tạm tài khoản: 4 lần sai đầu không khoá, sau đó 30 s nhân đôi, trần 15 phút', () => {
-    expect([0, 1, 4, 5, 6, 7, 10, 100].map(accountLockSeconds)).toEqual([0, 0, 0, 30, 60, 120, 900, 900]);
+    expect([0, 1, 4, 5, 6, 7, 10, 100].map((n) => accountLockSeconds(n))).toEqual([0, 0, 0, 30, 60, 120, 900, 900]);
   });
 });

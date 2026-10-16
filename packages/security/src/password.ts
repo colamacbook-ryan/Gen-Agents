@@ -1,6 +1,6 @@
 // Mật khẩu owner: argon2id (FS Chương 1, BUILD-PLAN §A.1), mật khẩu lần đầu dạng từ (STD-06), chính sách mật khẩu mới.
 //
-// Tham số argon2id [ĐỀ XUẤT — L-SEC]: OWASP Password Storage Cheat Sheet, cấu hình 1 — m = 46 MiB (47 104 KiB), t = 1, p = 1;
+// Tham số argon2id [Gen duyệt 2026-10-16]: OWASP Password Storage Cheat Sheet, cấu hình 1 — m = 46 MiB (47 104 KiB), t = 1, p = 1;
 // salt 16 byte ngẫu nhiên, đầu ra 32 byte, chuỗi PHC chuẩn `$argon2id$v=19$m=…,t=…,p=…$salt$hash`.
 // Đo trên máy cloud (4 CPU, Node 22): ~190 ms mỗi lần băm (WASM). Băm chạy trong worker_threads, một lần một lượt,
 // hàng đợi có trần ⇒ đăng nhập dồn dập không chặn event loop và không ăn RAM vô hạn (46 MiB mỗi lượt).
@@ -34,7 +34,7 @@ const VERIFY_BOUNDS = {
 } as const;
 
 export const PASSWORD_RULES = {
-  /** Mật khẩu mới tối thiểu 12 ký tự (code point) — đủ cho cụm từ dễ nhớ. [ĐỀ XUẤT — L-SEC] */
+  /** Mật khẩu mới tối thiểu 12 ký tự (code point) — đủ cho cụm từ dễ nhớ. [Gen duyệt 2026-10-16] */
   minChars: 12,
   maxChars: 256,
   /** Trần byte UTF-8 của MỌI mật khẩu nhận vào (cả lúc đăng nhập) — kiểm trước khi băm. */
@@ -270,11 +270,11 @@ export type PasswordPolicyViolation =
 
 export function validateNewPassword(
   password: string,
-  ctx: { username: string; currentPassword?: string },
+  ctx: { username: string; currentPassword?: string; minChars?: number },
 ): { ok: true } | { ok: false; reason: PasswordPolicyViolation } {
   const pw = password.normalize('NFC');
   const chars = [...pw];
-  if (chars.length < PASSWORD_RULES.minChars) return { ok: false, reason: 'too_short' };
+  if (chars.length < Math.max(PASSWORD_RULES.minChars, ctx.minChars ?? 0)) return { ok: false, reason: 'too_short' };
   if (chars.length > PASSWORD_RULES.maxChars || Buffer.byteLength(pw, 'utf8') > PASSWORD_RULES.maxBytes) {
     return { ok: false, reason: 'too_long' };
   }

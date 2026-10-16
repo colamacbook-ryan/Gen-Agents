@@ -113,12 +113,12 @@ describe('khoá từ tệp', () => {
 describe('HKDF', () => {
   it('K_audit đúng công thức DATABASE §9.6 và khác theo workspace', () => {
     const mk = key();
-    const ws = '01JWS00000000000000000AFI0';
+    const ws = '01JWS00000000000000000AFJ0';
     const want = Buffer.from(
       hkdfSync('sha256', mk, Buffer.from('genagents-audit'), Buffer.from(`audit-chain:v1:${ws}`), 32),
     );
     expect(deriveAuditKey(mk, ws).equals(want)).toBe(true);
-    expect(deriveAuditKey(mk, '01JWS00000000000000000AFI1').equals(want)).toBe(false);
+    expect(deriveAuditKey(mk, '01JWS00000000000000000AFJ1').equals(want)).toBe(false);
   });
   it('mỗi mục đích một khoá khác nhau; ca âm: audit thiếu workspace, mục đích khác nhận ngữ cảnh, master sai độ dài', () => {
     const mk = key();
@@ -134,7 +134,7 @@ describe('HKDF', () => {
 
 describe('envelope AES-256-GCM', () => {
   const ctx = {
-    workspaceId: '01JWS00000000000000000AFI0',
+    workspaceId: '01JWS00000000000000000AFJ0',
     secretId: '01JSEC0000000000000000000A',
     kind: 'telegram_bot_token',
   };
@@ -157,7 +157,7 @@ describe('envelope AES-256-GCM', () => {
     expect(a.ciphertext.equals(b.ciphertext)).toBe(false);
     expect(a.ciphertext.includes(Buffer.from(token))).toBe(false);
     expect(sealSecret('ngắn', ctx, ring).last4).toBeNull();
-    expect(sealSecret(token, { ...ctx, workspaceId: '01JWS00000000000000000AFI9' }, ring).fingerprint).not.toBe(
+    expect(sealSecret(token, { ...ctx, workspaceId: '01JWS00000000000000000AFJ9' }, ring).fingerprint).not.toBe(
       a.fingerprint,
     );
   });

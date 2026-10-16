@@ -2,7 +2,13 @@
 // Thứ tự BẮT BUỘC: (1) chặn kích thước (không quét gì nếu vượt trần) → (2) quét MỌI khoá + MỌI chuỗi giá trị, không có tool /
 // trường nào được miễn. Kết quả `denied` mang id mẫu — KHÔNG mang payload / đoạn khớp / hash (contracts CREDENTIAL_BLOCKED:
 // audit chỉ {patternId, tool}). Lần chặn ⇒ audit `credential.blocked`, cảnh báo owner, KHÔNG phạt (CNS-169).
-import { CREDENTIAL_KEY_NAMES, type CredentialPatternId, TOOL_PAYLOAD_LIMITS } from '@ga/contracts';
+import {
+  CREDENTIAL_KEY_NAMES,
+  type CredentialPatternId,
+  isCredentialKeyName,
+  normalizeCredentialName,
+  TOOL_PAYLOAD_LIMITS,
+} from '@ga/contracts';
 import { auditPatternId, scanText } from './credential-detector.ts';
 
 export interface PayloadLimits {
@@ -13,11 +19,10 @@ export interface PayloadLimits {
 }
 
 /**
- * Tên khoá mang credential (MỘT nguồn luật): `CREDENTIAL_KEY_NAMES` của contracts + `SECURITY_EXTRA_KEY_NAMES`, so sau khi
- * chuẩn hoá ⇒ bao `CREDENTIAL_KEY_RE` của contracts (kể cả các biến thể viết hoa / camel / gạch nối).
+ * Tên khoá mang credential — MỘT nguồn luật (contracts 0a2bfff): `isCredentialKeyName` của contracts (tên
+ * `CREDENTIAL_KEY_NAMES` mọi kiểu viết) + `SECURITY_EXTRA_KEY_NAMES`, chuẩn hoá bằng chính `normalizeCredentialName` của
+ * contracts (bỏ `_` / `-`, hạ chữ thường: `Refresh-Token` = `refresh_token` = `refreshToken` = `REFRESH__TOKEN`).
  */
-/** Chuẩn hoá tên khoá để so: chữ thường, bỏ mọi ký tự ngoài a–z0–9 (`Refresh-Token` = `refresh_token` = `refreshToken`). */
-export const normalizeKeyName = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** Phần thêm RIÊNG của security (ngoài contracts): tên chung chung chỉ chặn khi là KHOÁ object, không chặn câu văn. */
 export const SECURITY_EXTRA_KEY_NAMES = [
@@ -35,11 +40,11 @@ export const SECURITY_EXTRA_KEY_NAMES = [
 ] as const;
 
 export const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set(
-  [...CREDENTIAL_KEY_NAMES, ...SECURITY_EXTRA_KEY_NAMES].map(normalizeKeyName),
+  [...CREDENTIAL_KEY_NAMES, ...SECURITY_EXTRA_KEY_NAMES].map(normalizeCredentialName),
 );
 
 export function isSensitiveKey(key: string): boolean {
-  return SENSITIVE_KEY_NAMES.has(normalizeKeyName(key));
+  return isCredentialKeyName(key) || SENSITIVE_KEY_NAMES.has(normalizeCredentialName(key));
 }
 
 export type PayloadScreenResult =

@@ -21,6 +21,18 @@ importers:
         specifier: 4.1.12
         version: 4.1.12(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5))
 
+  apps/control-plane:
+    dependencies:
+      '@ga/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@ga/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ga/security':
+        specifier: workspace:*
+        version: link:../../packages/security
+
   apps/egress:
     devDependencies:
       '@ga/contracts':

@@ -9,6 +9,7 @@
 import { CREDENTIAL_DETECTORS, CREDENTIAL_KEY_NAMES } from '@ga/contracts';
 import { describe, expect, it } from 'vitest';
 import { detectCredential } from '../src/index.ts';
+import { base64Secrets, JS_SPACES, urlCorpus } from './helpers.ts';
 
 /** Tham chiếu CNS-169 (đặc tả bằng regex). Luật entropy: đoạn token TỐI ĐẠI ≥ 32, đủ hoa + thường + số, có ký tự ngoài hex. */
 const REFERENCE: ReadonlyArray<{ id: string; re: RegExp }> = [
@@ -21,17 +22,21 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: 'github', re: /\bgh[pousr]_[0-9A-Za-z]{36,}/ },
   { id: 'slack', re: /\bxox[abpr]-[0-9A-Za-z-]{10,}/ },
   { id: 'pem', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  { id: 'refresh_token_field', re: /["']?refresh_token["']?\s*[:=]/i },
+  /** tên mọi kiểu viết (contracts 0a2bfff): giữa các phần cho `[_-]*` */
+  { id: 'refresh_token_field', re: /["']?refresh[_-]*token["']?\s*[:=]/i },
   {
     id: 'credential_assignment',
     re: new RegExp(
-      `(?:${CREDENTIAL_KEY_NAMES.map((n) => n.replace('-', '\\-')).join('|')})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8,}`,
+      `(?:${CREDENTIAL_KEY_NAMES.map((n) => n.split(/[_-]/).join('[_-]*')).join('|')})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8,}`,
       'i',
     ),
   },
   { id: 'aws_access_key_id', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}/ },
-  /** Dự đoán `env_secret_assignment` của L0 (UPPER_SNAKE …_SECRET/TOKEN/PASSWORD/KEY/PAT=) — bản thật vào contracts thì (B) phủ. */
-  { id: 'env_secret_assignment', re: /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|KEY|PAT)\s*=\s*\S/ },
+  /** = contracts `env_secret_assignment` (c4285e8). */
+  {
+    id: 'env_secret_assignment',
+    re: /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\s*[:=]\s*["']?[^\s"']{8}/,
+  },
   { id: 'canary', re: /GA-CANARY-[0-9a-f-]{8,}/i },
   {
     id: 'high_entropy',
@@ -67,8 +72,11 @@ const int = (lo: number, hi: number) => lo + Math.floor(rnd() * (hi - lo + 1));
 const TOKEN = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
 const LOWER_HEX = '0123456789abcdef';
 const PRINTABLE = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('');
-const SPACES = [' ', '\t', '\n', '\r', '\v', '\f', ' ', ' ', '\u3000', '\ufeff'];
+/** Đúng tập `\s` của regex JS (lấy từ engine): ASCII + NBSP, U+1680, U+2000–U+200A, U+2028/9, U+202F, U+205F, U+3000, U+FEFF. */
+const SPACES = JS_SPACES;
 const run = (n: number, alphabet = TOKEN) => Array.from({ length: n }, () => pick([...alphabet])).join('');
+/** Kiểu viết khác của tên snake / kebab: phân cách ngẫu nhiên '', '-', '_', '__', '-_-' (contracts so sau khi bỏ `_` / `-`). */
+const spell = (name: string) => name.split(/[_-]/).join(pick(['', '-', '_', '__', '-_-']));
 const flipCase = (s: string) => [...s].map((c) => (rnd() < 0.5 ? c.toUpperCase() : c.toLowerCase())).join('');
 
 function corpus(): string[] {
@@ -78,7 +86,7 @@ function corpus(): string[] {
       for (let n = 0; n <= 64; n++) {
         for (const sep of [':', '=']) {
           const ws = Array.from({ length: n }, () => pick(SPACES)).join('');
-          out.push(`${q1}${flipCase('refresh_token')}${q2}${ws}${sep} "v"`);
+          out.push(`${q1}${flipCase(spell('refresh_token'))}${q2}${ws}${sep} "v"`);
         }
       }
     }
@@ -148,12 +156,16 @@ function corpus(): string[] {
   // TOÀN BỘ danh sách tên khoá của contracts — thêm tên ở contracts thì corpus tự phủ
   const names = [...CREDENTIAL_KEY_NAMES];
   const seps = [':', '=', ' : ', '": "', "'='", '=\t', '":"'];
+  // khoảng trắng Unicode làm dấu phân cách (review MEDIUM parser-differential): mọi ký tự `\s` ngoài ASCII
+  for (const sp of SPACES.filter((c) => c.charCodeAt(0) > 0x7f))
+    seps.push(`${sp}:${sp}`, `"${sp}=${sp}"`, `${sp}${sp}=`);
   for (const name of names) {
     for (const sep of seps) {
       for (let n = 6; n <= 10; n++) {
         const before = pick(['', ' ', 'x', '_', '"', '{"', 'INFO got {"', 'a1']);
         const body = run(n, VALUE);
         out.push(`${before}${flipCase(name)}${sep}${body}`, `INFO ${JSON.stringify({ [name]: body })} end`);
+        out.push(`${before}${flipCase(spell(name))}${sep}${body}`);
       }
     }
   }
@@ -167,13 +179,19 @@ function corpus(): string[] {
     }
   }
   // gán biến môi trường bí mật: tên UPPER_SNAKE (+ chữ thường) × hậu tố × dấu gán × giá trị 0–3 ký tự
-  for (const suffix of ['SECRET', 'TOKEN', 'PASSWORD', 'KEY', 'PAT', 'secret', 'token']) {
+  for (const suffix of ['SECRET', 'TOKEN', 'PASSWORD', 'PASSWD', 'KEY', 'PAT', 'secret', 'token', 'TOKENS']) {
     for (const name of ['DB', 'GITHUB', 'MY_APP', 'X1', 'aws_secret_ACCESS']) {
       for (const sep of ['=', ' = ', ':', '="']) {
         out.push(`${pick(['', 'export ', ' '])}${name}_${suffix}${sep}${run(int(0, 3), VALUE)}`);
+        out.push(`${pick(['', 'export ', ' ', 'x'])}${name}_${suffix}${sep}${run(int(6, 10), VALUE)}`);
       }
     }
   }
+  // URL có userinfo (corpus đối chiếu new URL(), cùng bộ với test của detector) — (B) so với contracts `url_userinfo`
+  out.push(...urlCorpus(5000).filter((_, i) => i % 4 === 0));
+  // secret base64 có + / (contracts base64_secret_run): 40–48 ký tự, đứng riêng / trong câu / trong đường dẫn
+  for (const v of base64Secrets(600, 40)) out.push(`k ${v} `, v);
+  for (const v of base64Secrets(200, 48, 11)) out.push(`/srv/${v}/x`, `${v.slice(0, 20)} ${v.slice(20)}`);
   const inserts = [
     'sk-',
     'ya29.',

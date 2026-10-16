@@ -3,7 +3,7 @@
 // - DEK ngẫu nhiên 256 bit mỗi bí mật; dữ liệu = AES-256-GCM(DEK, nonce 96 bit, AAD) với AAD gắn workspace_id ‖ secret_id ‖
 //   kind (mã hoá độ dài từng trường — không mơ hồ). Chép ciphertext sang hàng / workspace / loại khác ⇒ giải mã thất bại.
 // - DEK được bọc bằng KEK: AES-256-GCM(KEK, dek_nonce, AAD gắn cùng ngữ cảnh + kek_id).
-// - KEK = HKDF(master key, "secret-store:kek:v1") [ĐỀ XUẤT — L-SEC: tách miền với các khoá phụ khác dẫn xuất từ cùng master
+// - KEK = HKDF(master key, "secret-store:kek:v1") [Gen duyệt 2026-10-16: tách miền với các khoá phụ khác dẫn xuất từ cùng master
 //   key; DATABASE ghi "KEK = master key"]. `kek_id` = id của master key trong keyring.
 // - Xoay KEK: `rewrapSecret` giải DEK bằng khoá cũ (trong keyring), bọc lại bằng khoá hiện hành; ciphertext giữ nguyên.
 // - Cột khớp bảng `secrets`: ciphertext (‖ tag 16 byte), nonce, wrapped_dek (‖ tag), dek_nonce, kek_id, alg, last4, fingerprint.

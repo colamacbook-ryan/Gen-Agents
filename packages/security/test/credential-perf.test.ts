@@ -6,6 +6,8 @@ import { detectCredential, redactText, screenPayload } from '../src/index.ts';
 
 const MB = 1024 * 1024;
 const fill = (unit: string, size = MB) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+const NBSP = String.fromCharCode(0xa0);
+const IDEO_SPACE = String.fromCharCode(0x3000);
 
 /**
  * Lượt nhanh nhất trong `rounds` lần. Đo CẢ thời gian thực lẫn thời gian CPU của tiến trình (process.cpuUsage) và lấy giá trị
@@ -63,6 +65,25 @@ const adversarial: Record<string, string> = {
   'GA-CANARY- + 8 ký tự ngoài hex lặp': fill('GA-CANARY-zzzzzzzz '),
   'xpassword= lặp (tên mở rộng hụt ranh giới)': fill('xpassword=abcdefghij '),
   'đoạn 31 ký tự đủ loại lặp': fill('aB3dE5gH7jK9mN2pQ4rS6tU8vW1xY3z '),
+  // URL userinfo (xấp xỉ trên của parser URL): ứng viên lồng nhau, ':' dồn dập, gạch dài, TAB chen scheme, câu thường
+  'https: lặp + @ cuối (ứng viên A lồng nhau)': `${fill('https:', MB - 1)}@`,
+  ': dồn dập + @ cuối': `${':'.repeat(MB - 1)}@`,
+  'x:// lặp + @ cuối': `${fill('x://', MB - 1)}@`,
+  'http: + 1 MB gạch': `http:${'/\\'.repeat(MB / 2 - 8)}u:p@h`,
+  'scheme chen TAB lặp + @ cuối': `${fill('h\tt\tt\tp\ts\t:', MB - 1)}@`,
+  'ws: 10:30 a@b lặp (câu thường)': fill('ws: lúc 10:30 gửi a@b '),
+  '@: lặp': fill('@:'),
+  'h + 1 MB TAB + :@ (ứng viên A quét đoạn TAB)': `h${'\t'.repeat(MB - 4)}:@x`,
+  'x://a/ + 1 MB chữ + @ rồi x:// lặp (vòng lùi một lần)': `x://a/${'b'.repeat(MB / 2)}${fill('x://', MB / 2 - 8)}@`,
+  // tên credential mọi kiểu viết + base64_secret_run (contracts 0a2bfff)
+  'refresh-_-_-_- lặp': fill('refresh-_-_-_-'),
+  'api_ _ _ lặp (tên hụt)': fill('api___-__-_ '),
+  'base64 1 MB (+ / thưa, ít đổi lớp)': fill('aaaaAAAA1111/'),
+  'base64 đoạn 39 lặp': fill(`${'Ab1+'.repeat(9)}Ab1 `),
+  'base64 1 MB không / (một đoạn dài)': fill('Ab1+Cd2+Ef3+'),
+  // khoảng trắng Unicode (gập thành space trước khi quét)
+  'NBSP xen kẽ': fill(`a${NBSP}`),
+  'U+3000 + password= lặp': fill(`password${IDEO_SPACE}=${IDEO_SPACE}x `),
 };
 
 describe('chuỗi 1 MB — chặn (dừng ở mẫu đầu) < 50 ms', () => {
@@ -93,6 +114,9 @@ describe('tuyến tính: thời gian 1 MB / 256 KB < 8 (bậc hai ⇒ ≈ 16)', 
     'valid_token= dày đặc (khớp tham chiếu credential_assignment)': 'valid_token=abcdefghij ',
     'gần JWT dày đặc (eyJ…. lặp)': 'eyJaaaaaaaaa.',
     'sk- lặp': 'sk-',
+    'https:@ dày đặc (mỗi ":" một đoạn che)': 'https:@',
+    'URL có mật khẩu dày đặc': 'a://u:p@h https:u:p@h ',
+    'refresh_token:<NBSP> dày đặc': `refresh_token:${NBSP}vvvvvvvv `,
   };
   for (const [name, unit] of Object.entries(dense)) {
     it(name, () => {
@@ -121,6 +145,7 @@ describe('chuẩn hoá (giải tới 3 lớp) với chuỗi thoát dồn dập 1
     '&#NN;': fill('&#65;'),
     'độ rộng 0': fill('a\u200b'),
     fullwidth: fill('\uff21\uff22\uff11'),
+    'khoảng trắng Unicode dồn dập': fill(`${NBSP}${IDEO_SPACE}`),
   };
   for (const [name, str] of Object.entries(floods)) {
     it(name, () => {
