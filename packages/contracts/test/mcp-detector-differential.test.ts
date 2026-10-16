@@ -16,6 +16,29 @@ const highEntropyRef = (s: string) =>
     .split(/[^0-9A-Za-z_-]+/)
     .some((r) => r.length >= 32 && /\d/.test(r) && /[a-z]/.test(r) && /[A-Z]/.test(r) && !/^[0-9A-Fa-f-]+$/.test(r));
 
+/** Tham chiếu base64_secret_run: đoạn [A-Za-z0-9+/=_-] ≥ 40 có + hoặc /, đủ 3 lớp, ≥ 1/4 cặp chữ / số liền kề đổi lớp. */
+/** Tham chiếu base64_secret_run: đoạn [A-Za-z0-9+/=_-] ≥ 40 có + hoặc /, có đoạn con giữa '/' ≥ 10 đủ 3 lớp, có chữ ngoài
+ * hex, ≥ 1/4 cặp chữ / số liền kề đổi lớp. */
+const base64Ref = (s: string) =>
+  s
+    .split(/[^A-Za-z0-9+/=_-]+/)
+    .filter((r) => r.length >= 40 && /[+/]/.test(r))
+    .some((r) =>
+      r.split('/').some((g) => {
+        if (g.length < 10 || !/\d/.test(g) || !/[a-z]/.test(g) || !/[A-Z]/.test(g) || !/[G-Zg-z]/.test(g)) return false;
+        const cls = [...g].map((c) => (/[A-Z]/.test(c) ? 'U' : /[a-z]/.test(c) ? 'L' : /\d/.test(c) ? 'D' : ''));
+        let pairs = 0;
+        let changes = 0;
+        for (let i = 1; i < cls.length; i++) {
+          if (cls[i - 1] && cls[i]) {
+            pairs++;
+            if (cls[i - 1] !== cls[i]) changes++;
+          }
+        }
+        return pairs > 0 && changes * 4 >= pairs;
+      }),
+    );
+
 const REFERENCE: ReadonlyArray<{ id: string; re: RegExp | ((s: string) => boolean) }> = [
   { id: 'jwt', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/ },
   { id: 'google_oauth_access_token', re: /ya29\.[0-9A-Za-z_-]{10,}/ },
@@ -23,7 +46,7 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp | ((s: string) => boolea
   { id: 'google_api_key', re: /AIza[0-9A-Za-z_-]{30,}/ },
   { id: 'vendor_api_key_sk_ant', re: /sk-ant-[0-9A-Za-z_-]{10,}/ },
   { id: 'pem_private_key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  { id: 'refresh_token_field', re: /["']?refresh_token["']?\s*[:=]/i },
+  { id: 'refresh_token_field', re: /["']?refresh[_-]*token["']?\s*[:=]/i },
   { id: 'canary', re: /GA-CANARY-[0-9a-f-]{8,}/i },
   { id: 'generic_sk_key', re: /\bsk-[0-9A-Za-z_-]{20,}/ },
   { id: 'stripe_secret_key', re: /\b[sr]k_(?:live|test)_[0-9A-Za-z_-]{16,}/ },
@@ -37,12 +60,22 @@ const REFERENCE: ReadonlyArray<{ id: string; re: RegExp | ((s: string) => boolea
   { id: 'bearer_token', re: /(?<![0-9A-Za-z])bearer[ \t]{1,16}[0-9A-Za-z_.~+/=-]{16,}/i },
   { id: 'url_userinfo', re: /:\/\/[^\s/?#@"'<>:]{0,1024}:[^\s/?#@"'<>]{1,1024}@/ },
   { id: 'telegram_bot_token', re: /\b\d{8,10}:[0-9A-Za-z_-]{35,}/ },
-  { id: 'credential_assignment', re: new RegExp(`(?:${NAMES})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8,}`, 'i') },
+  {
+    id: 'credential_assignment',
+    // tên mọi kiểu viết: giữa các phần cho [_-]* (chuẩn hoá bỏ _ / -, không phân biệt hoa thường)
+    re: new RegExp(
+      `(?:${NAMES.split('|')
+        .map((n) => n.split(/[_-]/).join('[_-]*'))
+        .join('|')})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8,}`,
+      'i',
+    ),
+  },
   {
     id: 'env_secret_assignment',
     re: /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\s*[:=]\s*["']?[^\s"']{8,}/,
   },
   { id: 'high_entropy_run', re: highEntropyRef },
+  { id: 'base64_secret_run', re: base64Ref },
 ];
 const refHit = (p: (typeof REFERENCE)[number], s: string) => (typeof p.re === 'function' ? p.re(s) : p.re.test(s));
 
@@ -167,6 +200,18 @@ function corpus(): string[] {
         }
       }
     }
+  }
+  // tên credential kiểu camel / kebab / HOA + gán giá trị hex / chữ thường 6–10
+  for (const name of ['refreshToken', 'clientSecret', 'accessToken', 'api-key', 'apiSecret', 'X-API-KEY', 'Id_Token']) {
+    for (const sep of ['=', ': ', '":"']) {
+      for (let n = 6; n <= 10; n++) out.push(`${run(int(0, 2), PRINTABLE)}${name}${sep}${run(n, LOWER_HEX)}`);
+    }
+  }
+  // base64 chuẩn quanh ngưỡng 40, có / không có + /, bọc ký tự ngẫu nhiên; đường dẫn dài lẫn hoa / số
+  const B64A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let n = 36; n <= 48; n++) {
+    for (let k = 0; k < 20; k++) out.push(`${run(int(0, 2), ' "=:')}${run(n, B64A)}${run(int(0, 2), ' ".')}`);
+    out.push(`/home/user/Second-Brain/01-projects/gen-agents/spec/BUILD-PLAN-${run(n - 40 + 4, '0123456789')}.md`);
   }
   // gán kiểu .env: tên UPPER_SNAKE (+ biến thể chữ thường / thiếu '_') × hậu tố × nháy × khoảng trắng × giá trị 6–10 ký tự
   const SUFFIX = ['SECRET', 'TOKEN', 'PASSWORD', 'PASSWD', 'KEY', 'PAT', 'KEYS', 'TOKENS', 'Key'];

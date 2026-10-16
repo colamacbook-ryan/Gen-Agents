@@ -1,14 +1,18 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   API_ERROR_CODES,
+  AuthVolumeName,
   buildTermWebSocketInit,
   CERTAINTY_LEVELS,
   type Certainty,
+  Consumer,
   DB_TIMESTAMP_RE,
+  DesiredContainer,
   ENGINE_ARCHES,
   ENGINE_UNRESTRICTED_REASON,
   type EngineAdapter,
   EngineInstallStatus,
+  EnsureContainerRequest,
   EnvMap,
   ExecRequest,
   execEnv,
@@ -27,9 +31,11 @@ import {
   PTY_CLOSE_REASONS,
   parseDisplayId,
   parseSettingValue,
+  RoleDisplayId,
   remoteAnchorAuthority,
   SETTINGS,
   SseEvent,
+  screenToolPayload,
   sessionStatusFor,
   settingValueJson,
   settingWritableBy,
@@ -44,6 +50,7 @@ import {
   TurnResult,
   toDbTimestamp,
   UpdaterCommand,
+  WorkspaceCode,
 } from '../src/index.ts';
 
 const ULID = '01JABCDEFGHJKMNPQRSTVWXYZ0';
@@ -177,6 +184,52 @@ describe('supervisor — exec + vé lượt qua stdin', () => {
     const run = { command: 'turn', turnId: ULID, ticket: 'x'.repeat(43) };
     expect(ExecRequest.safeParse({ ...base, run, argv: ['sh', '-c', 'id'] }).success).toBe(false);
     expect(ExecRequest.safeParse({ ...base, run, env: { LD_PRELOAD: '/tmp/x.so' } }).success).toBe(false);
+  });
+});
+
+describe('định tuyến: không chuỗi tự do (review tay M0, LOW)', () => {
+  const role = { kind: 'role', roleId: ULID, roleDisplayId: 'RL-0001' };
+  const sys = { kind: 'sys', workspaceId: ULID, workspaceCode: '7K2Q' };
+  const desired = (over: Record<string, unknown>) => ({
+    consumer: role,
+    template: 'role.v1',
+    desired: 'running',
+    authVolumes: ['ga-auth-en-0001'],
+    ...over,
+  });
+  it('Consumer: roleId / workspaceId là ULID, roleDisplayId RL-…, workspaceCode 4 ký tự chữ / số', () => {
+    expect(Consumer.safeParse(role).success).toBe(true);
+    expect(Consumer.safeParse(sys).success).toBe(true);
+    for (const roleId of ['x'.repeat(26), `${ULID.slice(0, 25)}I`, '../../etc/passwd/aaaaaaaaaa']) {
+      expect(Consumer.safeParse({ ...role, roleId }).success, roleId).toBe(false);
+    }
+    for (const roleDisplayId of ['RL-1', 'rl-0001', 'RL-0001; rm', 'TK-0001', 'RL-0001\n']) {
+      expect(Consumer.safeParse({ ...role, roleDisplayId }).success, roleDisplayId).toBe(false);
+    }
+    for (const workspaceId of ['', 'abc', `${ULID}x`]) {
+      expect(Consumer.safeParse({ ...sys, workspaceId }).success, workspaceId).toBe(false);
+    }
+    for (const workspaceCode of ['7K2', '7K2Q9', '7K-Q', '../a']) {
+      expect(Consumer.safeParse({ ...sys, workspaceCode }).success, workspaceCode).toBe(false);
+    }
+  });
+  it('authVolumes: chỉ ga-auth-en-<số> (cả EnsureContainerRequest lẫn DesiredContainer)', () => {
+    expect(DesiredContainer.safeParse(desired({})).success).toBe(true);
+    for (const v of ['ga-auth-en-abc', '/var/run/docker.sock', 'ga-auth-en-01', 'ga-engines', 'ga-auth-en-0001:/x']) {
+      expect(DesiredContainer.safeParse(desired({ authVolumes: [v] })).success, v).toBe(false);
+      expect(
+        EnsureContainerRequest.safeParse({ consumer: role, template: 'role.v1', authVolumes: [v] }).success,
+        v,
+      ).toBe(false);
+    }
+    expect(AuthVolumeName.safeParse('ga-auth-en-000012').success).toBe(true);
+  });
+  it('send_telegram.chatRef = mã allowlist AL-…; chat_id / @username từ Role ⇒ invalid', () => {
+    expect(screenToolPayload('send_telegram', { chatRef: 'AL-0001', text: 'Xong việc' }).status).toBe('ok');
+    for (const chatRef of ['-1001234567890', '@owner_handle', 'AL-1', 'al-0001', 'AL-0001 ', '123456789']) {
+      expect(screenToolPayload('send_telegram', { chatRef, text: 'x' }).status, chatRef).toBe('invalid');
+    }
+    expect(RoleDisplayId.safeParse('RL-0001').success && WorkspaceCode.safeParse('SYS0').success).toBe(true);
   });
 });
 
