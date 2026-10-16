@@ -4,5 +4,5 @@ export const SYNC = {
   databaseVersion: "2.3.4",
   /** Hàm SQL mà schema gọi — mọi kết nối phải đăng ký đủ (hợp đồng ⑥-05). */
   appFunctions: ["app_actor","app_local_time","app_maint","app_now"] as readonly string[],
-  counts: { tables: 81, virtualTables: 1, indexes: 284, triggers: 563, views: 31 },
+  counts: { tables: 81, virtualTables: 1, indexes: 284, triggers: 564, views: 31 },
 } as const;

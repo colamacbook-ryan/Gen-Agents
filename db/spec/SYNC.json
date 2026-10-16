@@ -5,16 +5,16 @@
   "database_version": "2.3.4",
   "files": {
     "schema_v2_2.py": {
-      "sha256": "23970386783234ab2ee2a89f07725ff83fe89be412eb5589ddc98ebc0b9c4c83"
+      "sha256": "5e73cb743c0f65beb49354b3005b7c8ad56a5461961f3b4ad2ec6a82d32ce4f4"
     },
     "schema_v2_2.sql": {
-      "sha256": "19a73b0e9b65b25de7742f0bd2ce6010e4ddf7059a06c4b5bb855229b1738687"
+      "sha256": "5d87098d019d0da13a77d20a1deafa13b8c4474db607597a07437ebb33260d43"
     },
     "views_v2_2.sql": {
-      "sha256": "d4701e34307c15bbbcf35c5ed885d28b1fbb48c025f8196fa74bd1a63f13d88e"
+      "sha256": "d74f8852bf88861451e0da9c4f000c1d13550571e92f89eedc35256e19fe4ac6"
     },
     "tests_v2_2.py": {
-      "sha256": "19f2831df01713d6f353876f0e666abaf1a39d3a717c72ef703c7927be2eb965"
+      "sha256": "a5c9196bd95767e1d450c384dfd9a2591cfc0f09c867265c2870f26e3a1e6756"
     }
   },
   "app_functions": [
@@ -27,13 +27,13 @@
     "tables": 81,
     "virtual_tables": 1,
     "indexes": 284,
-    "triggers": 563,
+    "triggers": 564,
     "views": 31
   },
   "python_tests": {
-    "passed": 109,
-    "total": 109,
+    "passed": 114,
+    "total": 114,
     "sqlite": "3.45.1"
   },
-  "synced_at": "2026-10-16T16:48:40Z"
+  "synced_at": "2026-10-16T17:39:37Z"
 }

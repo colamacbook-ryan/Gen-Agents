@@ -387,6 +387,8 @@ WITH wk AS (
          CASE WHEN vc.consent_state IN ('not_required', 'ok') THEN 1 ELSE 0 END AS consent_ok, vc.consent_state,
          COALESCE((SELECT ei.install_state FROM engine_installs ei WHERE ei.workspace_id = b.workspace_id AND ei.engine_slug = a.engine_slug
                    AND ei.deleted_at IS NULL), 'not_installed') AS engine_install_state,                                   -- v2.3.1 (CNS-137)
+         COALESCE((SELECT CASE WHEN er.install_state = 'installed' AND er.tool_restriction_version = er.installed_version THEN 1 ELSE 0 END FROM engine_installs er WHERE er.workspace_id = b.workspace_id
+                   AND er.engine_slug = a.engine_slug AND er.deleted_at IS NULL), 0) AS tool_restriction_ok,                   -- v2.3.4
          (SELECT lp.id FROM probe_runs lp JOIN containers lc ON lc.id = lp.container_id AND lc.workspace_id = b.workspace_id
             AND lc.kind = 'system' AND lc.deleted_at IS NULL
           WHERE lp.engine_account_id = a.id AND lp.trigger = 'login_check' AND lp.status <> 'running'
@@ -400,7 +402,7 @@ WITH wk AS (
 SELECT b.*, p.display_id AS last_login_check_display_id, p.status AS last_login_check_status, p.finished_at AS last_login_check_at,
        CASE WHEN b.is_enabled = 1 AND b.account_status = 'active' AND b.engine_slug = b.core_slug AND b.login_status = 'logged_in'
                  AND b.quota_state <> 'exhausted' AND b.outage_since IS NULL AND b.engine_install_state = 'installed'
-                 AND p.status IS 'ok' AND b.consent_ok = 1 THEN 1 ELSE 0 END AS is_ready,
+                 AND p.status IS 'ok' AND b.consent_ok = 1 AND b.tool_restriction_ok = 1 THEN 1 ELSE 0 END AS is_ready,
        CASE WHEN b.engine_slug <> b.core_slug THEN 'wrong_type'
             -- v2.2.7 (CNS-093): không còn container AI Hệ thống sống (lớp hai — trigger containers_system_last_* chặn khi còn binding)
             WHEN NOT EXISTS (SELECT 1 FROM containers sc WHERE sc.workspace_id = b.workspace_id AND sc.kind = 'system'
@@ -427,7 +429,8 @@ SELECT b.*, p.display_id AS last_login_check_display_id, p.status AS last_login_
             WHEN b.outage_since IS NOT NULL THEN 'outage'              -- v2.2.8 (CONTRACT-r8 §C): sự cố phía hãng (5xx)
             WHEN b.quota_state = 'exhausted' THEN 'quota_exhausted'   -- v2.2.8: hết quota
             WHEN p.id IS NULL THEN 'login_check_missing'
-            WHEN p.status <> 'ok' THEN 'login_check_' || p.status END AS not_ready_reason,
+            WHEN p.status <> 'ok' THEN 'login_check_' || p.status
+            WHEN b.tool_restriction_ok = 0 THEN 'engine_unrestricted' END AS not_ready_reason,                -- v2.3.4 (contracts ENGINE_UNRESTRICTED_REASON)
        CASE WHEN b.is_enabled = 1 AND b.account_status = 'active' AND b.engine_slug = b.core_slug
                  AND b.priority = (SELECT MIN(x.priority) FROM engine_bindings x JOIN engine_accounts xa ON xa.id = x.engine_account_id
                                      AND xa.workspace_id = x.workspace_id
@@ -476,6 +479,7 @@ WITH wk AS (
               WHEN 'relogin_in_progress' THEN 'đang đăng nhập lại' WHEN 'type_change_in_progress' THEN 'đang đổi loại Core agent'
               WHEN 'login_stalled' THEN 'đăng nhập bị bỏ dở'
               WHEN 'engine_not_installed' THEN 'CLI chưa được cài'                                                             -- v2.3.1 (CNS-137)
+              WHEN 'engine_unrestricted' THEN 'CLI chưa có cơ chế giới hạn công cụ đã kiểm'                                     -- v2.3.4
               END AS reason_text,
          CASE WHEN x.reason = 'consent_missing' AND x.consent_state = 'identity_changed' THEN 'identity_changed'
               WHEN x.reason = 'engine_not_installed' AND x.engine_install_state = 'installing' THEN 'installing' END AS sub_reason,   -- v2.3.2 (Gen quyết)
@@ -497,6 +501,7 @@ WITH wk AS (
               WHEN t.reason = 'container_missing' THEN 'Dựng lại container AI Hệ thống'
               WHEN t.reason IN ('relogin_in_progress', 'type_change_in_progress') THEN 'Hoàn tất đăng nhập trong terminal'
               WHEN t.reason = 'engine_not_installed' THEN 'Cài lại CLI'                                                   -- v2.3.1 (CNS-137)
+              WHEN t.reason = 'engine_unrestricted' THEN 'Cài lại CLI hoặc Đổi loại Core agent'                            -- v2.3.4
               END AS owner_action
   FROM t
 )
@@ -643,7 +648,8 @@ SELECT a.workspace_id, a.id AS engine_account_id, a.display_id, a.engine_slug, a
        -- 'identity_changed' (đăng nhập ra danh tính khác: đồng ý cũ hết hiệu lực, tick lại = CN- mới, giữ EN-/EB-); áp cho Role lẫn AI Hệ thống
        vc.consent_state, vc.consent_display_id,
        -- v2.3.1 (CNS-137): trạng thái cài CLI của loại tài khoản (A5 cột "CLI", nút "Cài lại") — thiếu hàng ⇒ 'not_installed'
-       COALESCE(ei.install_state, 'not_installed') AS engine_install_state, ei.installed_version AS engine_installed_version
+       COALESCE(ei.install_state, 'not_installed') AS engine_install_state, ei.installed_version AS engine_installed_version,
+       CASE WHEN ei.install_state = 'installed' AND ei.tool_restriction_version = ei.installed_version THEN 1 ELSE 0 END AS engine_tool_restriction_ok   -- v2.3.4: 0 ⇒ runner từ chối lượt (engine_unrestricted)
 FROM engine_accounts a
 JOIN v_account_consent vc ON vc.engine_account_id = a.id
 LEFT JOIN engine_bindings b ON b.engine_account_id = a.id AND b.workspace_id = a.workspace_id AND b.deleted_at IS NULL
@@ -656,6 +662,7 @@ CREATE VIEW v_engine_installs AS
 SELECT w.id AS workspace_id, e.slug AS engine_slug, e.name AS engine_name, e.adapter_status, e.core_capable,
        i.id AS engine_install_id, COALESCE(i.install_state, 'not_installed') AS install_state, i.installed_version, i.failure_reason, i.detail,
        i.checked_at, COALESCE(i.updated_at, i.created_at) AS state_changed_at,
+       i.tool_restriction_version, CASE WHEN i.install_state = 'installed' AND i.tool_restriction_version = i.installed_version THEN 1 ELSE 0 END AS tool_restriction_ok,           -- v2.3.4 (engine_unrestricted)
        CASE WHEN e.slug = COALESCE((SELECT json_extract(s.value_json, '$') FROM settings s WHERE s.workspace_id = w.id
                                     AND s.key = 'system.core_agent_engine' AND s.deleted_at IS NULL), 'antigravity') THEN 1 ELSE 0 END AS is_core_agent_type
 FROM workspaces w CROSS JOIN engines e

@@ -634,6 +634,7 @@ export interface EngineInstalls {
   failure_reason: 'domain_blocked' | 'unsupported_arch' | 'network' | 'checksum_mismatch' | 'unknown' | null;
   detail: string | null;
   checked_at: string | null;
+  tool_restriction_version: string | null;
 }
 
 export interface Engines {
@@ -2026,6 +2027,7 @@ export interface VCoreAgentAccounts {
   consent_ok: ColumnType<SqlValue | null, never, never>;
   consent_state: ColumnType<SqlValue | null, never, never>;
   engine_install_state: ColumnType<SqlValue | null, never, never>;
+  tool_restriction_ok: ColumnType<SqlValue | null, never, never>;
   last_login_check_id: ColumnType<string | null, never, never>;
   last_login_check_display_id: ColumnType<string | null, never, never>;
   last_login_check_status: ColumnType<string | null, never, never>;
@@ -2146,6 +2148,7 @@ export interface VEngineAccounts {
   consent_display_id: ColumnType<string | null, never, never>;
   engine_install_state: ColumnType<SqlValue | null, never, never>;
   engine_installed_version: ColumnType<string | null, never, never>;
+  engine_tool_restriction_ok: ColumnType<SqlValue | null, never, never>;
 }
 
 /** view (chỉ đọc) */
@@ -2162,6 +2165,8 @@ export interface VEngineInstalls {
   detail: ColumnType<string | null, never, never>;
   checked_at: ColumnType<string | null, never, never>;
   state_changed_at: ColumnType<SqlValue | null, never, never>;
+  tool_restriction_version: ColumnType<string | null, never, never>;
+  tool_restriction_ok: ColumnType<SqlValue | null, never, never>;
   is_core_agent_type: ColumnType<SqlValue | null, never, never>;
 }
 

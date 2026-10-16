@@ -1140,6 +1140,7 @@ CREATE TABLE engine_installs (
   failure_reason TEXT CHECK (failure_reason IS NULL OR failure_reason IN ('domain_blocked', 'unsupported_arch', 'network', 'checksum_mismatch', 'unknown')),
   detail TEXT,
   checked_at TEXT,
+  tool_restriction_version TEXT,
   CHECK ((install_state = 'installed') = (installed_version IS NOT NULL)),
   CHECK ((install_state = 'failed') = (failure_reason IS NOT NULL))
 );

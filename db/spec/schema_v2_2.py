@@ -709,7 +709,11 @@ table('engine_installs', 'En', cols=[
     "installed_version TEXT",                                  # version đã cài (đọc từ CLI sau khi cài); chỉ có khi installed
     enum('failure_reason', INSTALL_FAIL, nn=False),            # domain hãng bị chặn / sai kiến trúc máy / mạng / checksum lệch / chưa phân loại được
     "detail TEXT",                                             # một dòng lỗi đã qua bộ lọc che (không bao giờ chứa credential)
-    "checked_at TEXT"],                                        # lần chạy `ga-engine-install status` gần nhất
+    "checked_at TEXT",                                         # lần chạy `ga-engine-install status` gần nhất
+    # v2.3.4 (contracts ENGINE_UNRESTRICTED_REASON, L-ENG toolRestriction — Gen duyệt): phiên bản CLI mà app ĐÃ KIỂM có đủ cơ chế giới hạn công cụ của adapter
+    # (mọi cờ toolRestriction.requiredFlags nằm trong bảng cờ đã quét của đúng phiên bản đó). Chỉ tính khi = installed_version (cập nhật CLI ⇒ kết luận cũ tự hết
+    # hiệu lực tới khi app kiểm lại); NULL = chưa kiểm / thiếu cơ chế ⇒ lý do O4 'engine_unrestricted' (fail-closed). Actor system ghi (engine_installs_writer_*).
+    "tool_restriction_version TEXT"],
     cons=["CHECK ((install_state = 'installed') = (installed_version IS NOT NULL))",
           "CHECK ((install_state = 'failed') = (failure_reason IS NOT NULL))"],
     idx=["CREATE UNIQUE INDEX ux_ei_engine ON engine_installs(workspace_id, engine_slug) WHERE deleted_at IS NULL"])
@@ -1624,7 +1628,8 @@ def CORE_CALM(ws):
     vòng 8c); binding cũ đã tắt khác loại nên không khớp na.engine_slug = CORE. v2.2.11 (CONTRACT-r8d §E): 'in_progress' QUÁ 15 phút (LOGIN_STALLED) không
     còn "êm" ⇒ login_stalled là sự cố (cảnh báo + nút đổi loại hiện lại). v2.3.1 (CNS-137): CLI của loại Core agent chưa cài (ENGINE_INSTALLED sai) đứng
     TRƯỚC consent / đăng nhập trong thứ tự lý do. v2.3.2 (Gen quyết 2026-10-16): CLI ĐANG CÀI (ENGINE_INSTALLING — owner bấm "Cài lại CLI" / đang tải) ⇒ "êm"
-    (không sự cố, như relogin_in_progress); chưa cài / cài lỗi / thiếu hàng ⇒ vẫn sự cố (kể cả lúc owner đổi loại sang CLI chưa cài)."""
+    (không sự cố, như relogin_in_progress); chưa cài / cài lỗi / thiếu hàng ⇒ vẫn sự cố (kể cả lúc owner đổi loại sang CLI chưa cài).
+    v2.3.4: 'engine_unrestricted' đứng CUỐI thứ tự lý do ⇒ không bao giờ "êm" (đăng nhập lại / đổi danh tính đứng trước nên vẫn thắng) ⇒ không đổi hàm này."""
     return (f"EXISTS (SELECT 1 FROM engine_bindings nb JOIN engine_accounts na ON na.id = nb.engine_account_id AND na.workspace_id = nb.workspace_id "
             f"WHERE nb.workspace_id = {ws} AND nb.consumer_kind = 'system' AND nb.deleted_at IS NULL AND na.deleted_at IS NULL "
             f"AND na.engine_slug = {CORE(ws)} AND EXISTS (SELECT 1 FROM containers nc WHERE nc.workspace_id = {ws} AND nc.kind = 'system' "
@@ -1673,18 +1678,25 @@ def ENGINE_INSTALLING(ws, slug):
     'installing'. = v_core_agent_status.sub_reason 'installing' (engine_not_installed KHÔNG phải sự cố, như relogin_in_progress)."""
     return (f"EXISTS (SELECT 1 FROM engine_installs eg WHERE eg.workspace_id = {ws} AND eg.engine_slug = {slug} AND eg.deleted_at IS NULL "
             f"AND eg.install_state = 'installing')")
+def ENGINE_RESTRICTED(ws, slug):
+    """v2.3.4 (contracts ENGINE_UNRESTRICTED_REASON): CLI loại {slug} đã cài trong {ws} VÀ app đã kiểm có cơ chế giới hạn công cụ cho ĐÚNG phiên bản đang cài
+    (tool_restriction_version = installed_version). Sai ⇒ không chạy lượt (runner: TurnPlanError engine_unrestricted) ⇒ Core agent không sẵn sàng —
+    = v_core_agent_accounts.tool_restriction_ok (nhánh CUỐI 'engine_unrestricted' của not_ready_reason)."""
+    return (f"EXISTS (SELECT 1 FROM engine_installs er WHERE er.workspace_id = {ws} AND er.engine_slug = {slug} AND er.deleted_at IS NULL "
+            f"AND er.install_state = 'installed' AND er.tool_restriction_version = er.installed_version)")
 def CORE_READY(ws):
     """Tài khoản Core agent SẴN SÀNG — MỘT định nghĩa (= v_core_agent_accounts.is_ready = mẫu số OB-04): binding hệ thống sống + bật,
     tài khoản active cùng loại Core agent, login_status = 'logged_in' (cache của lần kiểm mới nhất từ mọi nguồn: probe, hoặc lỗi 401/403
     lúc chạy) VÀ lần kiểm đăng nhập mới nhất (probe login_check trong container AI Hệ thống) = ok. Áp cho subscription lẫn API key (CNS-076).
     v2.2.8: + đồng ý điều khoản hợp lệ (CONSENT_OK, CONTRACT-r7 §A) + không hết quota + không có sự cố hãng đang mở (CONTRACT-r8 §C: bốn sự cố
     "đăng nhập hết hạn / outage / hết quota / bị khoá" đều làm Core agent mất sẵn sàng ⇒ chế độ khắc phục).
-    v2.3.1 (CNS-137): + CLI của loại Core agent đã cài (ENGINE_INSTALLED) — image không chứa CLI của hãng; chưa cài / đang tải / cài lỗi ⇒ không sẵn sàng."""
+    v2.3.1 (CNS-137): + CLI của loại Core agent đã cài (ENGINE_INSTALLED) — image không chứa CLI của hãng; chưa cài / đang tải / cài lỗi ⇒ không sẵn sàng.
+    v2.3.4: + CLI đó có cơ chế giới hạn công cụ đã kiểm cho đúng phiên bản (ENGINE_RESTRICTED) — thiếu ⇒ 'engine_unrestricted'."""
     return (f"SELECT 1 FROM engine_bindings cb JOIN engine_accounts ca ON ca.id = cb.engine_account_id AND ca.workspace_id = cb.workspace_id "
             f"WHERE cb.workspace_id = {ws} AND cb.consumer_kind = 'system' AND cb.deleted_at IS NULL AND cb.is_enabled = 1 "
             f"AND ca.deleted_at IS NULL AND ca.status = 'active' AND ca.engine_slug = {CORE(ws)} AND ca.login_status = 'logged_in' "
             f"AND ca.quota_state <> 'exhausted' AND ca.outage_since IS NULL "
-            f"AND {ENGINE_INSTALLED('cb.workspace_id', 'ca.engine_slug')} "
+            f"AND {ENGINE_INSTALLED('cb.workspace_id', 'ca.engine_slug')} AND {ENGINE_RESTRICTED('cb.workspace_id', 'ca.engine_slug')} "
             f"AND {LOGIN_CHECK_OK('ca.id', 'cb.workspace_id')} AND {CONSENT_OK('ca')}")
 def CONSENT_OK(a):
     """v2.2.8 (CONTRACT-r7 §A, OB-05): tài khoản {a} dùng được về mặt điều khoản = engine không đòi consent, HOẶC consents_id trỏ một
@@ -2023,6 +2035,7 @@ SECRET_SENSITIVE = ['kind', 'label', 'ciphertext', 'nonce', 'wrapped_dek', 'dek_
 MSG_SEC_WRITER = ('secrets (v2.3.3): chỉ owner / admin còn là thành viên hoặc actor system của workspace tạo / thay bí mật; kind anchor_remote_token (token gắn '
                   'đích) CHỈ OWNER; telegram_bot_token chỉ owner hoặc actor system — người ghi = app_actor(); bảo trì (xoay KEK) miễn')
 MSG_SEC_HOST = 'secrets (v2.3.2): allowed_host ghi một lần — đổi host đích = nhập token mới (secret mới)'
+MSG_SEC_KIND = 'secrets (v2.3.4): kind bất biến ngoài bảo trì — đổi loại bí mật = tạo secret mới (đổi kind từng là lối hạ cấp token chỉ owner sang nhánh admin)'
 MSG_EI_WRITER = ('engine_installs (v2.3.2): trạng thái cài CLI chỉ actor system của workspace (app theo ga-engine-install status) ghi — owner / admin / tác tử '
                  'khác không ghi tay (v2.3.3: người ghi = app_actor())')
 V231_TRIGGERS = [
@@ -2056,11 +2069,17 @@ WHEN NOT (CASE WHEN NEW.kind = 'anchor_remote_token' THEN {OWNER_ONLY(ACTOR)}
                WHEN NEW.kind = 'telegram_bot_token' THEN ({OWNER_ONLY(ACTOR)} OR {SYS_ACTOR(ACTOR)})
                ELSE ({OWNER_ADMIN(ACTOR)} OR {SYS_ACTOR(ACTOR)}) END)
 BEGIN SELECT RAISE(ABORT, '{MSG_SEC_WRITER}'); END""",
+# v2.3.4 (review bảo mật MEDIUM): v2.3.3 chọn luật theo NEW.kind ⇒ admin đổi kind telegram_bot_token (hoặc anchor_remote_token) sang kind thường KÈM giá trị
+# trong cùng câu lệnh lọt sang nhánh admin. Hai lớp, fail-closed: (1) secrets.kind BẤT BIẾN ngoài bảo trì (secrets_kind_u); (2) luật NGHIÊM NHẤT của OLD.kind và
+# NEW.kind (lớp 2 thừa khi lớp 1 còn — giữ có chủ đích: bỏ lớp 1 thì lớp 2 vẫn chặn; mỗi trigger có ca âm riêng).
 f"""CREATE TRIGGER secrets_writer_u BEFORE UPDATE OF {', '.join(SECRET_SENSITIVE)} ON secrets
-WHEN app_maint() = 0 AND NOT (CASE WHEN NEW.kind = 'anchor_remote_token' THEN {OWNER_ONLY(ACTOR)}
-                                   WHEN NEW.kind = 'telegram_bot_token' THEN ({OWNER_ONLY(ACTOR)} OR {SYS_ACTOR(ACTOR)})
+WHEN app_maint() = 0 AND NOT (CASE WHEN 'anchor_remote_token' IN (OLD.kind, NEW.kind) THEN {OWNER_ONLY(ACTOR)}
+                                   WHEN 'telegram_bot_token' IN (OLD.kind, NEW.kind) THEN ({OWNER_ONLY(ACTOR)} OR {SYS_ACTOR(ACTOR)})
                                    ELSE ({OWNER_ADMIN(ACTOR)} OR {SYS_ACTOR(ACTOR)}) END)
 BEGIN SELECT RAISE(ABORT, '{MSG_SEC_WRITER}'); END""",
+f"""CREATE TRIGGER secrets_kind_u BEFORE UPDATE OF kind ON secrets
+WHEN app_maint() = 0 AND NEW.kind IS NOT OLD.kind
+BEGIN SELECT RAISE(ABORT, '{MSG_SEC_KIND}'); END""",
 f"""CREATE TRIGGER secrets_allowed_host_u BEFORE UPDATE OF allowed_host ON secrets
 WHEN NEW.allowed_host IS NOT OLD.allowed_host
 BEGIN SELECT RAISE(ABORT, '{MSG_SEC_HOST}'); END""",
