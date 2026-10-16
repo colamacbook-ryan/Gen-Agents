@@ -20,7 +20,8 @@ pnpm test
 |---|---|
 | `pnpm lint` | Biome + luật riêng của repo (`scripts/lint-rules.mjs`: cấm `OR REPLACE`, tên CLI/model ngoài adapter, tên owner, env `*SESSION*`/`*_OAUTH_TOKEN`, `console.log` ở apps, dockerode ngoài supervisor, I/O trong transaction, ghi DB ngoài `conn.write(actor, fn)`, regex nguy cơ ReDoS, component trùng tên, ranh giới import, ký tự vô hình / bidi / fullwidth, …; danh sách: `node scripts/lint-rules.mjs --list`) |
 | `pnpm lint:rules --selftest` | mỗi luật phải bắt đúng tệp mồi của nó |
-| `pnpm typecheck` | `tsc -b` (TS project references) |
+| `pnpm typecheck` | kiểm `tsconfig.json` gốc tham chiếu đủ mọi project workspace (`packages/*`, `apps/*`, `testing/…`) rồi `tsc -b`; lệch thì chạy `pnpm tsconfig:refs` |
+| `pnpm test:it:runtime` | IT runtime của supervisor (Docker thật; không có package `@ga/supervisor` ⇒ đỏ, không im lặng) |
 | `pnpm test` | Vitest: contracts, hợp đồng kết nối DB, runner migration, parity, selftest lint / license |
 | `pnpm db:test` | 94 ca Python của DB chạy nguyên văn trên bản vendor + parity runner TS ≡ Python |
 | `pnpm db:mutation --sample 20` | DROP từng trigger → bộ test phải đỏ; có lượt đối chứng (`--all`, `--changed`, `--only <trigger>`) |
@@ -35,10 +36,12 @@ pnpm test
 Mọi commit chỉ tạo khi các lệnh kiểm đạt (không ghi "OK" khi chưa chạy):
 
 ```bash
-set -o pipefail
-git add <tệp>
-pnpm lint && pnpm typecheck && pnpm test && pnpm sec:scan -- --staged && git commit
+scripts/gate-commit.sh -F <tệp thông điệp> <tệp>...   # = git add đúng các tệp đó → lint → typecheck → test → sec:scan --staged → commit
 ```
+
+Index có tệp đã stage ngoài danh sách (checkout dùng chung) ⇒ script dừng; cổng đỏ ⇒ không commit.
+Kiểm test có bắt được lỗi không: `scripts/mutate.sh --replace <tệp> <cũ> <mới> [--cmd "<lệnh test>"]` (hoặc `--patch`) —
+chạy trong `git worktree` tạm, không đụng worktree đang làm việc; thoát 0 = bị bắt, 3 = sống.
 
 Fixture ca dương của bộ lọc credential phải dựng lúc chạy (vd ghép chuỗi / hàm sinh), không để chuỗi giống credential
 nguyên văn trong mã nguồn; `sec:scan -- --staged` bắt trước khi vào lịch sử.

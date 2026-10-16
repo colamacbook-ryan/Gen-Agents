@@ -13,7 +13,9 @@ import {
   Anchor,
   CREDENTIAL_BLOCKED,
   CREDENTIAL_DETECTORS,
+  CREDENTIAL_KEY_NAME_MAX_CHARS,
   CREDENTIAL_PATTERN_IDS,
+  credentialKeyMatches,
   findCredentialLike,
   freeFormFields,
   isCredentialKeyName,
@@ -440,6 +442,132 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       expect(isCredentialKeyName(k), k).toBe(false);
     }
     expect(normalizeCredentialName('Refresh-Token')).toBe('refreshtoken');
+  });
+
+  it('khoá object chuẩn hoá ĐẦY ĐỦ: khoảng trắng, chấm, hai chấm, khoảng trắng cuối, fullwidth, hoa thường (MEDIUM)', () => {
+    const hex = fake(40);
+    const variants = [
+      'refresh token',
+      'refresh.token',
+      'refresh:token',
+      'refresh_token ',
+      ' refresh_token',
+      '\uff52\uff45\uff46\uff52\uff45\uff53\uff48_token',
+      'ReFrEsH-ToKeN',
+      'client/secret',
+      'API KEY',
+      'x.api.key',
+      'refresh\u2460token',
+      'access\u00adtoken',
+    ];
+    for (const k of variants) {
+      expect(isCredentialKeyName(k), JSON.stringify(k)).toBe(true);
+      expect(findCredentialLike({ [k]: hex })?.patternId, JSON.stringify(k)).toBe('credential_field_name');
+    }
+    expect(normalizeCredentialName('\uff52\uff45\uff46\uff52\uff45\uff53\uff48_Token')).toBe('refreshtoken');
+    // chuỗi thô: fullwidth được NFKC; ngữ pháp vế trái giữ nguyên ([_-]* giữa các phần)
+    expect(findCredentialLike(`\uff52\uff45\uff46\uff52\uff45\uff53\uff48_token=${hex}`)).not.toBeNull();
+    // trần trước chuẩn hoá: vượt trần ⇒ normalize ném, credentialKeyMatches fail-closed
+    const huge = 'a'.repeat(CREDENTIAL_KEY_NAME_MAX_CHARS + 1);
+    expect(() => normalizeCredentialName(huge)).toThrow(RangeError);
+    expect(credentialKeyMatches(huge, new Set(['x']))).toBe(true);
+    for (const k of ['refresh', 'token', 'tokens', 'apikeys', 'refresh token count', 'secret santa']) {
+      expect(isCredentialKeyName(k), k).toBe(false);
+    }
+  });
+
+  it('password / passwd: chỉ khớp dạng khoá hoặc phép gán có giá trị, không khớp từ trần trong câu văn', () => {
+    const v = fake(12, 'pAsS1w0rD');
+    for (const s of [
+      { password: 'x' },
+      { Passwd: v },
+      `password=${v}`,
+      `"password": "${v}"`,
+      `login with passwd: '${v}'`,
+    ]) {
+      expect(findCredentialLike(s), JSON.stringify(s)).not.toBeNull();
+    }
+    for (const s of [
+      'Quên password? Bấm "Đặt lại mật khẩu"',
+      'password: tối thiểu 12 ký tự',
+      'Đổi password mỗi 90 ngày, không dùng lại passwd cũ',
+      'the password field is required',
+      'password=****',
+      'password = short',
+    ]) {
+      expect(findCredentialLike(s), s).toBeNull();
+    }
+  });
+
+  it('superset: mọi khoá bản cũ của packages/security bắt (bỏ mọi ký tự ngoài a–z0–9, không NFKC) thì bản mới cũng bắt', () => {
+    // fixture = SENSITIVE_KEY_NAMES của packages/security @ d211309 / d39d676 (dạng đã chuẩn hoá cũ)
+    const OLD = [
+      'refreshtoken',
+      'accesstoken',
+      'idtoken',
+      'authtoken',
+      'sessiontoken',
+      'oauthtoken',
+      'token',
+      'clientsecret',
+      'secret',
+      'secretkey',
+      'privatekey',
+      'apikey',
+      'xapikey',
+      'password',
+      'passwd',
+      'authorization',
+      'proxyauthorization',
+      'bearer',
+      'cookie',
+      'setcookie',
+      'authcode',
+      'bearertoken',
+      'apisecret',
+      'apitoken',
+      'awssecretaccesskey',
+    ];
+    const oldNorm = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const set = new Set(OLD.map(normalizeCredentialName));
+    let seed = 11;
+    const rnd = () => {
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const JUNK = [
+      ' ',
+      '.',
+      ':',
+      '_',
+      '-',
+      '/',
+      '\u00a0',
+      '\u2460',
+      '\u00ad',
+      '\u200b',
+      '\uff3f',
+      '\u0130',
+      '\u212a',
+      '\u017f',
+      '9',
+    ];
+    let oldCaught = 0;
+    const misses: string[] = [];
+    for (let k = 0; k < 20_000; k++) {
+      const name = OLD[Math.floor(rnd() * OLD.length)] as string;
+      const key = [...name]
+        .map((c) => (rnd() < 0.3 ? c.toUpperCase() : c) + (rnd() < 0.15 ? JUNK[Math.floor(rnd() * JUNK.length)] : ''))
+        .join('');
+      if (!set.has(oldNorm(key))) continue;
+      oldCaught++;
+      if (!credentialKeyMatches(key, set)) misses.push(JSON.stringify(key));
+    }
+    expect(oldCaught).toBeGreaterThan(5000);
+    expect(misses.slice(0, 5)).toEqual([]);
   });
 
   it('base64_secret_run: bắt base64 có + / (≥ 99 % mẫu 40 ký tự); 0 báo nhầm trên đường tệp / URL thật', () => {

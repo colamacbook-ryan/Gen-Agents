@@ -389,17 +389,52 @@ export const CREDENTIAL_KEY_NAMES = [
   'api_secret',
   'api_token',
   'aws_secret_access_key',
+  // L-RT / L-SEC đề xuất (Gen duyệt): chỉ khớp ở dạng KHOÁ object hoặc PHÉP GÁN có giá trị ≥ 8 ký tự — không khớp từ trần
+  // trong câu văn ("quên password?", "password: tối thiểu 12 ký tự" không bị chặn; test đo trên văn bản thật của repo).
+  'password',
+  'passwd',
 ] as const;
 
+/** Trần độ dài tên khoá TRƯỚC khi chuẩn hoá (= trần một chuỗi của payload, đã chặn trước khi quét). */
+export const CREDENTIAL_KEY_NAME_MAX_CHARS = TOOL_PAYLOAD_LIMITS.maxStringChars;
+
 /**
- * So tên KHÔNG phụ thuộc kiểu viết (review tay M0, LOW): chuẩn hoá = bỏ `_` / `-`, hạ chữ thường ⇒ `refreshToken`,
- * `Refresh-Token`, `REFRESH_TOKEN`, `refresh__token` cùng là `refreshtoken`. Regex: giữa các phần của tên cho `[_-]*`
- * (không lồng; phần sau là chữ cái cố định ⇒ tuyến tính), cờ `i`.
+ * Chuẩn hoá tên khoá — MỘT nguồn cho contracts và @ga/security (security review MEDIUM: bản chỉ bỏ `_` / `-` làm lọt
+ * `"refresh token"`, `"refresh.token"`, `"refresh:token"`, `"refresh_token "`, fullwidth `\uff52\uff45…_token`):
+ *   NFKC (fullwidth / ký tự tương thích → ASCII) → chữ thường → bỏ MỌI ký tự ngoài a–z0–9.
+ * Tên dài hơn CREDENTIAL_KEY_NAME_MAX_CHARS ⇒ RangeError (người gọi chặn kích thước trước — xem credentialKeyMatches).
  */
 export function normalizeCredentialName(name: string): string {
-  return name.replace(/[_-]/g, '').toLowerCase();
+  if (name.length > CREDENTIAL_KEY_NAME_MAX_CHARS) throw new RangeError('tên khoá vượt trần trước khi chuẩn hoá');
+  return name
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
-const CREDENTIAL_NAMES_ALT = [...new Set(CREDENTIAL_KEY_NAMES.map(normalizeCredentialName))]
+
+/** Dạng chuẩn hoá KHÔNG NFKC (= bản cũ của packages/security) — giữ để bản mới ⊇ bản cũ (vd `refresh①token`). */
+function plainCredentialName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Khoá object có thuộc tập tên (đã chuẩn hoá bằng normalizeCredentialName) không — so CẢ dạng NFKC lẫn dạng cũ ⇒ không hẹp
+ * hơn bản nào. Vượt trần ⇒ coi là khớp (fail-closed). @ga/security dùng hàm này với tập tên của mình.
+ */
+export function credentialKeyMatches(key: string, normalizedNames: ReadonlySet<string>): boolean {
+  if (key.length > CREDENTIAL_KEY_NAME_MAX_CHARS) return true;
+  return normalizedNames.has(normalizeCredentialName(key)) || normalizedNames.has(plainCredentialName(key));
+}
+
+export const CREDENTIAL_KEY_NAMES_NORMALIZED: ReadonlySet<string> = new Set(
+  CREDENTIAL_KEY_NAMES.map(normalizeCredentialName),
+);
+
+/**
+ * Vế trái của phép gán trong CHUỖI THÔ chỉ khớp theo ngữ pháp `[_-]*` giữa các phần (không mở rộng ra mọi dấu câu — tránh
+ * báo nhầm câu văn), không phân biệt hoa thường; chuỗi có ký tự ngoài ASCII được thử thêm bản NFKC (fullwidth…).
+ */
+const CREDENTIAL_NAMES_ALT = [...CREDENTIAL_KEY_NAMES_NORMALIZED]
   .map((n) => {
     const raw = CREDENTIAL_KEY_NAMES.find((k) => normalizeCredentialName(k) === n) as string;
     return raw.split(/[_-]/).join('[_-]*');
@@ -415,6 +450,12 @@ const CREDENTIAL_ASSIGNMENT_RE = new RegExp(
   `(?:${CREDENTIAL_NAMES_ALT})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8}`,
   'i',
 );
+
+/** Thử regex trên chuỗi, và trên bản NFKC nếu chuỗi có ký tự ngoài ASCII (fullwidth / ký tự tương thích → ASCII). */
+function testWithNfkc(s: string, re: RegExp): boolean {
+  if (re.test(s)) return true;
+  return /[^\t\n\r\x20-\x7e]/.test(s) && re.test(s.normalize('NFKC'));
+}
 
 /**
  * Đoạn token tối đại ≥ 32: lookbehind MỘT ký tự (không quantifier) ⇒ chỉ thử ở ĐẦU đoạn, mỗi đoạn quét một lần (nhanh ~3×
@@ -592,8 +633,8 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   { id: 'telegram_bot_token', test: (s) => /\b\d{8,10}:[0-9A-Za-z_-]{35}/.test(s) },
   { id: 'pem_private_key', test: hasPemPrivateKey },
   // tiền tố cố định + MỘT quantifier (\s*) ⇒ tuyến tính; refresh_token + phép gán ⇒ chặn bất kể giá trị (giữ từ v0)
-  { id: 'refresh_token_field', test: (s) => /refresh[_-]*token["']?\s*[:=]/i.test(s) },
-  { id: 'credential_assignment', test: (s) => CREDENTIAL_ASSIGNMENT_RE.test(s) },
+  { id: 'refresh_token_field', test: (s) => testWithNfkc(s, /refresh[_-]*token["']?\s*[:=]/i) },
+  { id: 'credential_assignment', test: (s) => testWithNfkc(s, CREDENTIAL_ASSIGNMENT_RE) },
   /**
    * Gán kiểu `.env` (Gen, security review "miễn hex làm lọt key hãng không prefix"): tên UPPER_SNAKE kết thúc bằng
    * _SECRET / _TOKEN / _PASSWORD / _PASSWD / _KEY / _PAT + [:=] + ≥ 8 ký tự giá trị. PHÂN BIỆT hoa thường (câu văn không
@@ -608,12 +649,12 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   { id: 'base64_secret_run', test: hasBase64SecretRun },
 ];
 
-/** Tên khoá JSON mang credential: payload có khoá này (bất kể giá trị) ⇒ chặn. */
+/** Dạng regex của tên (ngữ pháp chuỗi thô `[_-]*`) — giữ cho bên dùng cũ; khoá object dùng isCredentialKeyName. */
 export const CREDENTIAL_KEY_RE = new RegExp(`^(?:${CREDENTIAL_NAMES_ALT})$`, 'i');
 
-/** Khoá object có phải tên credential không (mọi kiểu viết; độ dài khoá đã chặn bởi payloadLimitExceeded). */
+/** Khoá object có phải tên credential không — chuẩn hoá ĐẦY ĐỦ (NFKC, hoa thường, bỏ mọi ký tự ngoài a–z0–9). */
 export function isCredentialKeyName(key: string): boolean {
-  return CREDENTIAL_KEY_RE.test(key);
+  return credentialKeyMatches(key, CREDENTIAL_KEY_NAMES_NORMALIZED);
 }
 
 /** Mọi patternId có thể trả về (audit `credential.blocked` chỉ mang id này, không mang payload). */
@@ -785,4 +826,6 @@ export const TURN_TICKET = {
   scheme: 'Bearer',
   /** GET → TurnBundle (contracts/runner.ts — ý định, không argv). Kiểm đăng nhập / probe: bundle đi qua stdin (ProbeBundle). */
   bundlePath: '/turn/bundle',
+  /** Đường MCP (Streamable HTTP) trên gateway: adapter nhận `${GA_GATEWAY_URL}${mcpPath}` (thay hằng tạm của runner). */
+  mcpPath: '/mcp',
 } as const;
