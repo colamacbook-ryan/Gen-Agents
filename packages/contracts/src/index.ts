@@ -5,6 +5,7 @@ export * from './errors.ts';
 export * from './events.ts';
 export * from './ids.ts';
 export * from './mcp.ts';
+export * from './runner.ts';
 export * from './sessions.ts';
 export * from './settings.ts';
 export * from './supervisor.ts';

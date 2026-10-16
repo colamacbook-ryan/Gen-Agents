@@ -77,7 +77,7 @@ describe('engine — env tiêm vào container (CNS-142)', () => {
       kind: 'cli',
       files: [{ path: 'prompt.md', content: 'x', mode: 0o400 }],
       argv: ['tool', '-p'],
-      env: { HOME: '/run/ga/t/home' },
+      env: { LANG: 'C.UTF-8' },
       timeoutMs: 1000,
     });
     expect(cli.kind).toBe('cli');

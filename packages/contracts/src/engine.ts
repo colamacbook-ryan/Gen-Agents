@@ -32,15 +32,9 @@ export const EnvMap = z.record(z.string(), z.string()).superRefine((env, ctx) =>
 });
 export type EnvMap = z.infer<typeof EnvMap>;
 
-// ---------------------------------------------------------------- chạy một lệnh không tương tác
-/** Một lần chạy lệnh không tương tác: stdin đóng, không TTY, timeout tường minh (STD-10 §4). */
-export const ExecPlan = z.strictObject({
-  argv: z.array(z.string().min(1)).min(1),
-  env: EnvMap,
-  timeoutMs: z.number().int().positive().max(3_600_000),
-});
-export type ExecPlan = z.infer<typeof ExecPlan>;
-
+// ---------------------------------------------------------------- kết quả một lần chạy không tương tác
+// Adapter KHÔNG trả lệnh CLI thô cho supervisor: mọi lần chạy CLI (lượt, kiểm đăng nhập, quét khả năng) đi qua `ga-runner`
+// trong container với HOME tmpfs riêng + auth-gc (CNS-168). Adapter chỉ trả EnginePlan (turnPlan / probePlan).
 export const ExecResult = z.strictObject({
   exitCode: z.number().int().nullable(),
   signal: z.string().nullable(),
@@ -116,9 +110,10 @@ export const LoginCheckResult = z.strictObject({
 });
 export type LoginCheckResult = z.infer<typeof LoginCheckResult>;
 
+/** Kiểm đăng nhập: một ProbePlan (ga-runner login-check chạy) + hàm thuần đọc kết quả. */
 export interface LoginCheck {
-  plan: ExecPlan;
-  parse(result: ExecResult): LoginCheckResult;
+  plan: ProbePlan;
+  parse(outcome: ProbeOutcome): LoginCheckResult;
 }
 
 // ---------------------------------------------------------------- capability registry (STD-10 §3)
@@ -193,7 +188,7 @@ export const TurnStreamEvent = z.discriminatedUnion('type', [
 ]);
 export type TurnStreamEvent = z.infer<typeof TurnStreamEvent>;
 
-/** Tệp adapter muốn ghi vào thư mục tmpfs của lượt (prompt, cấu hình MCP trỏ gateway, cấu hình tắt trí nhớ native). */
+/** Tệp adapter muốn ghi vào thư mục tmpfs của lượt / lần kiểm (prompt, cấu hình MCP trỏ gateway, tắt trí nhớ native). */
 export const TurnPlanFile = z.strictObject({
   /** Đường tương đối trong /run/ga/<lượt>/ (không tuyệt đối, không `..`). */
   path: z
@@ -206,16 +201,21 @@ export const TurnPlanFile = z.strictObject({
 export type TurnPlanFile = z.infer<typeof TurnPlanFile>;
 
 /**
- * Kế hoạch một lượt: union `cli | http` (CNS-160) — engine nhận prompt qua HTTP (GĐ2) không phải đổi hợp đồng.
+ * Kế hoạch chạy engine — DÙNG CHUNG cho lượt (turnPlan) và kiểm đăng nhập / quét khả năng (probePlan): union `cli | http`
+ * (CNS-160, CNS-168). ga-runner thực thi trong container: HOME = tmpfs riêng của lần chạy (runner đặt — plan không được
+ * đặt HOME), cwd = thư mục tmpfs, stdin đóng, không TTY, timeout tường minh; xong thì xoá tmpfs + auth-gc.
  * Vé lượt KHÔNG nằm trong plan: ga-runner đọc vé từ stdin rồi ghi vào tệp tmpfs 0400 (CNS-142).
  */
-export const TurnPlan = z.discriminatedUnion('kind', [
+export const EnginePlan = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('cli'),
     files: z.array(TurnPlanFile),
     argv: z.array(z.string().min(1)).min(1),
-    env: EnvMap,
-    timeoutMs: z.number().int().positive(),
+    env: EnvMap.refine(
+      (env) => !Object.hasOwn(env, 'HOME'),
+      'HOME do ga-runner đặt (tmpfs của lần chạy), plan không được đặt',
+    ),
+    timeoutMs: z.number().int().positive().max(3_600_000),
   }),
   z.strictObject({
     kind: z.literal('http'),
@@ -225,10 +225,47 @@ export const TurnPlan = z.discriminatedUnion('kind', [
       headers: z.record(z.string(), z.string()),
       body: z.string(),
     }),
-    timeoutMs: z.number().int().positive(),
+    timeoutMs: z.number().int().positive().max(3_600_000),
   }),
 ]);
-export type TurnPlan = z.infer<typeof TurnPlan>;
+export type EnginePlan = z.infer<typeof EnginePlan>;
+export const TurnPlan = EnginePlan;
+export type TurnPlan = EnginePlan;
+export const ProbePlan = EnginePlan;
+export type ProbePlan = EnginePlan;
+
+/** Kết quả một ProbePlan do ga-runner trả (stdout / stderr đã qua bộ lọc che bí mật trong runner). */
+export const ProbeOutcome = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('cli'),
+    exitCode: z.number().int().nullable(),
+    signal: z.string().nullable(),
+    stdout: z.string(),
+    stderr: z.string(),
+    timedOut: z.boolean(),
+    durationMs: z.number().int().nonnegative(),
+  }),
+  z.strictObject({
+    kind: z.literal('http'),
+    status: z.number().int().nullable(),
+    body: z.string(),
+    timedOut: z.boolean(),
+    durationMs: z.number().int().nonnegative(),
+  }),
+]);
+export type ProbeOutcome = z.infer<typeof ProbeOutcome>;
+
+/** Đầu vào để adapter dựng ProbePlan: đường tmpfs của LẦN KIỂM (không dùng HOME / thư mục credential thật làm HOME). */
+export interface ProbePlanInput {
+  /** ULID của lần kiểm. */
+  probeId: string;
+  /** Tuyệt đối: /run/ga/probe-<probeId>/ — tmpfs riêng, xoá khi xong. */
+  probeDir: string;
+  /** Tuyệt đối: /run/ga/probe-<probeId>/home/ — HOME của CLI trong lần kiểm (runner nối tệp allowlist từ authDir vào). */
+  homeDir: string;
+  /** Thư mục credential /auth/<en> (chỉ đọc tên tệp allowlist; runner không đọc nội dung). */
+  authDir: string;
+}
 
 export interface TurnPlanInput {
   /** ULID của lần chạy (một lượt có thể chạy lại khi fallback ⇒ mỗi lần một turnId). */
@@ -278,9 +315,11 @@ export interface EngineAdapter {
   readonly installSpec: InstallSpec;
   /** Argv đăng nhập chạy trong PTY (đúng lệnh đăng nhập, không shell). */
   loginArgv(input: LoginArgvInput): readonly string[];
-  loginCheck(input: LoginArgvInput): LoginCheck;
-  capabilityScan(input: CapabilityScanInput): readonly ExecPlan[];
-  parseCapabilities(results: readonly ExecResult[]): CapabilityEntry[];
+  /** Kiểm đăng nhập: plan chạy bằng `ga-runner login-check` (HOME tmpfs + auth-gc), không exec CLI thô. */
+  loginCheck(input: LoginArgvInput & ProbePlanInput): LoginCheck;
+  /** Quét khả năng: các plan chạy bằng `ga-runner probe` (cùng chính sách HOME tmpfs + auth-gc). */
+  capabilityScan(input: CapabilityScanInput & ProbePlanInput): readonly ProbePlan[];
+  parseCapabilities(outcomes: readonly ProbeOutcome[]): CapabilityEntry[];
   parseStreamLine(line: string): TurnStreamEvent | null;
   classify(
     exit: Pick<ExecResult, 'exitCode' | 'signal' | 'timedOut'>,

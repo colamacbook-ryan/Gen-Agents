@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EngineInstallStatus, EnvMap } from './engine.ts';
+import { AuthGcResult, ENGINE_INSTALL_COMMANDS, ProbeBundle, RUNNER_COMMANDS } from './runner.ts';
 
 // Hợp đồng ga-app ↔ ga-supervisor và trình duyệt ↔ relay PTY (BUILD-PLAN §B.2, §B.3, §B.6, §D.3).
 // Supervisor là nơi DUY NHẤT cầm Docker API (qua socket-proxy) và là TCB: chỉ thao tác container có nhãn genagents.kind=role|sys,
@@ -27,8 +28,18 @@ export const CONTAINER_TEMPLATES = ['role.v1', 'sys.v1'] as const;
 export const ContainerTemplate = z.enum(CONTAINER_TEMPLATES);
 export type ContainerTemplate = z.infer<typeof ContainerTemplate>;
 
-/** Chương trình exec được phép ngoài argv đăng nhập lấy từ vé đã ký (§B.3). */
+/**
+ * Chương trình exec được phép ngoài argv đăng nhập lấy từ vé đã ký (§B.3): CHỈ `ga-runner <RUNNER_COMMANDS>` và
+ * `ga-engine-install <ENGINE_INSTALL_COMMANDS>`. Không bao giờ exec CLI của hãng trực tiếp (CNS-168).
+ */
 export const EXEC_ALLOWLIST = ['ga-runner', 'ga-engine-install'] as const;
+
+export function isAllowedExecArgv(argv: readonly string[]): boolean {
+  const [program, command] = argv;
+  if (program === 'ga-runner') return (RUNNER_COMMANDS as readonly string[]).includes(command ?? '');
+  if (program === 'ga-engine-install') return (ENGINE_INSTALL_COMMANDS as readonly string[]).includes(command ?? '');
+  return false;
+}
 
 export const Consumer = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('role'), roleId: z.string().length(26), roleDisplayId: z.string() }),
@@ -72,19 +83,42 @@ export const EnsureContainerResponse = z.strictObject({
 export const ExecStdin = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('none') }),
   z.strictObject({ kind: z.literal('turn-ticket'), ticket: z.string().min(43) }),
+  /** Kiểm đăng nhập / quét khả năng: bundle JSON qua stdin (ga-runner login-check | probe). */
+  z.strictObject({ kind: z.literal('probe-bundle'), bundle: ProbeBundle }),
 ]);
 
-export const ExecRequest = z.strictObject({
-  container: ContainerRef,
-  /** argv[0] phải thuộc EXEC_ALLOWLIST (supervisor ép). */
-  argv: z
-    .array(z.string().min(1))
-    .min(1)
-    .refine((a) => (EXEC_ALLOWLIST as readonly string[]).includes(a[0] ?? ''), 'argv[0] ngoài allowlist exec'),
-  env: EnvMap,
-  stdin: ExecStdin,
-  timeoutMs: z.number().int().positive().max(3_600_000),
-});
+export const ExecRequest = z
+  .strictObject({
+    container: ContainerRef,
+    /** argv = `ga-runner <lệnh>` hoặc `ga-engine-install <lệnh>` (supervisor ép). */
+    argv: z
+      .array(z.string().min(1))
+      .min(2)
+      .refine(
+        isAllowedExecArgv,
+        'argv ngoài allowlist exec (chỉ ga-runner turn|login-check|probe|auth-gc, ga-engine-install)',
+      ),
+    env: EnvMap,
+    stdin: ExecStdin,
+    timeoutMs: z.number().int().positive().max(3_600_000),
+  })
+  .superRefine((req, ctx) => {
+    // stdin phải khớp lệnh: turn ⇐ vé lượt; login-check / probe ⇐ bundle đúng loại; lệnh khác ⇐ không stdin
+    const cmd = req.argv[0] === 'ga-runner' ? req.argv[1] : null;
+    const want = cmd === 'turn' ? 'turn-ticket' : cmd === 'login-check' || cmd === 'probe' ? 'probe-bundle' : 'none';
+    if (req.stdin.kind !== want) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stdin'],
+        message: `lệnh ${req.argv.slice(0, 2).join(' ')} cần stdin ${want}`,
+      });
+    } else if (req.stdin.kind === 'probe-bundle') {
+      const kind = req.stdin.bundle.kind;
+      if ((cmd === 'login-check') !== (kind === 'login_check')) {
+        ctx.addIssue({ code: 'custom', path: ['stdin'], message: `bundle ${kind} không khớp lệnh ${cmd}` });
+      }
+    }
+  });
 export type ExecRequest = z.infer<typeof ExecRequest>;
 
 /** Khung NDJSON trả về từ POST /rpc/v1/exec (luồng). stdout đã đi qua bộ lọc che bí mật ở ga-runner. */
@@ -134,11 +168,7 @@ export const AuthGcRequest = z.strictObject({
   /** 'unknown' ⇒ không xoá gì, native_memory = 'unknown', báo owner. */
   allowlist: z.union([z.array(z.string().min(1)), z.literal('unknown')]),
 });
-export const AuthGcResponse = z.strictObject({
-  /** Số mục đã xoá (chỉ đếm, không trả tên tệp / nội dung). */
-  removed: z.number().int().nonnegative(),
-  nativeMemory: z.enum(['off', 'unknown']),
-});
+export const AuthGcResponse = AuthGcResult;
 
 // ---------------------------------------------------------------- reconcile / status
 export const DesiredContainer = z.strictObject({
