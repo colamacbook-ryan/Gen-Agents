@@ -7,7 +7,7 @@ import {
 import type { InstallSource } from '@ga/engines';
 import { type AdapterRegistry, loadRegistry, requireAdapter } from '../adapters.ts';
 import { FIXED_ROOTS, RunnerError, type RunnerRoots } from '../paths.ts';
-import { EXIT_RUNNER_ERROR, emitError } from '../report.ts';
+import { EXIT_RUNNER_ERROR, emitError, errorReport } from '../report.ts';
 import { readFirstLine } from '../stdin.ts';
 import { installEngine, readInstallStatus, writeStatusLine } from './install.ts';
 
@@ -101,7 +101,11 @@ export async function engineInstallMain(
     );
     return r.state === 'installed' ? 0 : 1;
   } catch (e) {
+    // stdout của ga-engine-install = dòng EngineInstallStatus (supervisor parse) ⇒ lỗi trả bằng CHÍNH giao thức đó: `failed`
+    // + mã lỗi runner trong detail (không chen RunnerReport vào luồng trạng thái)
     emitError(process.stderr, e);
+    const r = errorReport(e);
+    out({ state: 'failed', reason: 'unknown', detail: `${r.code}: ${r.message}`.slice(0, 500) });
     return EXIT_RUNNER_ERROR;
   }
 }

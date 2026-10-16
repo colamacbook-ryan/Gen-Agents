@@ -4,7 +4,7 @@ import { requireAdapter } from './adapters.ts';
 import { cleanupOnError, newRunId, parseLoginEnv, type RunnerContext } from './commands.ts';
 import { PTY_MARKER_ENV, RunnerError } from './paths.ts';
 import { killMarked } from './pty.ts';
-import { EXIT_RUNNER_ERROR, emitError } from './report.ts';
+import { failWith } from './report.ts';
 import { buildCliEnv, createSessionDir, finishSession, prepareSession, type Session } from './session.ts';
 import { resolveCliBin } from './spawn.ts';
 
@@ -86,8 +86,7 @@ export async function cmdLogin(ctx: RunnerContext, opts: { killGraceMs?: number 
     finishSession(roots, s);
     return code;
   } catch (e) {
-    emitError(io.stderr, e);
-    return EXIT_RUNNER_ERROR;
+    return failWith(io, e);
   } finally {
     cleanupOnError(roots, session, dir, io);
   }

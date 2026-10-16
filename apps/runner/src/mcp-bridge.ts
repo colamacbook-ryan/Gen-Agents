@@ -53,7 +53,7 @@ export function readTicketFile(path: string, roots: RunnerRoots = FIXED_ROOTS): 
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     throw new RunnerError(
-      'ticket_file_missing',
+      'bad_ticket_file',
       code === 'ENOENT' ? 'không có tệp vé của lượt' : `không mở được tệp vé (${code})`,
     );
   }

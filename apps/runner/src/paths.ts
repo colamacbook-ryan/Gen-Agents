@@ -1,4 +1,4 @@
-import { ENGINE_SLUG_RE, isForbiddenArgv0Name } from '@ga/contracts';
+import { ENGINE_SLUG_RE, isForbiddenArgv0Name, type RunnerErrorCode } from '@ga/contracts';
 
 // Hằng số đường dẫn + bộ kiểm tên của ga-runner (BUILD-PLAN §B.5, §B.6; contracts TURN_EXEC).
 // Image runtime mang kèm @ga/contracts + @ga/engines (Gen quyết: runner tự dựng argv từ adapter) ⇒ luật dùng chung
@@ -17,12 +17,6 @@ export interface RunnerRoots {
 export const FIXED_ROOTS: RunnerRoots = { run: '/run/ga', auth: '/auth', engines: '/opt/engines' };
 
 export const TURN_ENV = { turnId: 'GA_TURN_ID', gatewayUrl: 'GA_GATEWAY_URL' } as const;
-/**
- * Đường MCP (Streamable HTTP) của gateway dưới GA_GATEWAY_URL (= gốc gateway; bundle ở TURN_TICKET.bundlePath).
- * contracts TurnPlanInput.gatewayUrl là "URL MCP gateway" ⇒ runner truyền `${GA_GATEWAY_URL}${GATEWAY_MCP_PATH}` cho adapter
- * (cầu mcp-bridge gọi đúng URL này). [ĐỀ XUẤT — L-RT → L0: đưa vào contracts TURN_TICKET.mcpPath.]
- */
-export const GATEWAY_MCP_PATH = '/mcp';
 export const TICKET_FILE_MODE = 0o400;
 /** Marker gắn vào env của tiến trình PTY để `pty-kill` tìm cả tiến trình đã tự tách nhóm (setsid). */
 export const PTY_MARKER_ENV = 'GA_PTY_ID';
@@ -69,9 +63,10 @@ export function isSafeRelPath(p: string): boolean {
   return parts.every((seg) => seg !== '.' && seg !== '..' && SEGMENT_RE.test(seg));
 }
 
+/** Lỗi của chính ga-runner: `code` thuộc enum đóng contracts RUNNER_ERROR_CODES (tsc chặn mã lạ). */
 export class RunnerError extends Error {
-  readonly code: string;
-  constructor(code: string, message: string) {
+  readonly code: RunnerErrorCode;
+  constructor(code: RunnerErrorCode, message: string) {
     super(message);
     this.name = 'RunnerError';
     this.code = code;

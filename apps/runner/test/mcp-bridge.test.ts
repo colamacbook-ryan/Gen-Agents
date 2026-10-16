@@ -129,10 +129,13 @@ describe('mcp-bridge — tệp vé: chỉ tệp tmpfs của lượt, chặt', ()
     writeFileSync(ticketPath, 'ngắn');
     expect(code(() => readTicketFile(ticketPath, sb.roots))).toBe('bad_ticket');
   });
-  it('thiếu tệp vé ⇒ ticket_file_missing (thoát kèm lỗi rõ)', async () => {
+  it('thiếu tệp vé ⇒ bad_ticket_file (thoát kèm lỗi rõ)', async () => {
     const missing = join(sb.roots.run, '01JABCDEFGHJKMNPQRSTVWXYZ5', 'ticket');
-    expect(code(() => readTicketFile(missing, sb.roots))).toBe('ticket_file_missing');
-    await expect(bridge('', missing)).rejects.toMatchObject({ code: 'ticket_file_missing' });
+    expect(code(() => readTicketFile(missing, sb.roots))).toBe('bad_ticket_file');
+    await expect(bridge('', missing)).rejects.toMatchObject({
+      code: 'bad_ticket_file',
+      message: 'không có tệp vé của lượt',
+    });
   });
   it('người khác đọc được (0644) ⇒ bad_ticket_file', () => {
     chmodSync(ticketPath, 0o644);

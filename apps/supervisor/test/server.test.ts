@@ -341,6 +341,40 @@ describe('RPC exec — supervisor chỉ tin stdout qua parseRunnerStdout (fail-c
   const protoErr = (frames: ExecFrame[]) =>
     frames.some((f) => f.type === 'error' && f.code === 'runner_protocol_error');
 
+  it.each(['bundle_rejected', 'bad_bundle', 'internal'] as const)(
+    'runner trả report error (%s) ⇒ khung error mang ĐÚNG mã đó trước exit, không phải runner_protocol_error',
+    async (code) => {
+      const err = JSON.stringify({ $ga: 'report', command: 'error', code, message: 'm' });
+      const frames = await run(`${line('a')}\n${err}\n`);
+      expect(protoErr(frames)).toBe(false);
+      const errs = frames.filter((f) => f.type === 'error');
+      expect(errs).toEqual([{ type: 'error', code, message: 'm' }]);
+      expect(frames.at(-1)?.type).toBe('exit');
+    },
+  );
+  it('auth-gc: runner trả report error ⇒ SupervisorError mang mã runner; AuthGcResult hợp lệ ⇒ trả kết quả', async () => {
+    const b = await boot();
+    await b.svc.ensureContainer({ consumer: SYS, template: 'sys.v1', authVolumes: ['ga-auth-en-0001'] });
+    await b.svc.start('ga-sys-AB12');
+    const req = { container: { name: 'ga-sys-AB12' }, engineSlug: 'demo', engineAccount: 'EN-0001' };
+    b.rt.onExec = (e) => {
+      e.stdout.write(`${JSON.stringify({ $ga: 'report', command: 'error', code: 'bad_bundle', message: 'm' })}\n`);
+      e.finish(125);
+    };
+    await expect(b.svc.authGc(req)).rejects.toMatchObject({
+      code: 'internal',
+      message: 'ga-runner auth-gc lỗi: bad_bundle',
+    });
+    b.rt.onExec = (e) => {
+      e.stdout.write(`${JSON.stringify({ removed: 2, nativeMemory: 'off' })}\n`);
+      e.finish(0);
+    };
+    await expect(b.svc.authGc(req)).resolves.toEqual({ removed: 2, nativeMemory: 'off' });
+  });
+  it('report error có mã ngoài enum ⇒ runner_protocol_error (fail-closed)', async () => {
+    const err = JSON.stringify({ $ga: 'report', command: 'error', code: 'made_up', message: 'm' });
+    expect(protoErr(await run(`${err}\n`))).toBe(true);
+  });
   it('line + report thật ở dòng cuối ⇒ không lỗi giao thức', async () => {
     expect(protoErr(await run(`${line('xin chào')}\n${line(report(0))}\n${report(0)}\n`))).toBe(false);
   });

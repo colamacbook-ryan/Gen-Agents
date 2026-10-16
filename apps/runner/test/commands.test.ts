@@ -2,12 +2,15 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, wr
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { parseRunnerStdout, type RunnerReport } from '@ga/contracts';
+import { parseRunnerStdout, type RunnerErrorCode, type RunnerReport } from '@ga/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type AdapterRegistry, type RunnerAdapter, registryOf } from '../src/adapters.ts';
 import { main } from '../src/cli.ts';
 import { cmdAuthGc, cmdProbe, cmdTurn, parseLoginEnv, type RunnerContext } from '../src/commands.ts';
 import { engineInstallMain } from '../src/engine-install/cli.ts';
+import { cmdLogin } from '../src/login.ts';
+import { RunnerError } from '../src/paths.ts';
+import { errorReport } from '../src/report.ts';
 import { BIN, fakeAdapter } from './fixtures/fake-adapter.ts';
 import { ACCOUNT, Capture, type Sandbox, sandbox, stdinOf, TICKET, TURN_ID } from './helpers.ts';
 
@@ -110,6 +113,14 @@ function okReport(out: Capture) {
   return r;
 }
 const runDirEmpty = () => readdirSync(sb.roots.run).length === 0;
+/** Đường lỗi: stdout qua parseRunnerStdout của contracts ⇒ ĐÚNG một report `error` có mã, là dòng cuối; không lộ vé. */
+function expectErrorReport(out: Capture, code: RunnerErrorCode) {
+  const p = parseRunnerStdout(out.lines());
+  if (!p.ok) throw new Error(`runner_protocol_error: ${p.reason}`);
+  expect(p.report).toEqual({ $ga: 'report', command: 'error', code, message: expect.any(String) });
+  expect(out.lines().at(-1)).toBe(JSON.stringify(p.report));
+  expect(out.data).not.toContain(TICKET);
+}
 
 describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter dựng', () => {
   it('lượt đầy đủ: vé 0400 chỉ trong tmpfs, env CLI không có vé / GA_*, transcript bị xoá, /auth chỉ còn allowlist', async () => {
@@ -167,12 +178,17 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
     expect(seen).toEqual({ gatewayUrl: `${gwUrl}/mcp`, ticketFile: join(sb.roots.run, TURN_ID, 'ticket') });
   });
 
-  const bad: [string, () => void, Partial<{ registry: AdapterRegistry; stdin: string }>][] = [
-    ['bundle có trường lạ (argv)', () => (bundleBody = { ...turnBundle(), argv: ['/bin/sh'] }), {}],
-    ['bundle có env tự do', () => (bundleBody = { ...turnBundle(), env: { LD_PRELOAD: '/x' } }), {}],
-    ['slug ngoài enum registry', () => (bundleBody = turnBundle({ engineSlug: 'other' })), {}],
-    ['model dạng cờ', () => (bundleBody = turnBundle({ params: { model: '--dangerously-skip', effort: null } })), {}],
-    ['effort dạng cờ', () => (bundleBody = turnBundle({ params: { model: null, effort: '-x' } })), {}],
+  const bad: [string, () => void, Partial<{ registry: AdapterRegistry; stdin: string }>, RunnerErrorCode][] = [
+    ['bundle có trường lạ (argv)', () => (bundleBody = { ...turnBundle(), argv: ['/bin/sh'] }), {}, 'bad_bundle'],
+    ['bundle có env tự do', () => (bundleBody = { ...turnBundle(), env: { LD_PRELOAD: '/x' } }), {}, 'bad_bundle'],
+    ['slug ngoài enum registry', () => (bundleBody = turnBundle({ engineSlug: 'other' })), {}, 'bad_bundle'],
+    [
+      'model dạng cờ',
+      () => (bundleBody = turnBundle({ params: { model: '--dangerously-skip', effort: null } })),
+      {},
+      'bad_bundle',
+    ],
+    ['effort dạng cờ', () => (bundleBody = turnBundle({ params: { model: null, effort: '-x' } })), {}, 'bad_bundle'],
     [
       'prompt path thoát tmpfs (..)',
       () =>
@@ -180,14 +196,21 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
           prompt: { user: { path: '../../auth/EN-0001/cred.json', content: 'x' }, system: null },
         })),
       {},
+      'bad_bundle',
     ],
     [
       'prompt path tuyệt đối',
       () => (bundleBody = turnBundle({ prompt: { user: { path: '/etc/passwd', content: 'x' }, system: null } })),
       {},
+      'bad_bundle',
     ],
-    ['turnId lệch env', () => (bundleBody = turnBundle({ turnId: '01JABCDEFGHJKMNPQRSTVWXYZ2' })), {}],
-    ['bundle hết hạn', () => (bundleBody = turnBundle({ expiresAt: '2026-10-16T09:00:00.000Z' })), {}],
+    ['turnId lệch env', () => (bundleBody = turnBundle({ turnId: '01JABCDEFGHJKMNPQRSTVWXYZ2' })), {}, 'bad_bundle'],
+    [
+      'bundle hết hạn',
+      () => (bundleBody = turnBundle({ expiresAt: '2026-10-16T09:00:00.000Z' })),
+      {},
+      'bundle_expired',
+    ],
     [
       'adapter dựng argv[0] là shell',
       () => (bundleBody = turnBundle()),
@@ -198,6 +221,7 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
           }),
         ]),
       },
+      'argv_rejected',
     ],
     [
       'adapter dựng cờ ngoài bảng',
@@ -209,6 +233,7 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
           }),
         ]),
       },
+      'argv_rejected',
     ],
     [
       'adapter khai nhầm LD_PRELOAD trong bảng env',
@@ -227,26 +252,55 @@ describe('ga-runner turn — bundle ý định, argv / env / tệp do adapter d�
           }),
         ]),
       },
+      'bad_plan', // schema EnginePlan của contracts chặn trước (lớp assertPlanEnv có test riêng ở env.test.ts)
     ],
-    ['vé sai dạng trên stdin', () => (bundleBody = turnBundle()), { stdin: 'không-phải-vé\n' }],
+    ['vé sai dạng trên stdin', () => (bundleBody = turnBundle()), { stdin: 'không-phải-vé\n' }, 'bad_ticket'],
   ];
-  it.each(bad)('từ chối: %s ⇒ 125, không chạy CLI, tmpfs đã dọn', async (_n, setup, o) => {
+  it.each(bad)('từ chối: %s ⇒ 125 + report error có mã, không chạy CLI, tmpfs đã dọn', async (_n, setup, o, code) => {
     setup();
     const { c, stdout, stderr } = ctx(o);
     expect(await cmdTurn(c)).toBe(125);
-    // lỗi trước khi có report ⇒ không in report ⇒ bên đọc fail-closed
-    expect(parseRunnerStdout(stdout.lines())).toMatchObject({ ok: false, code: 'runner_protocol_error' });
+    // mọi đường lỗi ⇒ đúng MỘT report `error` có mã, là dòng cuối (bên đọc thấy lỗi có mã, không phải thiếu report)
+    expectErrorReport(stdout, code);
     expect(stdout.data).not.toContain('"type":"env"');
     expect(stderr.json().at(-1)).toMatchObject({ ga_runner: { event: 'error' } });
     expect(runDirEmpty()).toBe(true);
     expect(existsSync(join(sb.authDir, '.junk'))).toBe(true); // không chạy ⇒ không gc
   });
 
-  it('gateway từ chối vé (401) ⇒ 125, tmpfs (vé) đã xoá', async () => {
+  it('gateway từ chối vé (401) ⇒ 125 + report error bundle_rejected, tmpfs (vé) đã xoá', async () => {
     bundleStatus = 401;
     bundleBody = turnBundle();
-    const { c } = ctx();
+    const { c, stdout } = ctx();
     expect(await cmdTurn(c)).toBe(125);
+    expectErrorReport(stdout, 'bundle_rejected');
+    expect(runDirEmpty()).toBe(true);
+  });
+
+  it('GA_TURN_ID / GA_GATEWAY_URL sai ⇒ report error bad_turn_id / bad_gateway_url', async () => {
+    for (const [env, code] of [
+      [{ GA_TURN_ID: 'x', GA_GATEWAY_URL: gwUrl }, 'bad_turn_id'],
+      [{ GA_TURN_ID: TURN_ID, GA_GATEWAY_URL: 'file:///etc/passwd' }, 'bad_gateway_url'],
+    ] as const) {
+      const { c, stdout } = ctx({ env });
+      expect(await cmdTurn(c)).toBe(125);
+      expectErrorReport(stdout, code);
+    }
+  });
+
+  it('lỗi KHÔNG phải RunnerError (adapter ném TypeError) ⇒ report error `internal`, không lộ thông điệp gốc', async () => {
+    bundleBody = turnBundle();
+    const registry = registryOf([
+      fakeAdapter({
+        turnPlan: () => {
+          throw new TypeError('chi tiết nội bộ không được lộ');
+        },
+      }),
+    ]);
+    const { c, stdout } = ctx({ registry });
+    expect(await cmdTurn(c)).toBe(125);
+    expectErrorReport(stdout, 'internal');
+    expect(stdout.data).not.toContain('chi tiết nội bộ');
     expect(runDirEmpty()).toBe(true);
   });
 });
@@ -305,9 +359,10 @@ describe('ga-runner login-check / probe — bundle qua stdin, plan của adapter
     ['trường lạ (plans)', 'login-check', probeBundle('login_check', { plans: [] }), PROBE_ID],
     ['slug ngoài enum', 'login-check', probeBundle('login_check', { engineSlug: 'nope' }), PROBE_ID],
     ['authMethod lạ', 'login-check', probeBundle('login_check', { authMethod: 'shell' }), PROBE_ID],
-  ] as const)('từ chối: %s', async (_n, cmd, stdin, probeEnv) => {
-    const { c } = ctx({ stdin, env: { GA_PROBE_ID: probeEnv } });
+  ] as const)('từ chối: %s ⇒ 125 + report error bad_bundle', async (_n, cmd, stdin, probeEnv) => {
+    const { c, stdout } = ctx({ stdin, env: { GA_PROBE_ID: probeEnv } });
     expect(await cmdProbe(c, cmd)).toBe(125);
+    expectErrorReport(stdout, 'bad_bundle');
     expect(runDirEmpty()).toBe(true);
   });
 });
@@ -329,17 +384,48 @@ describe('ga-runner auth-gc — allowlist CỦA ADAPTER, ga-app không gửi dan
     expect(stdout.json()[0]).toEqual({ removed: 0, nativeMemory: 'unknown' });
     expect(existsSync(join(sb.authDir, '.junk'))).toBe(true);
   });
-  it('bundle mang allowlist riêng ⇒ từ chối', async () => {
-    const { c } = ctx({
+  it('bundle mang allowlist riêng ⇒ 125 + đúng MỘT dòng report error bad_bundle (supervisor đọc được mã)', async () => {
+    const { c, stdout } = ctx({
       stdin: `${JSON.stringify({ v: 2, engineSlug: 'fake', engineAccount: ACCOUNT, allowlist: ['.junk/history.jsonl'] })}\n`,
     });
     expect(await cmdAuthGc(c)).toBe(125);
+    expect(stdout.lines()).toHaveLength(1);
+    expectErrorReport(stdout, 'bad_bundle');
+    expect(existsSync(join(sb.authDir, '.junk'))).toBe(true);
   });
 });
 
 describe('ga-runner main — đúng hai phần tử argv', () => {
-  it.each([[['turn', '--extra']], [['sh']], [['pty-kill']], [[]]])('từ chối argv %j', async (argv) => {
-    expect(await main(argv, { roots: sb.roots, registry: registryOf([fakeAdapter()]) })).toBe(125);
+  it.each([[['turn', '--extra']], [['sh']], [['pty-kill']], [[]]])(
+    'từ chối argv %j ⇒ 125 + report error usage',
+    async (argv) => {
+      const stdout = new Capture();
+      const stderr = new Capture();
+      expect(await main(argv, { roots: sb.roots, registry: registryOf([fakeAdapter()]), stdout, stderr })).toBe(125);
+      expectErrorReport(stdout, 'usage');
+    },
+  );
+  it('mcp-bridge lỗi ⇒ CHỈ stderr (stdout là kênh MCP của CLI), 125', async () => {
+    const stdout = new Capture();
+    const stderr = new Capture();
+    expect(await main(['mcp-bridge', '--url', 'http://ga-app:7410/mcp'], { roots: sb.roots, stdout, stderr })).toBe(
+      125,
+    );
+    expect(stdout.data).toBe('');
+    expect(stderr.json().at(-1)).toMatchObject({ ga_runner: { event: 'error', code: 'usage' } });
+  });
+  it('errorReport: mã ngoài RunnerError ⇒ internal; thông điệp giống credential bị thay; ≤ 500 ký tự', () => {
+    expect(errorReport(new Error('x'))).toMatchObject({ code: 'internal', message: 'lỗi nội bộ ga-runner' });
+    const leaky = errorReport(
+      new RunnerError('bad_url', `url có ${['sk-', 'ant-', 'api03-', 'A'.repeat(40)].join('')}`),
+    );
+    expect(leaky).toEqual({
+      $ga: 'report',
+      command: 'error',
+      code: 'bad_url',
+      message: 'thông điệp lỗi bị ẩn (giống credential)',
+    });
+    expect(errorReport(new RunnerError('usage', 'x'.repeat(900))).message).toHaveLength(500);
   });
 });
 
@@ -361,6 +447,12 @@ describe('ga-runner login — ý định từ ba biến env (vé PTY đã ký), 
   ])('từ chối: %s', (_n, o) => {
     const { c } = ctx({ env: env(o) });
     expect(() => parseLoginEnv(c)).toThrow();
+  });
+  it('cmdLogin với env sai ⇒ 125 + report error bad_bundle trên stdout (PTY), không spawn CLI', async () => {
+    const { c, stdout } = ctx({ env: env({ GA_ENGINE_SLUG: 'nope' }) });
+    expect(await cmdLogin(c)).toBe(125);
+    expectErrorReport(stdout, 'bad_bundle');
+    expect(runDirEmpty()).toBe(true);
   });
 });
 
@@ -385,15 +477,25 @@ describe('ga-engine-install — bundle qua stdin, công thức của adapter', (
     ],
     ['nguồn lạ', ['install'], { v: 2, engineSlug: 'fake', source: 'local' }],
     ['đối số thêm', ['install', '--manifest-url'], { v: 2, engineSlug: 'fake', source: 'official' }],
-  ] as const)('từ chối: %s', async (_n, argv, bundle) => {
-    const code = await engineInstallMain(argv, {
-      roots: sb.roots,
-      registry: registryOf([fakeAdapter()]),
-      stdin: stdinOf(`${JSON.stringify(bundle)}\n`),
-      out: () => {},
-    });
-    expect(code).toBe(125);
-  });
+  ] as const)(
+    'từ chối: %s ⇒ 125 + trạng thái failed mang mã lỗi runner (giao thức của ga-engine-install)',
+    async (_n, argv, bundle) => {
+      const out: unknown[] = [];
+      const code = await engineInstallMain(argv, {
+        roots: sb.roots,
+        registry: registryOf([fakeAdapter()]),
+        stdin: stdinOf(`${JSON.stringify(bundle)}\n`),
+        out: (s) => out.push(s),
+      });
+      expect(code).toBe(125);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({
+        state: 'failed',
+        reason: 'unknown',
+        detail: expect.stringMatching(/^(usage|bad_bundle): /),
+      });
+    },
+  );
   it('adapter chưa khai công thức cài ⇒ failed', async () => {
     const out: { state: string }[] = [];
     const code = await engineInstallMain(['install'], {

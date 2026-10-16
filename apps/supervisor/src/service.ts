@@ -11,6 +11,7 @@ import {
   execEnv,
   execStdinPayload,
   parseRunnerStdout,
+  RunnerReport,
 } from '@ga/contracts';
 import type { z } from 'zod';
 import { SupervisorError } from './errors.ts';
@@ -300,6 +301,10 @@ export class SupervisorService {
       const reason = p && !p.ok ? p.reason : 'stdout quá trần';
       this.log.log('warn', 'runner_protocol_error', { container: c.name, command: req.run.command, reason });
       emit({ type: 'error', code: 'runner_protocol_error', message: reason });
+    } else if (p.report.command === 'error') {
+      // runner báo lỗi có mã (contracts RUNNER_ERROR_CODES) ⇒ khung error mang ĐÚNG mã đó trước exit — ga-app coi lượt thất bại
+      this.log.log('warn', 'runner_error', { container: c.name, command: req.run.command, code: p.report.code });
+      emit({ type: 'error', code: p.report.code, message: p.report.message });
     }
     emit({
       type: 'exit',
@@ -333,6 +338,10 @@ export class SupervisorService {
     }
     if (parsed === null || JSON.stringify(parsed) !== lines[0]) {
       throw new SupervisorError('internal', 'ga-runner auth-gc không trả kết quả hợp lệ');
+    }
+    const failed = RunnerReport.safeParse(parsed);
+    if (failed.success && failed.data.command === 'error') {
+      throw new SupervisorError('internal', `ga-runner auth-gc lỗi: ${failed.data.code}`);
     }
     const res = AuthGcResult.safeParse(parsed);
     if (r.exitCode !== 0 || !res.success) throw new SupervisorError('internal', 'ga-runner auth-gc thất bại');

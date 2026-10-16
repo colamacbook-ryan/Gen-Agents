@@ -17,8 +17,8 @@ import { type AdapterRegistry, requireAdapter } from './adapters.ts';
 import { authGc } from './auth-gc.ts';
 import { writeNewFileInside } from './fsutil.ts';
 import { getText } from './http.ts';
-import { GATEWAY_MCP_PATH, isTurnTicket, RunnerError, type RunnerRoots, TICKET_FILE_MODE, TURN_ENV } from './paths.ts';
-import { EXIT_RUNNER_ERROR, emitError, exitCodeOf } from './report.ts';
+import { isTurnTicket, RunnerError, type RunnerRoots, TICKET_FILE_MODE, TURN_ENV } from './paths.ts';
+import { emitError, exitCodeOf, failWith } from './report.ts';
 import { CappedText, checkPlan, outcomeOf, runPlan } from './run-plan.ts';
 import { createSessionDir, finishSession, prepareSession, type Session, type SessionFile } from './session.ts';
 import { readFirstLine } from './stdin.ts';
@@ -140,7 +140,7 @@ export async function cmdTurn(ctx: RunnerContext): Promise<number> {
         detectedFlags: b.detectedFlags,
         model: b.params.model,
         effort: b.params.effort,
-        gatewayUrl: `${gatewayUrl}${GATEWAY_MCP_PATH}`,
+        gatewayUrl: `${gatewayUrl}${TURN_TICKET.mcpPath}`,
         turnDir: dir,
         homeDir: join(dir, 'home'),
         ticketFile: join(dir, 'ticket'),
@@ -176,8 +176,7 @@ export async function cmdTurn(ctx: RunnerContext): Promise<number> {
     });
     return exitCodeOf(r);
   } catch (e) {
-    emitError(io.stderr, e);
-    return EXIT_RUNNER_ERROR;
+    return failWith(io, e);
   } finally {
     cleanupOnError(roots, session, dir, io);
   }
@@ -243,8 +242,7 @@ export async function cmdProbe(ctx: RunnerContext, command: 'login-check' | 'pro
     writeReport(io, { $ga: 'report', command, probeId: b.probeId, outcomes, authGc: end.gc });
     return 0;
   } catch (e) {
-    emitError(io.stderr, e);
-    return EXIT_RUNNER_ERROR;
+    return failWith(io, e);
   } finally {
     cleanupOnError(roots, session, dir, io);
   }
@@ -262,8 +260,7 @@ export async function cmdAuthGc(ctx: RunnerContext): Promise<number> {
     io.stdout.write(`${JSON.stringify(r)}\n`);
     return 0;
   } catch (e) {
-    emitError(io.stderr, e);
-    return EXIT_RUNNER_ERROR;
+    return failWith(io, e);
   }
 }
 

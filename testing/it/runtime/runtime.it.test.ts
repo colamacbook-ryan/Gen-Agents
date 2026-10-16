@@ -619,7 +619,7 @@ describe.sequential('IT runtime — Docker thật', () => {
       const missing = bridge(`/run/ga/${ulid()}/ticket`, ping(3));
       expect(missing.code).toBe(125);
       expect(missing.stdout).toBe('');
-      expect(missing.stderr).toContain('ticket_file_missing');
+      expect(missing.stderr).toContain('bad_ticket_file');
       // thông điệp > 1 MiB ⇒ -32600 (id null), bị bỏ trước khi tới gateway; thông điệp sau vẫn đi
       expect(writeTicket(good).code).toBe(0);
       const big = JSON.stringify({
@@ -647,6 +647,24 @@ describe.sequential('IT runtime — Docker thật', () => {
     } finally {
       cexec(SYS, ['rm', '-rf', dir]);
     }
+  }, 120_000);
+
+  it('runner báo lỗi có mã (vé lượt chưa đăng ký ⇒ gateway 401) ⇒ supervisor trả khung error bundle_rejected trước exit', async () => {
+    const ticket = randomBytes(32).toString('base64url');
+    const r = await sup.rpc('exec', {
+      container: { name: SYS },
+      run: { command: 'turn', turnId: ulid(), ticket },
+      timeoutMs: 60_000,
+    });
+    expect(r.status).toBe(200);
+    const fs = frames(r.text);
+    const p = protocol(fs);
+    expect(p).toMatchObject({ ok: true, report: { command: 'error', code: 'bundle_rejected' } });
+    expect(fs.filter((f) => f.type === 'error')).toEqual([
+      { type: 'error', code: 'bundle_rejected', message: expect.any(String) },
+    ]);
+    expect(fs.at(-1)).toMatchObject({ type: 'exit', exitCode: 125 });
+    expect(r.text).not.toContain(ticket);
   }, 120_000);
 
   it('container Role: không docker.sock, không gọi được 7401, bị chặn example.com (cả qua egress lẫn đi thẳng)', async () => {
