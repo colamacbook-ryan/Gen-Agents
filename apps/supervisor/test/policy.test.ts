@@ -399,6 +399,26 @@ describe('meta — mọi khoá phải KHỚP mẫu; khoá mẫu không dùng ⇒
     }
     expect(misses).toEqual([]);
   });
+  it.each([
+    ['HostConfig.privileged', (b: Record<string, unknown>) => (host(b).privileged = true)],
+    ['HostConfig.logconfig', (b: Record<string, unknown>) => (host(b).logconfig = { Type: 'syslog' })],
+    ['HostConfig.networkmode', (b: Record<string, unknown>) => (host(b).networkmode = 'host')],
+    ['hostconfig cấp trên', (b: Record<string, unknown>) => (b.hostconfig = { Privileged: true })],
+  ])(
+    'Docker (Go encoding/json) so tên khoá KHÔNG phân biệt hoa thường ⇒ biến thể chữ thường %s bị từ chối',
+    (_n, mutate) => {
+      const b = roleBody();
+      const body = structuredClone(b.body);
+      mutate(body);
+      expect(rules(b.name, body)).toEqual(['unknown_field']);
+    },
+  );
+  it('endpoint `aliases` viết thường ⇒ network_mode', () => {
+    const b = roleBody();
+    const body = structuredClone(b.body);
+    body.NetworkingConfig = { EndpointsConfig: { [ENV.rolesNetwork]: { aliases: ['ga-app'] } } };
+    expect(rules(b.name, body)).toEqual(['network_mode']);
+  });
   it('volume-init.v1 (không mạng) thêm NetworkingConfig ⇒ network_mode', () => {
     const b = buildVolumeInitContainer('ga-engines', 'engines', ENV);
     const body = structuredClone(b.body);
