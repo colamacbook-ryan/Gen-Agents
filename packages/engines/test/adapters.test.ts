@@ -122,6 +122,16 @@ for (const adapter of ADAPTERS) {
         const resultEvent = parser.push(result?.line ?? '')[0];
         expect(resultEvent).toMatchObject({ stage: 'result', name: callEvent?.type === 'tool' ? callEvent.name : '' });
       });
+      it('dòng delta HỢP LỆ nhưng vượt trần 1 MiB ⇒ bỏ (không JSON.parse), cả parser không trạng thái', () => {
+        const d = c.stream.find((s) => s.line !== undefined && s.expected[0]?.type === 'delta');
+        const first = d?.expected[0];
+        expect(first?.type).toBe('delta');
+        const small = first?.type === 'delta' ? first.text : '';
+        const big = (d?.line ?? '').replace(JSON.stringify(small).slice(1, -1), 'a'.repeat(1024 * 1024));
+        expect(big.length).toBeGreaterThan(1024 * 1024);
+        expect(adapter.parseStreamLineAll(big)).toEqual([]);
+        expect(adapter.parseStreamLineAll(d?.line ?? '')).toEqual(d?.expected);
+      });
       it('dòng quá trần bị bỏ không parse, có đếm (không nuốt lỗi im lặng)', () => {
         const parser = adapter.createLineParser();
         const big = `{"x":"${'a'.repeat(1024 * 1024)}"}`;

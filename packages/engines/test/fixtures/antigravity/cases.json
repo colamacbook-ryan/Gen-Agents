@@ -197,6 +197,21 @@
       }
     },
     {
+      "name": "chưa đăng nhập: chỉ JSON stdout (không stderr) ⇒ cần đăng nhập",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdoutFile": "print-nologin.out",
+      "stderr": "",
+      "expected": {
+        "outcome": "AUTH_REQUIRED",
+        "ruleId": "AGY-E02",
+        "resetAt": null
+      }
+    },
+    {
       "name": "chưa đăng nhập: exit 1 + JSON lỗi xác thực (Spike 1b)",
       "exit": {
         "exitCode": 1,

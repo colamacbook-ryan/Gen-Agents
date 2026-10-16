@@ -50,6 +50,16 @@
   ],
   "stream": [
     {
+      "name": "text_delta (dạng Spike 1b) ⇒ delta",
+      "line": "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Xin chào\"}},\"parent_tool_use_id\":null}",
+      "expected": [
+        {
+          "type": "delta",
+          "text": "Xin chào"
+        }
+      ]
+    },
+    {
       "name": "gọi công cụ (assumed CC-STREAM-01: content_block_start tool_use)",
       "line": "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"mcp__ga__recall\",\"input\":{}}},\"parent_tool_use_id\":null}",
       "expected": [
@@ -245,6 +255,21 @@
       }
     },
     {
+      "name": "403 không kèm chữ \"disabled\" ⇒ vẫn bị khoá (chỉ luật mã 403 bắt)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":403,\"result\":\"API Error: 403 permission_error\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "account_suspended",
+        "ruleId": "CC-E05",
+        "resetAt": null
+      }
+    },
+    {
       "name": "OAuth token hết hạn (assumed)",
       "exit": {
         "exitCode": 1,
@@ -256,6 +281,21 @@
       "expected": {
         "outcome": "login_expired",
         "ruleId": "CC-E06",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "chỉ chữ \"account has been disabled\", không mã HTTP ⇒ bị khoá",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":null,\"result\":\"Your account has been disabled.\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "account_suspended",
+        "ruleId": "CC-E05",
         "resetAt": null
       }
     },
