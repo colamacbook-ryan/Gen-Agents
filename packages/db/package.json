@@ -1,0 +1,25 @@
+{
+  "name": "@ga/db",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "SQLite (SQL trước): migration runner, hợp đồng kết nối ⑥-05, kiểu Kysely sinh từ DB (BUILD-PLAN §D.4).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./connection": "./src/connection.ts",
+    "./runner": "./src/runner/index.ts",
+    "./schema": "./src/generated/schema.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ga/contracts": "workspace:*",
+    "better-sqlite3": "13.0.3",
+    "kysely": "0.29.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0"
+  }
+}

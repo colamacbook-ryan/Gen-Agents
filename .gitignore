@@ -1,0 +1,33 @@
+# deps / build
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.vite/
+
+# secrets — KHÔNG BAO GIỜ commit (STD-04 §4). Chỉ .env.example được commit.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+credentials*.json
+service-account*.json
+
+# dữ liệu chạy local
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+data/
+
+# python (db/spec)
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
