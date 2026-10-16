@@ -1,11 +1,12 @@
 import { StringDecoder } from 'node:string_decoder';
-import { redact } from './redact.ts';
+import { MAX_SCAN_CHARS, redactLine } from './redact.ts';
 
 // Tách luồng byte thành dòng, che credential từng dòng rồi mới ghi ra. Dòng vượt trần bị BỎ (không cắt đôi — cắt đôi có thể
 // tách một token làm hai nửa lọt qua bộ che).
 
-export const MAX_LINE_CHARS = 4 * 1024 * 1024;
-export const DROPPED_LINE_MARKER = '{"ga_runner":{"event":"line_dropped","reason":"too_long"}}';
+/** Trần một dòng = trần quét của bộ che (chặn kích thước trước khi quét). */
+export const MAX_LINE_CHARS = MAX_SCAN_CHARS;
+export const DROPPED_LINE_MARKER = '{"$ga":"line_dropped","reason":"too_long"}';
 
 export class RedactingLineWriter {
   private buf = '';
@@ -52,7 +53,7 @@ export class RedactingLineWriter {
     if (this.dropping) {
       this.write(`${DROPPED_LINE_MARKER}\n`);
     } else {
-      this.write(`${redact(this.buf)}\n`);
+      this.write(`${redactLine(this.buf)}\n`);
     }
     this.buf = '';
     this.dropping = false;

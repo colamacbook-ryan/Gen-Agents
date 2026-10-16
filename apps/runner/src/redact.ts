@@ -1,156 +1,81 @@
-// Bộ CHE credential cho stdout / stderr của CLI trước khi rời container (BUILD-PLAN §B.5 bước 6, DATABASE §9.5 bước 7).
-// Che (thay bằng [REDACTED]) — khác với CHẶN của gateway (L-GW). Không dùng regex: indexOf + đếm ký tự ⇒ tuyến tính.
-// Phủ ít nhất các mẫu của contracts CREDENTIAL_DETECTORS có tiền tố nhận dạng được (sk-ant-, sk-, ya29., 1//0, AIza, JWT,
-// PEM, refresh_token, canary GA-CANARY-). Không che "chuỗi token dài bất kỳ" (UUID phiên, sha) vì làm hỏng stream hợp lệ —
-// lớp chặn rộng nằm ở gateway. TODO(L-SEC): thay bằng bộ phát hiện dùng chung @ga/security khi lane đó push.
+import { findCredentialLike } from '@ga/contracts';
 
-export const REDACTED = '[REDACTED]';
+// Che credential trong stdout / stderr của CLI trước khi rời container (BUILD-PLAN §B.5 bước 6, DATABASE §9.5 bước 7).
+// MỘT NGUỒN LUẬT (review bảo mật MEDIUM parser-differential, Gen quyết): KHÔNG tự viết bộ phát hiện. Tạm dùng bộ tham chiếu
+// của contracts (`findCredentialLike`, tuyến tính); khi @ga/security (L-SEC) vào nhánh thì thay bằng `redactLogLine`.
+// Vì bộ tham chiếu chỉ trả có / không (không trả vị trí), runner thay CẢ DÒNG bằng một dòng đánh dấu — không cố che từng
+// đoạn bằng parser riêng (nguồn của lệch parser). Dòng khớp nếu MỘT trong các dạng sau khớp bộ tham chiếu:
+//   (a) dòng thô;
+//   (b) dòng đã bỏ mọi dấu `\` (JSON lồng 1, 2, 3… lớp escape: `\"refresh_token\":` → `"refresh_token":`);
+//   (c) nếu dòng là JSON: giá trị đã parse (bộ tham chiếu duyệt cả KHOÁ — refresh_token / access_token / id_token /
+//       client_secret / private_key), và mọi chuỗi trong đó trông như JSON được parse tiếp tối đa 3 lớp.
+// Chặn kích thước TRƯỚC khi quét (dòng > 1 MiB ⇒ thay bằng dấu hiệu, không quét). Mọi bước tuyến tính theo độ dài dòng.
+// Quá tay có chủ đích: bộ tham chiếu bắt cả UUID / chuỗi token dài ⇒ một số dòng hợp lệ bị thay (chấp nhận tới khi có
+// @ga/security, vốn không chặn hex / UUID — CNS-169).
 
-function isWord(c: number): boolean {
-  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
-}
-function isToken(c: number): boolean {
-  return isWord(c) || c === 45;
-}
-function isHexOrDash(c: number): boolean {
-  return (c >= 48 && c <= 57) || (c >= 97 && c <= 102) || (c >= 65 && c <= 70) || c === 45;
-}
+export const MAX_SCAN_CHARS = 1_048_576;
+const NESTED_JSON_DEPTH = 3;
 
-/** Độ dài đoạn ký tự thoả `pred` liền nhau bắt đầu tại `from`. */
-function runLen(s: string, from: number, pred: (c: number) => boolean): number {
-  let i = from;
-  while (i < s.length && pred(s.charCodeAt(i))) i++;
-  return i - from;
+export function redactedMarker(patternId: string): string {
+  return JSON.stringify({ $ga: 'line_redacted', patternId: patternId.replace(/[^a-z0-9_]/gi, '_') });
 }
 
-type Range = [number, number];
-
-/** prefix + ≥ min ký tự token ⇒ che cả prefix + đoạn. */
-function prefixRanges(s: string, prefix: string, min: number, out: Range[], wordStart = false): void {
-  let from = 0;
-  for (;;) {
-    const at = s.indexOf(prefix, from);
-    if (at < 0) return;
-    // kiểm đầu từ TRƯỚC khi đếm đoạn ⇒ "xsk-xsk-…" không bị đếm lại từng lần (tuyến tính)
-    if (wordStart && at > 0 && isWord(s.charCodeAt(at - 1))) {
-      from = at + 1;
-      continue;
-    }
-    const n = runLen(s, at + prefix.length, isToken);
-    // khớp ⇒ che rồi nhảy qua; không khớp ⇒ mọi lần xuất hiện sau trong CÙNG đoạn có đoạn ngắn hơn ⇒ cũng nhảy qua
-    if (n >= min) out.push([at, at + prefix.length + n]);
-    from = at + prefix.length + n;
-  }
+function looksLikeJson(s: string): boolean {
+  const t = s.trimStart();
+  return t.startsWith('{') || t.startsWith('[') || t.startsWith('"');
 }
 
-function jwtRanges(s: string, out: Range[]): void {
-  let from = 0;
-  for (;;) {
-    const at = s.indexOf('eyJ', from);
-    if (at < 0) return;
-    const a = runLen(s, at, isToken);
-    let end = -1;
-    if (a >= 8 && s.charCodeAt(at + a) === 46) {
-      const b = runLen(s, at + a + 1, isToken);
-      if (b >= 8 && s.charCodeAt(at + a + 1 + b) === 46) {
-        const c = runLen(s, at + a + 2 + b, isToken);
-        if (c >= 8) end = at + a + 2 + b + c;
+/** Parse các chuỗi trông như JSON lồng bên trong (tối đa `depth` lớp) rồi quét bằng bộ tham chiếu. */
+function scanParsed(value: unknown, depth: number): { patternId: string } | null {
+  const hit = findCredentialLike(value);
+  if (hit || depth <= 0) return hit;
+  const stack: unknown[] = [value];
+  let nodes = 0;
+  while (stack.length > 0) {
+    const v = stack.pop();
+    if (++nodes > 20_000) return { patternId: 'too_many_nodes' };
+    if (typeof v === 'string') {
+      if (v.length > 1 && looksLikeJson(v)) {
+        try {
+          const inner = scanParsed(JSON.parse(v), depth - 1);
+          if (inner) return inner;
+        } catch {
+          // không phải JSON: đã quét như chuỗi ở findCredentialLike
+        }
       }
-    }
-    if (end > 0) {
-      out.push([at, end]);
-      from = end;
-    } else {
-      from = at + Math.max(1, a);
+    } else if (Array.isArray(v)) {
+      for (const x of v) stack.push(x);
+    } else if (v !== null && typeof v === 'object') {
+      for (const x of Object.values(v)) stack.push(x);
     }
   }
+  return null;
 }
 
-function canaryRanges(s: string, out: Range[]): void {
-  const prefix = 'GA-CANARY-';
-  let from = 0;
-  for (;;) {
-    const at = s.indexOf(prefix, from);
-    if (at < 0) return;
-    const n = runLen(s, at + prefix.length, isHexOrDash);
-    if (n >= 8) {
-      out.push([at, at + prefix.length + n]);
-      from = at + prefix.length + n;
-    } else {
-      from = at + 1;
-    }
+/** Mẫu credential khớp trong một dòng (null = sạch). */
+export function credentialInLine(line: string): string | null {
+  if (line.length > MAX_SCAN_CHARS) return 'too_large';
+  const raw = findCredentialLike(line);
+  if (raw) return raw.patternId;
+  if (line.includes('\\')) {
+    const unescaped = findCredentialLike(line.split('\\').join(''));
+    if (unescaped) return unescaped.patternId;
   }
+  if (looksLikeJson(line)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      return null;
+    }
+    const hit = scanParsed(parsed, NESTED_JSON_DEPTH);
+    if (hit) return hit.patternId;
+  }
+  return null;
 }
 
-/** PEM khoá riêng: từ `-----BEGIN` tới hết `-----END …-----` (hoặc hết chuỗi nếu chưa thấy END). */
-function pemRanges(s: string, out: Range[]): void {
-  let from = 0;
-  for (;;) {
-    const at = s.indexOf('-----BEGIN ', from);
-    if (at < 0) return;
-    const headEnd = s.indexOf('-----', at + 11);
-    if (headEnd < 0 || s.slice(at, headEnd).indexOf('PRIVATE KEY') < 0) {
-      from = at + 1;
-      continue;
-    }
-    const endMarker = s.indexOf('-----END ', headEnd + 5);
-    let end = s.length;
-    if (endMarker >= 0) {
-      const close = s.indexOf('-----', endMarker + 9);
-      end = close >= 0 ? close + 5 : s.length;
-    }
-    out.push([at, end]);
-    from = end;
-  }
-}
-
-/** `refresh_token` (không phân biệt hoa thường) + dấu nháy? + khoảng trắng + `:`/`=` + khoảng trắng + nháy? ⇒ che giá trị. */
-function refreshFieldRanges(s: string, out: Range[]): void {
-  const lower = s.toLowerCase();
-  const key = 'refresh_token';
-  let from = 0;
-  for (;;) {
-    const at = lower.indexOf(key, from);
-    if (at < 0) return;
-    let i = at + key.length;
-    if (s[i] === '"' || s[i] === "'") i++;
-    while (i < s.length && (s[i] === ' ' || s[i] === '\t')) i++;
-    if (s[i] === ':' || s[i] === '=') {
-      i++;
-      while (i < s.length && (s[i] === ' ' || s[i] === '\t')) i++;
-      if (s[i] === '"' || s[i] === "'") i++;
-      let j = i;
-      while (j < s.length && s[j] !== '"' && s[j] !== "'" && s[j] !== ',' && s[j] !== '}' && s[j] !== ' ') j++;
-      if (j > i) out.push([i, j]);
-      from = Math.max(j, at + 1);
-    } else {
-      from = at + 1;
-    }
-  }
-}
-
-/** Che mọi đoạn giống credential. Tuyến tính theo độ dài chuỗi. */
-export function redact(s: string): string {
-  if (s.length === 0) return s;
-  const ranges: Range[] = [];
-  prefixRanges(s, 'sk-ant-', 10, ranges);
-  prefixRanges(s, 'sk-', 20, ranges, true);
-  prefixRanges(s, 'ya29.', 10, ranges);
-  prefixRanges(s, '1//0', 10, ranges);
-  prefixRanges(s, 'AIza', 30, ranges);
-  jwtRanges(s, ranges);
-  canaryRanges(s, ranges);
-  pemRanges(s, ranges);
-  refreshFieldRanges(s, ranges);
-  if (ranges.length === 0) return s;
-  ranges.sort((a, b) => a[0] - b[0]);
-  let out = '';
-  let pos = 0;
-  for (const [a, b] of ranges) {
-    if (b <= pos) continue;
-    const start = Math.max(a, pos);
-    out += s.slice(pos, start) + REDACTED;
-    pos = b;
-  }
-  return out + s.slice(pos);
+/** Dòng đi ra ngoài: nguyên văn nếu sạch, ngược lại một dòng đánh dấu (không chứa nội dung gốc). */
+export function redactLine(line: string): string {
+  const hit = credentialInLine(line);
+  return hit === null ? line : redactedMarker(hit);
 }
