@@ -786,3 +786,36 @@ describe('contracts fd1fd84 / 3af4e6a: password / passwd, NFKC, trần độ dà
     expect(() => redactText(`${hugeKey}: v ${'refresh_token '.repeat(10)}`)).not.toThrow();
   });
 });
+
+describe('bản NFKC (security review MEDIUM ×2): khớp ⇒ che cả chuỗi; NFKC vượt trần ⇒ too_large, không quét', () => {
+  const fw = (t: string) => [...t].map((c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)).join('');
+  const FDFA = String.fromCharCode(0xfdfa);
+  it('credential A dạng ASCII + credential B CÙNG id chỉ lộ sau NFKC (fullwidth) ⇒ B cũng bị che (cả chuỗi)', () => {
+    const a = ['abcd', '1234', 'XYZ'].join('');
+    const b = ['QWERTY', '98765z'].join('');
+    for (const pad of [0, 70_000]) {
+      const line = `${'x '.repeat(pad / 2)}api_key=${a} ${fw('api_key')}=${b} hết`;
+      expect(detectCredential(line)).not.toBeNull();
+      const out = redactText(line);
+      expect(out, `pad ${pad}`).not.toContain(a);
+      expect(out, `pad ${pad}`).not.toContain(b);
+    }
+    // chỉ có B (fullwidth) trong chuỗi > 64 Ki ký tự ⇒ detectCredential báo ngay khớp của bản NFKC
+    expect(detectCredential(`${'y '.repeat(40_000)}${fw('client_secret')}=${b}`)).toBe('credential_assignment');
+  });
+  it('100 Ki ký tự U+FDFA (NFKC ×18 > trần) ⇒ too_large, không quét, < 250 ms', () => {
+    const s = FDFA.repeat(100_000);
+    const t0 = performance.now();
+    expect(detectCredential(s)).toBe('too_large');
+    expect(scanText(s)).toEqual({ status: 'too_large', length: 100_000 });
+    expect(redactText(s)).toBe('[REDACTED:too_large len=100000]');
+    expect(performance.now() - t0).toBeLessThan(250);
+  });
+  it('NFKC trong trần vẫn quét bình thường; tiếng Việt 1 MiB (NFKC không đổi) không thành too_large', () => {
+    const v = ['abcd', '1234', 'XYZ'].join('');
+    expect(detectCredential(`${FDFA.repeat(50_000)} api_key=${v}`)).toBe('credential_assignment');
+    const viet = 'Xin chào, đây là một câu tiếng Việt bình thường lúc 14:00. '.repeat(18_000).slice(0, SCAN_MAX_CHARS);
+    expect(detectCredential(viet)).toBeNull();
+    expect(redactText(viet)).toBe(viet);
+  });
+});

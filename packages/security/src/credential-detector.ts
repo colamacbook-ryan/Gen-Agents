@@ -29,6 +29,7 @@
 // lọc trước bằng includes / indexOf gốc của V8 rồi mới chạy regex có tiền tố chữ cố định.
 
 import {
+  boundedNfkc,
   CREDENTIAL_KEY_NAMES,
   CREDENTIAL_PATTERN_IDS,
   type CredentialPatternId,
@@ -1171,8 +1172,16 @@ function foldUnicodeSpaces(s: string): string {
   return x;
 }
 
-function collect(raw: string, firstOnly: boolean): CredentialSpan[] {
+/** Quét một chuỗi đã chặn kích thước. null ⇒ bản NFKC vượt trần (`too_large`, không quét gì). */
+function collect(raw: string, firstOnly: boolean, max: number): CredentialSpan[] | null {
   const s = foldUnicodeSpaces(raw);
+  // NFKC tính TRƯỚC mọi lượt quét bằng `boundedNfkc` của contracts (theo khúc, độ dài THẬT, dừng ngay khi vượt trần —
+  // security review MEDIUM: NFKC nở tới 18×, vd U+FDFA): vượt trần ⇒ too_large, không quét (như chuỗi gốc quá trần)
+  let nf: string | null = s;
+  if (NON_ASCII_RE.test(s)) {
+    nf = boundedNfkc(s, max);
+    if (nf === null) return null;
+  }
   const spans: CredentialSpan[] = [];
   const emit: Emit = (start, end, patternId) => {
     spans.push({ start, end, patternId });
@@ -1205,26 +1214,18 @@ function collect(raw: string, firstOnly: boolean): CredentialSpan[] {
   }
 
   // NFKC (contracts testWithNfkc): ký tự tương thích — fullwidth ngoài trần 64 Ki của bước gập, chữ khoanh tròn, chữ in
-  // trên / dưới, chữ ghép… ⇒ quét thêm bản NFKC để PHÁT HIỆN. Vị trí không ánh xạ được (NFKC đổi độ dài) ⇒ bản NFKC có
-  // nhiều đoạn của một id hơn các lượt trước thì che CẢ chuỗi (mặc định chặn).
-  if (NON_ASCII_RE.test(s)) {
-    const nf = s.normalize('NFKC');
-    if (nf !== s) {
-      const before = new Map<string, number>();
-      for (const sp of spans) before.set(sp.patternId, (before.get(sp.patternId) ?? 0) + 1);
-      const seen = new Map<string, number>();
-      let extra: string | null = null;
-      runDetectors(nf, (_a, _b, id) => {
-        const c = (seen.get(id) ?? 0) + 1;
-        seen.set(id, c);
-        if (c <= (before.get(id) ?? 0)) return false;
-        extra = id;
-        return true;
-      });
-      if (extra !== null) {
-        spans.push({ start: 0, end: s.length, patternId: extra });
-        if (firstOnly) return spans;
-      }
+  // trên / dưới, chữ ghép… ⇒ quét thêm bản NFKC. Vị trí KHÔNG ánh xạ được (NFKC đổi độ dài) ⇒ bản NFKC khác chuỗi và có
+  // BẤT KỲ khớp nào thì che / chặn CẢ chuỗi (fail-closed, security review MEDIUM: suy "khớp mới" bằng đếm theo id lọt khi
+  // lượt trước đếm trùng một đoạn).
+  if (nf !== s) {
+    let nfHit: string | null = null;
+    runDetectors(nf, (_a, _b, id) => {
+      nfHit = id;
+      return true;
+    });
+    if (nfHit !== null) {
+      spans.push({ start: 0, end: s.length, patternId: nfHit });
+      if (firstOnly) return spans;
     }
   }
 
@@ -1250,7 +1251,8 @@ export function scanText(text: string, opts: { maxChars?: number; firstOnly?: bo
   const max = opts.maxChars ?? SCAN_MAX_CHARS;
   if (text.length > max) return { status: 'too_large', length: text.length };
   const firstOnly = opts.firstOnly ?? false;
-  const spans = collect(text, firstOnly);
+  const spans = collect(text, firstOnly, max);
+  if (spans === null) return { status: 'too_large', length: text.length };
   if (spans.length === 0) return { status: 'clean' };
   if (!firstOnly) spans.sort((a, b) => a.start - b.start || b.end - a.end);
   return { status: 'match', patternId: (spans[0] as CredentialSpan).patternId, spans };

@@ -129,6 +129,28 @@ describe('redactLine — phát hiện ⇒ thay CẢ dòng (fail-closed, không c
   });
 });
 
+describe('NFKC có trần (DoS: U+FDFA nở 18×) — rào 3 dùng boundedNfkc của contracts', () => {
+  const bloat = '\uFDFA'.repeat(100_000); // 100 K ký tự ⇒ ~1,8 M sau NFKC (> trần 1 MiB)
+  it('gọi thẳng credentialKeyAssignment trên 100 K × U+FDFA ⇒ true (fail-closed), < 250 ms', () => {
+    const t0 = performance.now();
+    expect(credentialKeyAssignment(bloat)).toBe(true);
+    expect(performance.now() - t0).toBeLessThan(250);
+  });
+  it('qua redactLine ⇒ thay cả dòng (too_large), không chứa nội dung gốc', () => {
+    const out = redactLine(bloat);
+    expect(JSON.parse(out)).toEqual({ $ga: 'line_redacted', patternId: 'too_large' });
+  });
+  it('tiếng Việt có dấu 1 MiB ⇒ bình thường (không bị coi là phình), đi nguyên văn', () => {
+    const vi = 'Xin chào, hôm nay trời đẹp — tác tử đã xử lý xong việc của chủ. ';
+    const line = vi.repeat(Math.floor(MAX_SCAN_CHARS / vi.length));
+    expect(line.length).toBeLessThanOrEqual(MAX_SCAN_CHARS);
+    const t0 = performance.now();
+    expect(credentialKeyAssignment(line)).toBe(false);
+    expect(redactLine(line)).toBe(line);
+    expect(performance.now() - t0).toBeLessThan(2000);
+  });
+});
+
 describe('RedactingLineWriter — che theo DÒNG hoàn chỉnh', () => {
   it('token bị cắt giữa hai khúc vẫn được che (che sau khi ráp dòng)', () => {
     let out = '';

@@ -107,6 +107,10 @@ const adversarial: Record<string, (n: number) => string> = {
   // khoảng trắng Unicode (gập thành space trước khi quét)
   'NBSP xen kẽ': (n) => fill(`a${NBSP}`, n),
   'U+3000 + password= lặp': (n) => fill(`password${IDEO_SPACE}=${IDEO_SPACE}x `, n),
+  // NFKC (security review MEDIUM DoS): ký tự nở ×18 / ×3, tiếng Việt dài (NFKC không đổi), fullwidth (NFKC đổi, ×1)
+  'U+FDFA lặp (NFKC nở ×18 ⇒ too_large)': (n) => fill(String.fromCharCode(0xfdfa), n),
+  'dấu … lặp (NFKC nở ×3)': (n) => fill(`a${String.fromCharCode(0x2026)}`, n),
+  'fullwidth chữ lặp (NFKC đổi, không nở)': (n) => fill(String.fromCharCode(0xff41, 0xff50, 0xff49, 0x20), n),
 };
 
 describe(`chuỗi đối kháng — chặn (dừng ở mẫu đầu): tỉ lệ 1 MiB / 128 KiB < ${MAX_RATIO}, 1 MiB < ${CAP_MS} ms`, () => {

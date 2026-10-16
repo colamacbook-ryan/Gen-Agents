@@ -1,4 +1,4 @@
-import { CREDENTIAL_KEY_NAMES, findCredentialLike, normalizeCredentialName } from '@ga/contracts';
+import { boundedNfkc, CREDENTIAL_KEY_NAMES, findCredentialLike, normalizeCredentialName } from '@ga/contracts';
 import { detectCredential, SCAN_MAX_CHARS } from '@ga/security';
 
 // Che credential trong stdout / stderr của CLI trước khi rời container (BUILD-PLAN §B.5 bước 6, DATABASE §9.5 bước 7).
@@ -23,11 +23,14 @@ export function redactedMarker(patternId: string): string {
 const KEY_NAMES: readonly string[] = [...new Set(CREDENTIAL_KEY_NAMES.map(normalizeCredentialName))];
 
 /**
- * Gập CẢ DÒNG để tìm tên khoá: NFKC + chữ thường + bỏ `_` / `-`. KHÔNG dùng `normalizeCredentialName` cho cả dòng — hàm đó
- * bỏ mọi ký tự ngoài a–z0–9 (mất `:` / `=` / nháy cần cho bước sau) và ném lỗi khi vượt trần tên khoá.
+ * Gập CẢ DÒNG để tìm tên khoá: NFKC CÓ TRẦN (`boundedNfkc` của contracts — NFKC có thể nở một ký tự tới 18×, vd U+FDFA ⇒
+ * dòng 1 MiB phình ~18 MiB trước khi quét: DoS) + chữ thường + bỏ `_` / `-`. Vượt trần ⇒ null (người gọi coi là có
+ * credential — fail-closed, thay cả dòng). KHÔNG dùng `normalizeCredentialName` cho cả dòng — hàm đó bỏ mọi ký tự ngoài
+ * a–z0–9 (mất `:` / `=` / nháy cần cho bước sau) và ném lỗi khi vượt trần tên khoá.
  */
-function foldLine(line: string): string {
-  return line.normalize('NFKC').toLowerCase().replace(/[_-]/g, '');
+function foldLine(line: string): string | null {
+  const nf = boundedNfkc(line, MAX_SCAN_CHARS);
+  return nf === null ? null : nf.toLowerCase().replace(/[_-]/g, '');
 }
 /** Trần số ký tự bỏ qua mỗi phía của dấu `:` / `=` (giữ tuyến tính: mỗi lần khớp tên tốn O(1)). */
 const MAX_SKIP = 64;
@@ -75,6 +78,7 @@ const escapeLen = (s: string, p: number) => (s.charCodeAt(p) === 92 && unicodeEs
 /** Rào 3: có phép gán `<tên khoá credential> : / = <giá trị không rỗng>` ở đâu đó trong dòng (mọi dạng nháy / escape). */
 export function credentialKeyAssignment(line: string): boolean {
   const lower = foldLine(line);
+  if (lower === null) return true; // NFKC vượt trần ⇒ không quét được ⇒ coi như có (fail-closed)
   for (const name of KEY_NAMES) {
     let from = 0;
     for (;;) {
