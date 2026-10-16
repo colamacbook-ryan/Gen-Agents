@@ -5,11 +5,15 @@
 //   - đăng ký app_maint(), app_now(), app_local_time(ts, tz) và MỌI hàm app_* mà schema đã vendor gọi (SYNC.json) —
 //     thiếu cài đặt cho một hàm trong danh sách ⇒ throw. Kết nối không đăng ký (sqlite3 CLI…) gọi tới trigger sẽ lỗi
 //     `no such function: app_maint` ⇒ không sửa/xoá được bảng được bảo vệ (fail-closed);
-//   - kết nối đọc mở `readonly` + `query_only` — không ghi được.
+//   - kết nối đọc mở `readonly` + `query_only` — không ghi được, và KHÔNG có app_actor();
+//   - MỌI ghi DB của app đi qua `conn.write(actorId, fn)`: transaction IMMEDIATE + gắn actor vào ngữ cảnh kết nối
+//     (app_actor() = actorId) suốt transaction, xoá ở finally kể cả khi lỗi. DB v2.3.3 (báo trước): guard chung buộc
+//     created_by / updated_by / deleted_by = app_actor(); app_actor() NULL ⇒ ghi bị từ chối (trừ bảo trì). Lint
+//     `db-write-only-via-write` chặn câu lệnh ghi ngoài write(). Job hệ thống dùng actor system (systemActorId).
 // Code app CẤM `INSERT OR REPLACE` / `REPLACE INTO` / `UPDATE OR REPLACE` / Kysely `.orReplace()` (lint `no-or-replace`).
 // Cấm gọi mạng / LLM bên trong transaction (transaction của better-sqlite3 là đồng bộ; lint heuristic `no-io-in-transaction`).
 
-import { type Clock, toDbTimestamp } from '@ga/contracts';
+import { type ActorSystemKey, type Clock, toDbTimestamp, ULID_RE } from '@ga/contracts';
 import Database from 'better-sqlite3';
 import { SYNC } from './generated/sync.ts';
 
@@ -41,12 +45,35 @@ export interface MaintenanceEvent {
   reason: string;
 }
 
+/** Query đã biên dịch (Kysely `.compile()` trả đúng dạng này) hoặc SQL thô có tham số. */
+export interface CompiledLike {
+  sql: string;
+  parameters: readonly unknown[];
+}
+export type Statementish = string | CompiledLike | { compile(): CompiledLike };
+
+/** Ngữ cảnh của một giao dịch ghi: chạy câu lệnh đồng bộ trên chính transaction đang mở. */
+export interface WriteContext {
+  readonly actorId: string;
+  run(q: Statementish, params?: readonly unknown[]): Database.RunResult;
+  get<R = unknown>(q: Statementish, params?: readonly unknown[]): R | undefined;
+  all<R = unknown>(q: Statementish, params?: readonly unknown[]): R[];
+}
+
 export interface AppConnection {
   readonly db: SqliteDatabase;
   readonly role: 'writer' | 'reader' | 'scratch';
   readonly clock: Clock;
   /** Giá trị app_maint() hiện tại. */
   inMaintenance(): boolean;
+  /** Actor của giao dịch ghi đang chạy (= app_actor()); null ngoài write(). */
+  currentActor(): string | null;
+  /**
+   * Cửa ghi DUY NHẤT của app: transaction IMMEDIATE, app_actor() = actorId trong suốt transaction, chạy `fn` ĐỒNG BỘ
+   * (không await — transaction của better-sqlite3 là đồng bộ), xoá actor ở finally kể cả khi lỗi (transaction rollback).
+   * Không lồng nhau. actorId = id ULID của hàng `actors` (người, Role hoặc actor system — job dùng systemActorId()).
+   */
+  write<T>(actorId: string, fn: (w: WriteContext) => T): T;
   /**
    * Bật ngữ cảnh bảo trì (app_maint() = 1) cho đúng một hàm đồng bộ, tắt ở finally (DATABASE §9.3).
    * Mặc định tự mở transaction; `{ transaction: 'caller' }` khi người gọi đã BEGIN (runner rebuild).
@@ -118,30 +145,50 @@ export function appLocalTime(ts: unknown, tz: unknown): string | null {
 interface FnState {
   maint: boolean;
   clock: Clock;
+  /** actor của giao dịch ghi hiện tại — chỉ write() đặt / xoá. */
+  actor: string | null;
 }
 
 type AppFunctionImpl = (db: SqliteDatabase, state: FnState) => void;
 
 /** Cài đặt cho từng hàm app_* — tên phải phủ SYNC.app_functions (kiểm lúc mở kết nối). */
-const APP_FUNCTIONS: Record<string, AppFunctionImpl> = {
+const APP_FUNCTIONS: Record<string, { impl: AppFunctionImpl; onReader: boolean }> = {
   // KHÔNG bật directOnly: trigger phải gọi được (DATABASE §9.3). Trả INTEGER 0/1 như bản Python.
-  app_maint: (db, st) => db.function('app_maint', { deterministic: false }, () => (st.maint ? 1n : 0n)),
-  app_now: (db, st) => db.function('app_now', { deterministic: false }, () => toDbTimestamp(st.clock.now())),
-  app_local_time: (db) => db.function('app_local_time', { deterministic: true }, appLocalTime),
+  app_maint: {
+    onReader: true,
+    impl: (db, st) => db.function('app_maint', { deterministic: false }, () => (st.maint ? 1n : 0n)),
+  },
+  app_now: {
+    onReader: true,
+    impl: (db, st) => db.function('app_now', { deterministic: false }, () => toDbTimestamp(st.clock.now())),
+  },
+  app_local_time: {
+    onReader: true,
+    impl: (db) => db.function('app_local_time', { deterministic: true }, appLocalTime),
+  },
+  // DB v2.3.3 (báo trước): actor của giao dịch ghi; NULL ngoài write() ⇒ guard từ chối ghi. Kết nối đọc KHÔNG có hàm này.
+  app_actor: {
+    onReader: false,
+    impl: (db, st) => db.function('app_actor', { deterministic: false }, () => st.actor),
+  },
 };
 
-export function registeredAppFunctions(): string[] {
-  return Object.keys(APP_FUNCTIONS).sort();
+/** Hàm app_* đăng ký cho một loại kết nối. */
+export function registeredAppFunctions(role: AppConnection['role'] = 'writer'): string[] {
+  return Object.entries(APP_FUNCTIONS)
+    .filter(([, f]) => role !== 'reader' || f.onReader)
+    .map(([name]) => name)
+    .sort();
 }
 
-function registerAppFunctions(db: SqliteDatabase, state: FnState): void {
+function registerAppFunctions(db: SqliteDatabase, state: FnState, role: AppConnection['role']): void {
   const missing = SYNC.appFunctions.filter((name) => !(name in APP_FUNCTIONS));
   if (missing.length > 0) {
     throw new ConnectionContractError(
       `Schema đã vendor (rev ${SYNC.rev.slice(0, 7)}) gọi hàm chưa có cài đặt: ${missing.join(', ')} — thêm vào APP_FUNCTIONS`,
     );
   }
-  for (const impl of Object.values(APP_FUNCTIONS)) impl(db, state);
+  for (const f of Object.values(APP_FUNCTIONS)) if (role !== 'reader' || f.onReader) f.impl(db, state);
 }
 
 // ---------------------------------------------------------------- pragma
@@ -182,6 +229,30 @@ function wrap(db: SqliteDatabase, role: AppConnection['role'], opts: OpenOptions
     role,
     clock: opts.clock,
     inMaintenance: () => state.maint,
+    currentActor: () => state.actor,
+    write<T>(actorId: string, fn: (w: WriteContext) => T): T {
+      if (role === 'reader') throw new ConnectionContractError('Kết nối đọc không ghi được');
+      if (typeof actorId !== 'string' || !ULID_RE.test(actorId)) {
+        throw new ConnectionContractError('write() cần actorId là ULID của một hàng actors');
+      }
+      if (state.actor !== null) throw new ConnectionContractError('write() không được lồng nhau');
+      const ctx = writeContext(db, actorId);
+      state.actor = actorId;
+      try {
+        return db
+          .transaction(() => {
+            const out = fn(ctx);
+            if (out instanceof Promise)
+              throw new ConnectionContractError(
+                'write() chỉ nhận hàm đồng bộ (transaction của better-sqlite3 là đồng bộ)',
+              );
+            return out;
+          })
+          .immediate();
+      } finally {
+        state.actor = null;
+      }
+    },
     withMaintenance<T>(reason: string, fn: () => T, o: { transaction: 'own' | 'caller' } = { transaction: 'own' }): T {
       if (role === 'reader') throw new ConnectionContractError('Kết nối đọc không có ngữ cảnh bảo trì');
       if (reason.trim().length === 0) throw new ConnectionContractError('withMaintenance cần lý do (ghi audit)');
@@ -208,6 +279,42 @@ function wrap(db: SqliteDatabase, role: AppConnection['role'], opts: OpenOptions
   };
 }
 
+function resolveStatement(q: Statementish, params: readonly unknown[] | undefined): CompiledLike {
+  if (typeof q === 'string') return { sql: q, parameters: params ?? [] };
+  const c = 'compile' in q ? q.compile() : q;
+  if (params && params.length > 0) throw new ConnectionContractError('query đã biên dịch không nhận thêm tham số');
+  return { sql: c.sql, parameters: c.parameters };
+}
+
+function writeContext(db: SqliteDatabase, actorId: string): WriteContext {
+  return {
+    actorId,
+    run: (q, params) => {
+      const c = resolveStatement(q, params);
+      return db.prepare(c.sql).run(...(c.parameters as unknown[]));
+    },
+    get: <R>(q: Statementish, params?: readonly unknown[]) => {
+      const c = resolveStatement(q, params);
+      return db.prepare(c.sql).get(...(c.parameters as unknown[])) as R | undefined;
+    },
+    all: <R>(q: Statementish, params?: readonly unknown[]) => {
+      const c = resolveStatement(q, params);
+      return db.prepare(c.sql).all(...(c.parameters as unknown[])) as R[];
+    },
+  };
+}
+
+/** id actor system của workspace cho job / tiến trình (scheduler, gateway, updater…). Thiếu ⇒ throw (không ghi vô danh). */
+export function systemActorId(conn: AppConnection, workspaceId: string, key: ActorSystemKey = 'system'): string {
+  const row = conn.db
+    .prepare(
+      "SELECT id FROM actors WHERE workspace_id = ? AND kind = 'system' AND system_key = ? AND purged_at IS NULL",
+    )
+    .get(workspaceId, key) as { id: string } | undefined;
+  if (!row) throw new ConnectionContractError(`workspace ${workspaceId} không có actor system '${key}'`);
+  return row.id;
+}
+
 function assertFilePath(path: string): void {
   if (path === ':memory:' || path === '') {
     throw new ConnectionContractError('Kết nối app phải là tệp DB (WAL); DB trong RAM chỉ dùng openScratch()');
@@ -219,9 +326,9 @@ export function openWriter(path: string, opts: OpenOptions): AppConnection {
   assertFilePath(path);
   const db = new Database(path);
   try {
-    const state: FnState = { maint: false, clock: opts.clock };
+    const state: FnState = { maint: false, clock: opts.clock, actor: null };
     applyAndVerifyPragmas(db, 'writer');
-    registerAppFunctions(db, state);
+    registerAppFunctions(db, state, 'writer');
     return wrap(db, 'writer', opts, state);
   } catch (e) {
     db.close();
@@ -234,9 +341,9 @@ export function openReader(path: string, opts: OpenOptions): AppConnection {
   assertFilePath(path);
   const db = new Database(path, { readonly: true, fileMustExist: true });
   try {
-    const state: FnState = { maint: false, clock: opts.clock };
+    const state: FnState = { maint: false, clock: opts.clock, actor: null };
     applyAndVerifyPragmas(db, 'reader');
-    registerAppFunctions(db, state);
+    registerAppFunctions(db, state, 'reader');
     return wrap(db, 'reader', opts, state);
   } catch (e) {
     db.close();
@@ -247,8 +354,8 @@ export function openReader(path: string, opts: OpenOptions): AppConnection {
 /** DB trong RAM cho công cụ (sinh kiểu, parity, test). Cùng hàm + pragma trừ WAL / mmap. Không dùng trong app. */
 export function openScratch(opts: OpenOptions): AppConnection {
   const db = new Database(':memory:');
-  const state: FnState = { maint: false, clock: opts.clock };
+  const state: FnState = { maint: false, clock: opts.clock, actor: null };
   applyAndVerifyPragmas(db, 'scratch');
-  registerAppFunctions(db, state);
+  registerAppFunctions(db, state, 'scratch');
   return wrap(db, 'scratch', opts, state);
 }

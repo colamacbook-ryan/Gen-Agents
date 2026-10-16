@@ -20,6 +20,7 @@ describe('lint-rules', () => {
         'dockerode-only-in-supervisor',
         'no-io-in-transaction',
         'no-redos-regex',
+        'db-write-only-via-write',
         'no-duplicate-component-names',
         'import-boundaries',
       ]),

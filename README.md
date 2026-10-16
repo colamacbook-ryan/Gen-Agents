@@ -18,7 +18,7 @@ pnpm test
 
 | Lệnh | Làm gì |
 |---|---|
-| `pnpm lint` | Biome + luật riêng của repo (`scripts/lint-rules.mjs`: cấm `OR REPLACE`, tên CLI/model ngoài adapter, tên owner, env `*SESSION*`/`*_OAUTH_TOKEN`, `console.log` ở apps, dockerode ngoài supervisor, I/O trong transaction, regex nguy cơ ReDoS, component trùng tên, ranh giới import) |
+| `pnpm lint` | Biome + luật riêng của repo (`scripts/lint-rules.mjs`: cấm `OR REPLACE`, tên CLI/model ngoài adapter, tên owner, env `*SESSION*`/`*_OAUTH_TOKEN`, `console.log` ở apps, dockerode ngoài supervisor, I/O trong transaction, ghi DB ngoài `conn.write(actor, fn)`, regex nguy cơ ReDoS, component trùng tên, ranh giới import) |
 | `pnpm lint:rules --selftest` | mỗi luật phải bắt đúng tệp mồi của nó |
 | `pnpm typecheck` | `tsc -b` (TS project references) |
 | `pnpm test` | Vitest: contracts, hợp đồng kết nối DB, runner migration, parity, selftest lint / license |

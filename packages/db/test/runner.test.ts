@@ -192,21 +192,24 @@ describe('runner — rebuild 9 bước (bảng có view + trigger phụ thuộc)
     conn = openWriter(join(tmp.dir, 'gen.sqlite'), { clock: clock() });
     migrate(conn, { dir: tmp.dir, appVersion: '0.0.0' });
     seedMinimal(conn);
-    const ins = conn.db.prepare(
-      'INSERT INTO positions (id, workspace_id, display_id, display_seq, created_by, title, title_template, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    const INS =
+      'INSERT INTO positions (id, workspace_id, display_id, display_seq, created_by, title, title_template, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+    conn.write(TENANT_ACTOR, (w) => {
+      w.run(INS, [
+        '01JPOS00000000000000000001',
+        TENANT_WS,
+        'PS-0001',
+        1,
+        TENANT_ACTOR,
+        'Trợ lý',
+        'Trợ lý của {owner_name}',
+        1,
+      ]);
+      w.run(INS, ['01JPOS00000000000000000002', TENANT_WS, 'PS-0002', 2, TENANT_ACTOR, 'Kế toán', null, 0]);
+    });
+    conn.write(SYS_ACTOR, (w) =>
+      w.run(INS, ['01JPOS00000000000000000003', SYS_WS, 'PS-0001', 1, SYS_ACTOR, 'Hệ thống', null, 0]),
     );
-    ins.run(
-      '01JPOS00000000000000000001',
-      TENANT_WS,
-      'PS-0001',
-      1,
-      TENANT_ACTOR,
-      'Trợ lý',
-      'Trợ lý của {owner_name}',
-      1,
-    );
-    ins.run('01JPOS00000000000000000002', TENANT_WS, 'PS-0002', 2, TENANT_ACTOR, 'Kế toán', null, 0);
-    ins.run('01JPOS00000000000000000003', SYS_WS, 'PS-0001', 1, SYS_ACTOR, 'Hệ thống', null, 0);
   });
   afterEach(() => {
     conn.close();

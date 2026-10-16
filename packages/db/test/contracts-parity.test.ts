@@ -1,6 +1,8 @@
 // Hợp đồng @ga/contracts phải khớp DB đã vendor: prefix display_id, enum phiên / tool UI / capability / container,
 // 16 trạng thái avatar, và ánh xạ lỗi RAISE → mã i18n (G-03). Lệch ⇒ đỏ ngay khi `pnpm db:sync` đổi DB.
 import {
+  ACTOR_KINDS,
+  ACTOR_SYSTEM_KEYS,
   AGENT_KINDS,
   AUTH_METHODS,
   AVATAR_STATES,
@@ -50,6 +52,11 @@ describe('contracts ↔ DB', () => {
         ).n === 2,
     );
     expect(sorted(Object.values(ENTITY_TYPES))).toEqual(sorted(withDisplay));
+  });
+
+  it('actor: system_key và kind khớp CHECK của bảng actors', () => {
+    expect(sorted(ACTOR_SYSTEM_KEYS)).toEqual(sorted(DB_ENUMS['actors.system_key']));
+    expect(sorted(ACTOR_KINDS)).toEqual(sorted(DB_ENUMS['actors.kind']));
   });
 
   it('enum phiên khớp CHECK của bảng sessions', () => {

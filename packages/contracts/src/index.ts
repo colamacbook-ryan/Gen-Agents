@@ -1,3 +1,4 @@
+export * from './actors.ts';
 export * from './clock.ts';
 export * from './engine.ts';
 export * from './errors.ts';

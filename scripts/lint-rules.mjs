@@ -395,6 +395,36 @@ export const RULES = [
     },
   },
   {
+    id: 'db-write-only-via-write',
+    why: 'mọi ghi DB của app đi qua conn.write(actorId, fn) — app_actor() gắn actor cho từng giao dịch (hợp đồng ⑥-05, DB v2.3.3)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      /^(apps|packages)\//.test(rel) &&
+      !isTest(rel) &&
+      !rel.startsWith('packages/db/src/runner/') &&
+      !rel.startsWith('packages/db/scripts/') &&
+      rel !== 'packages/db/src/connection.ts',
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      const spans = findAll(code, /\.write\s*\(/).map((m) => {
+        const open = m.index + m[0].length - 1;
+        return [open, open + balancedParen(code, open).length];
+      });
+      const inWrite = (i) => spans.some(([a, b]) => i >= a && i < b);
+      const pats = [
+        /\bINSERT\s+(?:OR\s+\w+\s+)?INTO\b/i,
+        /\bUPDATE\s+(?:OR\s+\w+\s+)?["`\w.]+\s+SET\b/i,
+        /\bDELETE\s+FROM\b/i,
+        /\.(?:insertInto|updateTable|deleteFrom|replaceInto|mergeInto)\s*\(/,
+      ];
+      return pats.flatMap((re) =>
+        findAll(code, re)
+          .filter((m) => !inWrite(m.index))
+          .map((m) => ({ line: lineOf(code, m.index), msg: `ghi DB ngoài conn.write(): "${m[0]}"` })),
+      );
+    },
+  },
+  {
     id: 'no-redos-regex',
     why: 'regex không được có lookaround chứa * / + hoặc quantifier lồng — nguy cơ ReDoS (STD-11 1.10, L-20261016-30)',
     applies: (rel) => CODE_EXT.test(rel) && /^(apps|packages)\//.test(rel) && !isTest(rel),

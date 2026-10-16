@@ -341,16 +341,23 @@ export function migrate(
       continue;
     }
     const t0 = performance.now();
-    inTxn(conn, () => {
-      dropAll(conn, 'view'); // view có thể làm ALTER … RENAME lỗi (DATABASE §10.1); dựng lại ngay sau tệp
-      try {
-        conn.db.exec(m.sql);
-      } catch (e) {
-        throw new MigrationError(`${m.file}: ${(e as Error).message}`, { cause: e });
-      }
-      rebuildRepeatables(conn, set);
-      recordMigration(conn, m, opts.appVersion, Math.round(performance.now() - t0), null);
-    });
+    // migration = thao tác bảo trì của hệ thống (DATABASE §10.4 bước 2): app_maint() = 1, không có actor người dùng
+    inTxn(conn, () =>
+      conn.withMaintenance(
+        `migration ${m.file}`,
+        () => {
+          dropAll(conn, 'view'); // view có thể làm ALTER … RENAME lỗi (DATABASE §10.1); dựng lại ngay sau tệp
+          try {
+            conn.db.exec(m.sql);
+          } catch (e) {
+            throw new MigrationError(`${m.file}: ${(e as Error).message}`, { cause: e });
+          }
+          rebuildRepeatables(conn, set);
+          recordMigration(conn, m, opts.appVersion, Math.round(performance.now() - t0), null);
+        },
+        { transaction: 'caller' },
+      ),
+    );
     done.push({ version: m.version, name: m.name, kind: m.kind, durationMs: Math.round(performance.now() - t0) });
   }
 
