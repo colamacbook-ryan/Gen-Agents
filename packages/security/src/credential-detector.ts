@@ -172,7 +172,9 @@ const PREFIX_RE_SRC = PREFIX_FLAT.map(
 const knownPrefixes: Detector = {
   id: 'known_prefix',
   strong: true,
-  pre: (v) => PREFIX_FLAT.some(({ p }) => v.s.includes(p)),
+  // không lọc trước bằng includes: includes / indexOf của V8 với kim ngắn chậm hẳn trên văn bản lặp ký tự đầu của kim
+  // (vd 'AIza' trên 'AAAA…' ≈ 8 ms/MB); regex gộp dưới đây tự lọc nhanh hơn
+  pre: () => true,
   find(v, emit) {
     const re = new RegExp(PREFIX_RE_SRC, 'g');
     for (let m = re.exec(v.s); m; m = re.exec(v.s)) {
@@ -198,7 +200,7 @@ const knownPrefixes: Detector = {
 const awsAccessKey: Detector = {
   id: 'aws_access_key_id',
   strong: true,
-  pre: (v) => v.s.includes('AKIA') || v.s.includes('ASIA'),
+  pre: (v) => /A[KS]IA/.test(v.s),
   find(v, emit) {
     // ranh giới TRƯỚC trong regex (lookbehind MỘT ký tự, không quantifier; rộng hơn `\b` của tham chiếu vì cho cả '_').
     // KHÔNG đòi ranh giới SAU: tham chiếu `\b(?:AKIA|ASIA)[0-9A-Z]{16}` bắt cả khi chữ / số dính liền phía sau.

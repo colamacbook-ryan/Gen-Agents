@@ -80,7 +80,9 @@ export function readSessionCookie(cookieHeader: string | null | undefined, opts:
     count++;
     found = part.slice(eq + 1).trim();
   }
-  if (count !== 1 || found === null || !TOKEN_RE.test(found)) return null;
+  // token phải là base64url CHUẨN của đúng 32 byte — giá trị 43 ký tự "gần đúng" (bit thừa ở ký tự cuối) trả null ở đây
+  // thay vì để hashSessionToken ném lỗi ở tầng trên (review adversarial L-SEC: cookie giả làm request lỗi 500)
+  if (count !== 1 || found === null || !TOKEN_RE.test(found) || !b64urlDecodeStrict(found)) return null;
   return found;
 }
 

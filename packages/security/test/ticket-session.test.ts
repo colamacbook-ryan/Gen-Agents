@@ -204,6 +204,10 @@ describe('phiên cookie', () => {
     expect(readSessionCookie(`ga_sid=${token}`, { secure: true })).toBeNull();
     expect(readSessionCookie(`ga_sid=${token}; ga_sid=${other}`, { secure: false })).toBeNull();
     expect(readSessionCookie('ga_sid=abc', { secure: false })).toBeNull();
+    // 43 ký tự đúng bảng chữ nhưng không phải base64url chuẩn (bit thừa ở ký tự cuối) ⇒ null, không ném
+    const nonCanonical = `${token.slice(0, 42)}${token.endsWith('B') ? 'C' : 'B'}`;
+    expect(readSessionCookie(`ga_sid=${'A'.repeat(42)}B`, { secure: false })).toBeNull();
+    expect(() => readSessionCookie(`ga_sid=${nonCanonical}`, { secure: false })).not.toThrow();
     expect(readSessionCookie(`ga_sid=${token}; x=${'y'.repeat(9000)}`, { secure: false })).toBeNull();
     expect(readSessionCookie(null, { secure: false })).toBeNull();
   });
