@@ -56,9 +56,6 @@ describe('ca âm từng luật (chỉ chính luật đó lẽ ra phải bắt �
     credential_assignment: [
       'Bạn đổi password: ở trang cài đặt',
       'token: ok',
-      'xpassword=abcdefghijkl',
-      'access_token=short',
-      'client_secret: "1234567"',
       'api_key field is required',
       'access_token',
     ],
@@ -227,11 +224,13 @@ describe('gán credential theo tên khoá trên DÒNG THÔ (Gen 2026-10-16, revi
     expect(detectCredential(`x \\\\\\\\u0072efresh_token: ${v}`)).toBe('refresh_token_field');
     expect(detectCredential(`pct %2572efresh_token%253D${v}`)).toBe('refresh_token_field');
   });
-  it('ca âm (a)/(b): giá trị < 8 ký tự, tên mở rộng thiếu ranh giới, \\u giải ra chữ khác, không có dấu gán', () => {
+  it('ca âm (a)/(b): tên mở rộng thiếu ranh giới, \\u giải ra chữ khác, không có dấu gán', () => {
+    // giá trị < 8 ký tự với tên credential của contracts (`access_token=short`) NAY bị bắt bởi credential_field_name
+    expect(detectCredential('access_token=short')).toBe('credential_field_name');
+    expect(detectCredential('client_secret: "1234567"')).toBe('credential_field_name');
+    // `password` / `passwd` là tên credential của contracts (3af4e6a): khớp MỌI vị trí như tham chiếu, giá trị ≥ 8
+    expect(detectCredential('xpassword=abcdefghijkl')).toBe('credential_assignment');
     for (const s of [
-      'access_token=short',
-      'client_secret: "1234567"',
-      'xpassword=abcdefghijkl',
       '\\u0073efresh_token=abcdefghijk',
       'refresh_token is documented here',
       '\\\\u0072efresh_tokens and more',
@@ -647,5 +646,143 @@ describe('tên credential mọi kiểu viết + base64_secret_run (contracts 0a2
     ]);
     expect(samples.length).toBeGreaterThan(200);
     expect(samples.filter((x) => detectCredential(x) !== null)).toEqual([]);
+  });
+});
+
+describe('khoá object: chuẩn hoá CHẶT (review MEDIUM — hồi quy khi chỉ bỏ `_` / `-`)', () => {
+  const fullwidth = (s: string) => [...s].map((c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)).join('');
+  const NBSP = String.fromCharCode(0xa0);
+  const keys = [
+    'api key',
+    'api.key',
+    'api:key',
+    'api_key ',
+    ' api_key',
+    `api_key${NBSP}`,
+    'Refresh.Token',
+    'client secret',
+    'x:api:key',
+    'pass word',
+    fullwidth('api_key'),
+    fullwidth('password'),
+    `${fullwidth('Access')}_token`,
+  ];
+  it('khoá có dấu cách, `.`, `:`, khoảng trắng cuối, fullwidth ⇒ vẫn là khoá nhạy cảm', () => {
+    for (const k of keys) {
+      expect(isSensitiveKey(k), JSON.stringify(k)).toBe(true);
+      expect(screenPayload({ data: { [k]: 'x' } }), JSON.stringify(k)).toMatchObject({
+        code: 'credential_like_payload',
+        patternId: 'credential_field_name',
+      });
+      expect(JSON.stringify(redactValue({ [k]: 'v4lue-x' })), JSON.stringify(k)).not.toContain('v4lue-x');
+    }
+  });
+  it('khoá thường không bị coi là nhạy cảm', () => {
+    for (const k of ['token count', 'keyboard', 'api', 'secretary', 'my.key.id', 'passport']) {
+      expect(isSensitiveKey(k), k).toBe(false);
+    }
+  });
+});
+
+describe('phép gán khoá credential, giá trị NGẮN (credential_field_name — runner bỏ rào riêng, L-RT 2026-10-16)', () => {
+  const nest = (s: string, layers: number) => {
+    let out = s;
+    for (let i = 0; i < layers; i++) out = JSON.stringify({ msg: out });
+    return out;
+  };
+  const KEYS = ['refresh_token', 'access_token', 'id_token', 'client_secret', 'private_key', 'api_key', 'api_token'];
+  it('khoá JSON có nháy, `name=…`, `name: …`, giá trị 1 ký tự; JSON lồng 0–3 lớp ⇒ bắt', () => {
+    for (const key of KEYS) {
+      for (let layers = 0; layers <= 3; layers++) {
+        const line = nest(JSON.stringify({ [key]: 'v' }), layers);
+        expect(detectCredential(line), `${key} @ ${layers} lớp: ${line}`).not.toBeNull();
+      }
+      for (const line of [`${key}=v`, `${key}: v`, `'${key}': 'v'`, `x.${key}=ab`, `${key.toUpperCase()}: 1`]) {
+        expect(detectCredential(line), line).not.toBeNull();
+      }
+    }
+  });
+  it('chữ trong tên khoá viết `\\uXXXX` (tổng ≤ 3 lớp giải) ⇒ bắt', () => {
+    for (let layers = 0; layers <= 2; layers++) {
+      for (const inner of ['{"\\u0061ccess_token":"v"}', '{"api\\u005fkey":"v"}', '{"\\u0049D_TOKEN":"v"}']) {
+        const line = nest(inner, layers);
+        expect(detectCredential(line), line).not.toBeNull();
+      }
+    }
+  });
+  it('che đúng giá trị (giá trị có nháy ⇒ tới nháy đóng, kể cả có dấu cách), JSON vẫn hợp lệ', () => {
+    expect(redactText('INFO {"access_token":"x.y z"}')).toBe(
+      'INFO {"access_token":"[REDACTED:credential_field_name]"}',
+    );
+    expect(redactText("{'client_secret': 'ab'}")).toBe("{'client_secret': '[REDACTED:credential_field_name]'}");
+    expect(redactText('api_key=v&x=1')).toBe('api_key=[REDACTED:credential_field_name]&x=1');
+    const line = redactLogLine(JSON.stringify({ msg: JSON.stringify({ id_token: 'a b' }) }));
+    expect(JSON.parse(JSON.parse(line).msg)).toEqual({ id_token: '[REDACTED:credential_field_name]' });
+  });
+  it('ca âm: không có giá trị, khoá chỉ CHỨA tên credential, chỉ nhắc tên, null / true / false', () => {
+    for (const line of [
+      '{"api_key":""}',
+      "{'api_key': ''}",
+      'api_key:',
+      'api_key: ,',
+      'apikeys: 3',
+      'x_api_key_count 4',
+      'MAX_TOKEN=4096',
+      'MAX_TOKENS=4096',
+      'my_access_token=x',
+      'access_token_count: 2',
+      '{"access_token": null}',
+      '{"id_token":false}',
+      'Rotate your refresh_token regularly',
+      'docs: access_token and id_token are described here',
+      '{"field":"refresh_token"}',
+      'task-runner ask-me',
+    ]) {
+      expect(detectCredential(line), line).toBeNull();
+    }
+  });
+});
+
+describe('contracts fd1fd84 / 3af4e6a: password / passwd, NFKC, trần độ dài tên (không ném RangeError)', () => {
+  it('password / passwd: khoá object, phép gán giá trị ≥ 8 ⇒ bắt; câu văn / giá trị ngắn ⇒ không (như contracts)', () => {
+    const v = ['pAsS', '1w0rD', 'pAsS'].join('');
+    expect(screenPayload({ password: 'x' })).toMatchObject({ patternId: 'credential_field_name' });
+    expect(screenPayload({ Passwd: v })).toMatchObject({ patternId: 'credential_field_name' });
+    for (const s of [`password=${v}`, `"password": "${v}"`, `login with passwd: '${v}'`]) {
+      expect(detectCredential(s), s).not.toBeNull();
+      expect(redactText(s), s).not.toContain(v);
+    }
+    for (const s of [
+      'Quên password? Bấm "Đặt lại mật khẩu"',
+      'password: tối thiểu 12 ký tự',
+      'Đổi password mỗi 90 ngày, không dùng lại passwd cũ',
+      'the password field is required',
+      'password=****',
+      'password = short',
+    ]) {
+      expect(detectCredential(s), s).toBeNull();
+    }
+  });
+  it('NFKC: tên credential viết fullwidth trong chuỗi > 64 Ki ký tự, chữ khoanh tròn ⇒ vẫn bắt (che cả chuỗi)', () => {
+    const fw = (t: string) => [...t].map((c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)).join('');
+    const circledA = String.fromCharCode(0x24d0);
+    const value = ['abcd', '1234', 'XYZ'].join('');
+    const big = `${'văn bản thường '.repeat(5000)}${fw('api_key')}=${value} hết`;
+    expect(big.length).toBeGreaterThan(65_536);
+    expect(detectCredential(big)).not.toBeNull();
+    expect(redactText(big)).not.toContain(value);
+    const circled = `log ${circledA}ccess_token=${value}`;
+    expect(detectCredential(circled)).not.toBeNull();
+    expect(redactText(circled)).not.toContain(value);
+  });
+  it('khoá / tên dài quá trần: không ném lỗi, coi là nhạy cảm (fail-closed)', () => {
+    const hugeKey = `api${'_'.repeat(20_000)}key`;
+    expect(isSensitiveKey(hugeKey)).toBe(true);
+    expect(isSensitiveKey('x'.repeat(20_000))).toBe(true);
+    expect(() => redactValue({ [hugeKey]: 'v4lue-x' })).not.toThrow();
+    expect(JSON.stringify(redactValue({ [hugeKey]: 'v4lue-x' }))).not.toContain('v4lue-x');
+    expect(() => detectCredential(`${hugeKey}=v`)).not.toThrow();
+    expect(detectCredential(`${hugeKey}=v`)).not.toBeNull();
+    expect(() => redactText(`${hugeKey}: v ${'refresh_token '.repeat(10)}`)).not.toThrow();
   });
 });
