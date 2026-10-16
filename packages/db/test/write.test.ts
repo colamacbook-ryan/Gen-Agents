@@ -38,7 +38,7 @@ describe('write(actor, fn)', () => {
   it('app_actor() = actor trong giao dịch, NULL ngoài giao dịch', () => {
     expect(actorNow(conn)).toBeNull();
     const seen = conn.write(TENANT_ACTOR, (w) => {
-      w.run(POS('01JPOS00000000000000000001', 1, TENANT_ACTOR));
+      w.run(POS('01JP0S00000000000000000001', 1, TENANT_ACTOR));
       return w.get<{ a: string }>('SELECT app_actor() AS a')?.a;
     });
     expect(seen).toBe(TENANT_ACTOR);
@@ -50,15 +50,15 @@ describe('write(actor, fn)', () => {
   it('lỗi giữa giao dịch ⇒ rollback + actor bị xoá', () => {
     expect(() =>
       conn.write(TENANT_ACTOR, (w) => {
-        w.run(POS('01JPOS00000000000000000001', 1, TENANT_ACTOR));
+        w.run(POS('01JP0S00000000000000000001', 1, TENANT_ACTOR));
         throw new Error('boom');
       }),
     ).toThrow('boom');
     expect(count(conn, 'SELECT count(*) FROM positions')).toBe(0);
     expect(actorNow(conn)).toBeNull();
     // lỗi do DB (vi phạm UNIQUE) cũng vậy
-    conn.write(TENANT_ACTOR, (w) => w.run(POS('01JPOS00000000000000000001', 1, TENANT_ACTOR)));
-    expect(() => conn.write(TENANT_ACTOR, (w) => w.run(POS('01JPOS00000000000000000002', 1, TENANT_ACTOR)))).toThrow();
+    conn.write(TENANT_ACTOR, (w) => w.run(POS('01JP0S00000000000000000001', 1, TENANT_ACTOR)));
+    expect(() => conn.write(TENANT_ACTOR, (w) => w.run(POS('01JP0S00000000000000000002', 1, TENANT_ACTOR)))).toThrow();
     expect(actorNow(conn)).toBeNull();
     expect(count(conn, 'SELECT count(*) FROM positions')).toBe(1);
   });
@@ -68,7 +68,7 @@ describe('write(actor, fn)', () => {
     expect(actorNow(conn)).toBeNull();
     expect(() =>
       conn.write(TENANT_ACTOR, async (w) => {
-        w.run(POS('01JPOS00000000000000000003', 3, TENANT_ACTOR));
+        w.run(POS('01JP0S00000000000000000003', 3, TENANT_ACTOR));
       }),
     ).toThrow(/đồng bộ/);
     expect(count(conn, 'SELECT count(*) FROM positions')).toBe(0);
@@ -83,7 +83,7 @@ describe('write(actor, fn)', () => {
     conn.write(TENANT_ACTOR, (w) => {
       w.run(
         k.insertInto('positions').values({
-          id: '01JPOS00000000000000000009',
+          id: '01JP0S00000000000000000009',
           workspace_id: TENANT_WS,
           display_id: 'PS-0009',
           display_seq: 9,
@@ -117,11 +117,11 @@ describe('write(actor, fn)', () => {
     () => {
       expect(() =>
         conn.db
-          .prepare(POS('01JPOS00000000000000000005', 5, TENANT_ACTOR).sql)
-          .run(...POS('01JPOS00000000000000000005', 5, TENANT_ACTOR).parameters),
+          .prepare(POS('01JP0S00000000000000000005', 5, TENANT_ACTOR).sql)
+          .run(...POS('01JP0S00000000000000000005', 5, TENANT_ACTOR).parameters),
       ).toThrow();
-      expect(() => conn.write(SYS_ACTOR, (w) => w.run(POS('01JPOS00000000000000000006', 6, TENANT_ACTOR)))).toThrow();
-      conn.write(TENANT_ACTOR, (w) => w.run(POS('01JPOS00000000000000000007', 7, TENANT_ACTOR)));
+      expect(() => conn.write(SYS_ACTOR, (w) => w.run(POS('01JP0S00000000000000000006', 6, TENANT_ACTOR)))).toThrow();
+      conn.write(TENANT_ACTOR, (w) => w.run(POS('01JP0S00000000000000000007', 7, TENANT_ACTOR)));
       expect(count(conn, 'SELECT count(*) FROM positions')).toBe(1);
     },
   );

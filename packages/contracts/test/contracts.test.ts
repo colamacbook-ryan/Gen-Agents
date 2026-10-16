@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
+  API_ERROR_CODES,
   buildTermWebSocketInit,
   CERTAINTY_LEVELS,
   type Certainty,
@@ -350,6 +351,11 @@ describe('mcp + settings + errors + events', () => {
     }
     expect(() => parseSettingValue('backup.remote_anchor', { ...ok, token: 'x' })).toThrow();
     expect(() => parseSettingValue('backup.remote_anchor', { ...ok, secret_id: 'SEC-0001' })).toThrow();
+  });
+  it('mã lỗi đăng nhập của L-SEC có trong API_ERROR_CODES', () => {
+    for (const c of ['auth.invalid_credentials', 'auth.locked', 'auth.weak_password']) {
+      expect(API_ERROR_CODES as readonly string[], c).toContain(c);
+    }
   });
   it('lỗi DB ánh xạ theo tiền tố, còn lại về db.rule_violation', () => {
     expect(mapDbError('append-only/write-once: proactive_sends')).toBe('db.append_only');
