@@ -1,0 +1,613 @@
+{
+  "_doc": "Ca kiểm adapter theo slug. Tệp *.txt/*.out/*.jsonl: output THẬT của Spike 1b (claude 2.1.299; đã thay id phiên, rút trường dài / đường dẫn). Ca có \"assumed\": dạng lỗi giả định (chưa kiểm, M6) — chuyển sang CLI giả chung (testing/fakes, L-FAKE) khi có.",
+  "adapter": {
+    "authAllowlist": [".claude/.credentials.json"],
+    "nativeStatePaths": [".claude/projects", ".claude/history.jsonl", ".claude.json"],
+    "outputSignals": {
+      "phase": "stream",
+      "certainty": "unmeasured"
+    },
+    "helpFile": "help.txt",
+    "flagsObservedOutsideHelp": [],
+    "loginArgvSubscriptionTail": ["auth", "login"],
+    "systemPrompt": {
+      "in": "argv",
+      "flag": "--append-system-prompt"
+    },
+    "valueForm": "eq",
+    "apiKeyFiles": [],
+    "mcpConfigFile": "mcp.json",
+    "checksumAlgorithm": "sha256",
+    "selfUpdate": "unknown",
+    "phaseAfterToolCall": "acting"
+  },
+  "streamFiles": [
+    {
+      "name": "lượt thật một câu (Spike 1b): model + delta + usage (có chi phí)",
+      "file": "stream-ok.jsonl",
+      "expected": [
+        {
+          "type": "model",
+          "model": "claude-haiku-5-5"
+        },
+        {
+          "type": "delta",
+          "text": "ok"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input": 2,
+            "output": 4,
+            "cacheRead": 0,
+            "cacheWrite": 33987,
+            "thinking": 0,
+            "costMicroUsd": 6800
+          }
+        }
+      ]
+    }
+  ],
+  "stream": [
+    {
+      "name": "gọi công cụ (assumed CC-STREAM-01: content_block_start tool_use)",
+      "line": "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"mcp__ga__recall\",\"input\":{}}},\"parent_tool_use_id\":null}",
+      "expected": [
+        {
+          "type": "tool",
+          "stage": "call",
+          "name": "mcp__ga__recall",
+          "callId": "toolu_1"
+        }
+      ]
+    },
+    {
+      "name": "kết quả công cụ, parser không trạng thái ⇒ tên 'unknown' (assumed CC-STREAM-02)",
+      "line": "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_1\",\"content\":\"x\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_2\",\"content\":\"y\"}]},\"parent_tool_use_id\":null}",
+      "expected": [
+        {
+          "type": "tool",
+          "stage": "result",
+          "name": "unknown",
+          "callId": "toolu_1"
+        },
+        {
+          "type": "tool",
+          "stage": "result",
+          "name": "unknown",
+          "callId": "toolu_2"
+        }
+      ]
+    },
+    {
+      "name": "delta của subagent bị bỏ",
+      "line": "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"nội bộ\"}},\"parent_tool_use_id\":\"toolu_9\"}",
+      "expected": []
+    },
+    {
+      "name": "thinking_delta không phải văn bản trả lời",
+      "line": "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"...\"}},\"parent_tool_use_id\":null}",
+      "expected": []
+    },
+    {
+      "name": "dòng assistant lặp nội dung partial ⇒ bỏ (không nhân đôi)",
+      "line": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]},\"parent_tool_use_id\":null}",
+      "expected": []
+    },
+    {
+      "name": "rate_limit_event rejected ⇒ error (assumed CC-E02)",
+      "line": "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"rejected\",\"resetsAt\":1792000000,\"rateLimitType\":\"five_hour\"}}",
+      "expected": [
+        {
+          "type": "error",
+          "code": "rate_limit_rejected",
+          "message": "resetsAt=1792000000"
+        }
+      ]
+    },
+    {
+      "name": "rate_limit_event allowed (Spike 1b) ⇒ không sự kiện",
+      "line": "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed\",\"resetsAt\":1791975600,\"rateLimitType\":\"five_hour\"}}",
+      "expected": []
+    },
+    {
+      "name": "result lỗi ⇒ usage + error (assumed)",
+      "line": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":429,\"result\":\"API Error: 429\",\"total_cost_usd\":0,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0}}",
+      "expected": [
+        {
+          "type": "usage",
+          "usage": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "thinking": null,
+            "costMicroUsd": 0
+          }
+        },
+        {
+          "type": "error",
+          "code": "api_error_429",
+          "message": "API Error: 429"
+        }
+      ]
+    },
+    {
+      "name": "dòng không phải JSON",
+      "line": "warning: something",
+      "expected": []
+    },
+    {
+      "name": "JSON mảng",
+      "line": "[1,2,3]",
+      "expected": []
+    },
+    {
+      "name": "JSON hỏng",
+      "line": "{\"type\":\"result\",",
+      "expected": []
+    },
+    {
+      "name": "system/status không mang thông tin",
+      "line": "{\"type\":\"system\",\"subtype\":\"status\"}",
+      "expected": []
+    }
+  ],
+  "classify": [
+    {
+      "name": "lượt thật thành công (Spike 1b)",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdoutFile": "stream-ok.jsonl",
+      "stderr": "",
+      "expected": {
+        "outcome": "ok",
+        "ruleId": "CC-E01",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "rate_limit_event rejected + resetsAt (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"rejected\",\"resetsAt\":1791975600,\"rateLimitType\":\"five_hour\"}}\n{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":null,\"result\":\"limit\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "CC-E02",
+        "resetAt": "2026-10-14T11:00:00.000Z"
+      }
+    },
+    {
+      "name": "\"usage limit reached|<giây>\" (assumed) — giờ reset từ văn bản",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":null,\"result\":\"Claude AI usage limit reached|1792000000\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "CC-E03",
+        "resetAt": "2026-10-14T17:46:40.000Z"
+      }
+    },
+    {
+      "name": "429 không có giờ reset ⇒ resetAt null (không đoán)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":429,\"result\":\"API Error: 429 rate_limit_error\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "CC-E03",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "billing_error (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"assistant\",\"message\":{\"content\":[]},\"error\":\"billing_error\"}\n{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Credit balance is too low\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "CC-E04",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "403 tài khoản bị khoá (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":403,\"result\":\"API Error: 403 This organization has been disabled.\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "account_suspended",
+        "ruleId": "CC-E05",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "OAuth token hết hạn (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":401,\"result\":\"OAuth token has expired. Please obtain a new token or refresh your existing token. Please run /login\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "login_expired",
+        "ruleId": "CC-E06",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "chưa đăng nhập / key sai (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":null,\"result\":\"Invalid API key · Please run /login\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "AUTH_REQUIRED",
+        "ruleId": "CC-E07",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "401 chung (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":null,\"result\":\"API Error: 401 {\\\"type\\\":\\\"error\\\"}\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "login_expired",
+        "ruleId": "CC-E08",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "529 quá tải (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":529,\"result\":\"API Error: 529 overloaded_error\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "outage",
+        "ruleId": "CC-E09",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "lỗi mạng ở stderr (assumed)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "",
+      "stderr": "Error: connect ECONNREFUSED 10.0.0.1:443",
+      "expected": {
+        "outcome": "outage",
+        "ruleId": "CC-E09",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "hết giờ, không output",
+      "exit": {
+        "exitCode": null,
+        "signal": "SIGKILL",
+        "timedOut": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "CC-E10",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "exit 0 nhưng result lỗi error_max_turns ⇒ không phải ok",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"error_max_turns\",\"is_error\":true,\"result\":\"\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "CC-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "exit 0 nhưng không có dòng result ⇒ không phải ok",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"system\",\"subtype\":\"init\",\"model\":\"m\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "CC-E11",
+        "resetAt": null
+      }
+    }
+  ],
+  "login": [
+    {
+      "name": "auth status đã đăng nhập (dạng Spike 1b, không có email) ⇒ account_hint null",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "{\"loggedIn\":true,\"authMethod\":\"oauth_token\",\"apiProvider\":\"firstParty\"}",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_in",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "logged_in",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "auth status có email (assumed CC-L02) ⇒ che",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "{\"loggedIn\":true,\"authMethod\":\"oauth_token\",\"email\":\"mai.nguyen@example.com\"}",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_in",
+        "accountHint": "m***@example.com"
+      },
+      "probe": {
+        "loginStatus": "logged_in",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "auth status chưa đăng nhập (assumed CC-L01)",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "{\"loggedIn\":false}",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_out",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "expired",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "auth status không ra JSON, exit 0 ⇒ chưa xác định",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "Logged in.",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "unknown",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "unknown",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "auth status bị giết ⇒ lỗi",
+      "authMethod": "subscription",
+      "outcome": {
+        "exitCode": null,
+        "signal": "SIGKILL",
+        "stdout": "",
+        "stderr": "",
+        "timedOut": true
+      },
+      "expected": {
+        "status": "unknown",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "error",
+        "probeStatus": "failed"
+      }
+    },
+    {
+      "name": "API key đúng: -p thành công (dạng result Spike 1b)",
+      "authMethod": "api_key",
+      "outcome": {
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"result\":\"OK\"}",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_in",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "logged_in",
+        "probeStatus": "ok"
+      }
+    },
+    {
+      "name": "API key sai (assumed)",
+      "authMethod": "api_key",
+      "outcome": {
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Invalid API key · Please run /login\"}",
+        "stderr": "",
+        "timedOut": false
+      },
+      "expected": {
+        "status": "logged_out",
+        "accountHint": null
+      },
+      "probe": {
+        "loginStatus": "expired",
+        "probeStatus": "ok"
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "name": "chưa đăng nhập: chỉ version + help (Spike 1b)",
+      "authMode": "none",
+      "outcomes": [
+        {
+          "exitCode": 0,
+          "stdoutFile": "version.txt"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "help.txt"
+        }
+      ],
+      "values": {
+        "version:cli": "2.1.299"
+      },
+      "known": [
+        "flag:-p",
+        "flag:--print",
+        "flag:--allowedTools",
+        "flag:--allowed-tools",
+        "flag:--include-partial-messages",
+        "effort:low",
+        "effort:medium",
+        "effort:high",
+        "effort:xhigh",
+        "effort:max",
+        "mode:dontAsk",
+        "mode:plan",
+        "output_format:stream-json",
+        "subcommand:auth",
+        "subcommand:update",
+        "subcommand:upgrade"
+      ],
+      "unknown": {
+        "model:*": "unknown_requires_login",
+        "quota_window:*": "unknown_requires_login"
+      },
+      "scan": {
+        "compatibility": "tested",
+        "missingTurnFlags": [],
+        "probeStatus": "partial"
+      }
+    },
+    {
+      "name": "đã đăng nhập: /model chỉ bí danh (static_catalog), /usage không có quota gói (Spike 1b)",
+      "authMode": "oauth",
+      "outcomes": [
+        {
+          "exitCode": 0,
+          "stdoutFile": "version.txt"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "help.txt"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "p-model.out"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "p-usage.out"
+        }
+      ],
+      "values": {
+        "model:opus[1m]": "opus[1m]",
+        "feature:current_model_label": "Sonnet 5.5 (default)"
+      },
+      "confidence": {
+        "model:sonnet": "static_catalog",
+        "feature:current_model_label": "direct"
+      },
+      "known": ["model:sonnet", "model:haiku", "model:default", "model:opusplan"],
+      "absent": ["model:or a full model ID"],
+      "unknown": {
+        "quota_window:*": "unknown: CLI không cung cấp quota gói qua /usage ở phiên bản này"
+      },
+      "scan": {
+        "compatibility": "tested",
+        "missingTurnFlags": [],
+        "probeStatus": "partial"
+      }
+    },
+    {
+      "name": "phiên bản mới ⇒ chưa kiểm tương thích",
+      "authMode": "none",
+      "outcomes": [
+        {
+          "exitCode": 0,
+          "stdout": "2.1.301 (Claude Code)\n"
+        },
+        {
+          "exitCode": 0,
+          "stdoutFile": "help.txt"
+        }
+      ],
+      "values": {
+        "version:cli": "2.1.301"
+      },
+      "known": [],
+      "unknown": {},
+      "scan": {
+        "compatibility": "untested",
+        "missingTurnFlags": [],
+        "probeStatus": "partial"
+      }
+    }
+  ]
+}
