@@ -23,6 +23,7 @@ describe('lint-rules', () => {
         'db-write-only-via-write',
         'no-duplicate-component-names',
         'import-boundaries',
+        'engine-plans-only-in-runner',
       ]),
     );
   });

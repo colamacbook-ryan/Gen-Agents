@@ -507,6 +507,6 @@ export const TURN_TICKET = {
   /** Header MCP client gửi gateway. Cấu hình MCP đọc vé từ TỆP /run/ga/<lượt>/ticket, không nhúng vé. */
   header: 'authorization',
   scheme: 'Bearer',
-  /** GET → TurnBundle (contracts/runner.ts). Kiểm đăng nhập / probe không gọi gateway: bundle đi qua stdin (ProbeBundle). */
+  /** GET → TurnBundle (contracts/runner.ts — ý định, không argv). Kiểm đăng nhập / probe: bundle đi qua stdin (ProbeBundle). */
   bundlePath: '/turn/bundle',
 } as const;
