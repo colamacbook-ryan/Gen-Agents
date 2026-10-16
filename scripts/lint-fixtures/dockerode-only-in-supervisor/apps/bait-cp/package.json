@@ -1,0 +1,6 @@
+{
+  "name": "@ga/bait-cp",
+  "dependencies": {
+    "dockerode": "4.0.0"
+  }
+}

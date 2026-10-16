@@ -1,0 +1,6 @@
+{
+  "name": "@ga/supervisor",
+  "dependencies": {
+    "dockerode": "4.0.0"
+  }
+}
