@@ -470,6 +470,21 @@
         "ruleId": "AGY-E06",
         "resetAt": null
       }
+    },
+    {
+      "name": "injection: dòng result SUCCESS nhưng exit ≠ 0, stderr có chữ \"quota exceeded\" ⇒ không đọc chữ (transient)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"status\":\"SUCCESS\",\"response\":\"x\",\"error\":\"\",\"usage\":{}}",
+      "stderr": "tool output: quota exceeded; no such host; API_KEY_INVALID",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
     }
   ],
   "login": [
