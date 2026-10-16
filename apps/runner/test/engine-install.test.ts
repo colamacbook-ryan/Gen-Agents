@@ -15,8 +15,9 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import type { EngineInstallStatus } from '@ga/contracts';
 import { EngineInstallStatus as StatusSchema } from '@ga/contracts';
+import type { InstallSource } from '@ga/engines';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { fakeRecipe } from '../src/engine-install/fake-source.ts';
+import { fakeInstall } from '../src/engine-install/fake-source.ts';
 import {
   currentVersion,
   installEngine,
@@ -24,9 +25,9 @@ import {
   readInstallStatus,
   rollbackEngine,
 } from '../src/engine-install/install.ts';
-import type { InstallRecipe } from '../src/engine-install/recipe.ts';
 import type { RunnerRoots } from '../src/paths.ts';
 import { resolveCliBin } from '../src/spawn.ts';
+import { fakeAdapter } from './fixtures/fake-adapter.ts';
 import { type Sandbox, sandbox } from './helpers.ts';
 
 // Máy chủ "hãng" giả + proxy giả (đóng vai ga-egress: absolute-form cho http, CONNECT, từ chối = 403 + x-ga-egress: blocked).
@@ -105,10 +106,9 @@ afterEach(() => sb.cleanup());
 
 const PLATFORM = { arch: 'x64', libc: 'glibc', key: 'linux-x64' } as const;
 
-function perPlatform(over: Partial<InstallRecipe> = {}): InstallRecipe {
+function perPlatform(over: Partial<InstallSource> = {}): InstallSource {
   return {
     binaryName: 'fakecli',
-    platforms: [PLATFORM],
     manifest: {
       kind: 'per-platform',
       urlTemplate: `${vendorUrl}/manifests/{platform}.json`,
@@ -120,11 +120,17 @@ function perPlatform(over: Partial<InstallRecipe> = {}): InstallRecipe {
   };
 }
 
-async function run(recipe: InstallRecipe, opts: { proxy?: URL | null; httpsOnly?: boolean; slug?: string } = {}) {
+async function run(source: InstallSource, opts: { proxy?: URL | null; httpsOnly?: boolean; slug?: string } = {}) {
   const events: EngineInstallStatus[] = [];
   const result = await installEngine(
     roots,
-    { slug: opts.slug ?? 'fake', recipe, httpsOnly: opts.httpsOnly ?? false, proxy: opts.proxy ?? null },
+    {
+      slug: opts.slug ?? 'fake',
+      source,
+      platforms: [PLATFORM],
+      httpsOnly: opts.httpsOnly ?? false,
+      proxy: opts.proxy ?? null,
+    },
     { emit: (s) => events.push(s), now: () => new Date('2026-10-16T10:00:00.000Z'), platform: PLATFORM },
   );
   for (const e of events) expect(() => StatusSchema.parse(e)).not.toThrow();
@@ -267,10 +273,20 @@ describe('ga-engine-install — cài từ công thức của adapter, có %, đi
     expect(proxied).toContain('CONNECT vendor.invalid:443');
   });
 
-  it('nền tảng không có trong công thức ⇒ unsupported_arch', () => {
-    expect(() => pickPlatform(perPlatform(), 'ia32', 'glibc')).toThrow();
-    expect(() => pickPlatform(perPlatform(), 'x64', 'musl')).toThrow();
-    expect(pickPlatform(perPlatform(), 'x64', 'glibc').key).toBe('linux-x64');
+  it('nền tảng ngoài installSpec.platforms (contracts installPlatformFor) ⇒ unsupported_arch', () => {
+    const code = (f: () => unknown) => {
+      try {
+        f();
+        return 'ok';
+      } catch (e) {
+        return (e as { reason?: string }).reason;
+      }
+    };
+    expect(code(() => pickPlatform([PLATFORM], 'ia32', 'glibc'))).toBe('unsupported_arch');
+    expect(code(() => pickPlatform([PLATFORM], 'x64', 'musl'))).toBe('unsupported_arch');
+    expect(code(() => pickPlatform([PLATFORM], 'x64', 'glibc', 'darwin'))).toBe('unsupported_arch');
+    expect(pickPlatform([PLATFORM], 'x64', 'glibc').key).toBe('linux-x64');
+    expect(pickPlatform(fakeAdapter().installSpec.platforms, 'x64', 'glibc').key).toBe('linux-x64');
   });
 
   it('một lần cài đang chạy (khoá) ⇒ lần thứ hai failed', async () => {
@@ -318,13 +334,15 @@ describe('readInstallStatus — fail-closed', () => {
 });
 
 describe('nguồn fake (chỉ image test)', () => {
-  it('dựng công thức per-platform từ GA_FAKE_ENGINE_SOURCE_URL, giữ tên binary của adapter', () => {
-    const r = fakeRecipe('demo', 'democli', { GA_FAKE_ENGINE_SOURCE_URL: 'http://fake-source:8080' });
-    expect(r.binaryName).toBe('democli');
-    expect(r.manifest).toMatchObject({ urlTemplate: 'http://fake-source:8080/demo/manifests/{platform}.json' });
+  it('dựng nguồn per-platform từ GA_FAKE_ENGINE_SOURCE_URL, giữ tên binary của adapter; nền tảng theo engine-source', () => {
+    const r = fakeInstall('demo', 'democli', { GA_FAKE_ENGINE_SOURCE_URL: 'http://fake-source:8080' });
+    expect(r.source.binaryName).toBe('democli');
+    expect(r.source.manifest).toMatchObject({ urlTemplate: 'http://fake-source:8080/demo/manifests/{platform}.json' });
+    expect(pickPlatform(r.platforms, 'x64', 'glibc').key).toBe('linux_amd64');
+    expect(pickPlatform(r.platforms, 'arm64', 'glibc').key).toBe('linux_arm64');
   });
   it.each(['', 'file:///etc', 'http://x/path?q', 'http://a b'])('từ chối URL nguồn: %j', (u) => {
-    expect(() => fakeRecipe('demo', 'democli', { GA_FAKE_ENGINE_SOURCE_URL: u })).toThrow();
+    expect(() => fakeInstall('demo', 'democli', { GA_FAKE_ENGINE_SOURCE_URL: u })).toThrow();
   });
 });
 

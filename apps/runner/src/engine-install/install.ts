@@ -14,11 +14,11 @@ import {
   writeSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import type { EngineInstallStatus } from '@ga/contracts';
+import { type EngineInstallStatus, type InstallPlatform, installPlatformFor } from '@ga/contracts';
+import type { InstallSource } from '@ga/engines';
 import { lstatOrNull, mkdirInside, writeFileAtomic } from '../fsutil.ts';
 import { isCliBinName, isEngineSlug, RunnerError, type RunnerRoots } from '../paths.ts';
 import { FetchError, fetchVia, newHash } from './fetch.ts';
-import type { InstallPlatform, InstallRecipe } from './recipe.ts';
 import { extractMember } from './tar.ts';
 
 // ga-engine-install (BUILD-PLAN §A.2-5, §B.7; CNS-137): tải CLI của hãng từ nguồn chính chủ vào volume ga-engines, có %.
@@ -26,8 +26,9 @@ import { extractMember } from './tar.ts';
 //   /opt/engines/<slug>/current → <version>    bản hiện hành (symlink tương đối, thay nguyên tử) — ga-runner chỉ chạy binary ở đây
 //   /opt/engines/<slug>/status.json           trạng thái cài gần nhất (đọc bởi `ga-engine-install status`)
 // Image KHÔNG chứa CLI của hãng. Chạy trong container cài riêng do supervisor dựng: ga-engines mount RW chỉ ở container này;
-// container Role / hệ thống mount CHỈ ĐỌC. Mọi lần tải đi qua ga-egress. Công thức cài (URL, trường manifest, checksum) là DỮ
-// LIỆU của adapter (@ga/engines, bảng đóng) — không nhận URL tự do từ ngoài.
+// container Role / hệ thống mount CHỈ ĐỌC. Mọi lần tải đi qua ga-egress. Nguồn cài là DỮ LIỆU của adapter (bảng đóng, không
+// nhận URL tự do từ ngoài): nền tảng = `installSpec.platforms` (contracts, chọn bằng `installPlatformFor`); cách lấy manifest +
+// dạng gói = `installSource` (@ga/engines).
 // Mỗi dòng stdout là một EngineInstallStatus (contracts) JSON: installing (+%) … rồi installed | failed (+ lý do).
 
 export type FailureReason = 'domain_blocked' | 'unsupported_arch' | 'network' | 'checksum_mismatch' | 'unknown';
@@ -60,13 +61,13 @@ export function currentLibc(): 'glibc' | 'musl' {
 }
 
 export function pickPlatform(
-  recipe: InstallRecipe,
+  platforms: readonly InstallPlatform[],
   arch: string = process.arch,
   libc: 'glibc' | 'musl' = currentLibc(),
-  platform: string = process.platform,
+  os: string = process.platform,
 ): InstallPlatform {
-  if (platform !== 'linux') throw new InstallFailure('unsupported_arch', `hệ điều hành không hỗ trợ: ${platform}`);
-  const p = recipe.platforms.find((x) => x.arch === arch && x.libc === libc);
+  if (os !== 'linux') throw new InstallFailure('unsupported_arch', `hệ điều hành không hỗ trợ: ${os}`);
+  const p = installPlatformFor({ platforms: [...platforms] }, arch, libc);
   if (!p) throw new InstallFailure('unsupported_arch', `nguồn chính chủ không có bản cho ${arch}/${libc}`);
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(p.key)) throw new InstallFailure('unknown', 'khoá nền tảng sai dạng');
   return p;
@@ -123,7 +124,10 @@ function failureFromFetch(e: unknown, notFound: FailureReason): InstallFailure {
 
 export interface InstallRequest {
   slug: string;
-  recipe: InstallRecipe;
+  /** Cách lấy manifest + dạng gói (@ga/engines `installSource`). */
+  source: InstallSource;
+  /** Nền tảng hãng phát hành (contracts `installSpec.platforms`). */
+  platforms: readonly InstallPlatform[];
   /** Nguồn official: mọi bước https. */
   httpsOnly: boolean;
   proxy: URL | null;
@@ -151,9 +155,9 @@ async function getText(url: string, req: InstallRequest, notFound: FailureReason
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** Đọc manifest theo công thức ⇒ phiên bản + URL tải + checksum. */
+/** Đọc manifest theo nguồn cài ⇒ phiên bản + URL tải + checksum. */
 export async function resolveArtifact(req: InstallRequest, platform: InstallPlatform): Promise<ResolvedArtifact> {
-  const m = req.recipe.manifest;
+  const m = req.source.manifest;
   if (m.kind === 'per-platform') {
     const url = fill(m.urlTemplate, { platform: platform.key });
     const doc = parseJson(await getText(url, req, 'unsupported_arch'));
@@ -226,17 +230,17 @@ export async function installEngine(
   deps: InstallDeps,
 ): Promise<EngineInstallStatus> {
   if (!isEngineSlug(req.slug)) throw new RunnerError('bad_slug', 'slug không hợp lệ');
-  const bin = req.recipe.binaryName;
+  const bin = req.source.binaryName;
   mkdirInside(roots.engines, req.slug, 0o755);
   let lock: string | null = null;
   const tmps: string[] = [];
   try {
-    if (!isCliBinName(bin)) throw new InstallFailure('unknown', 'tên binary trong công thức sai dạng');
+    if (!isCliBinName(bin)) throw new InstallFailure('unknown', 'tên binary trong nguồn cài sai dạng');
     lock = acquireLock(roots, req.slug, deps.now());
     writeStatus(roots, req.slug, { state: 'installing', version: null, startedAt: deps.now().toISOString() });
     deps.emit({ state: 'installing', progressPct: 0, version: null });
 
-    const platform = deps.platform ?? pickPlatform(req.recipe);
+    const platform = deps.platform ?? pickPlatform(req.platforms);
     const art = await resolveArtifact(req, platform);
     const versionDir = mkdirInside(roots.engines, `${req.slug}/${art.version}`, 0o755);
     const download = join(versionDir, `.download-${process.pid}`);
@@ -275,12 +279,12 @@ export async function installEngine(
     }
 
     let staged = download;
-    if (req.recipe.payload.kind === 'tar.gz') {
+    if (req.source.payload.kind === 'tar.gz') {
       staged = join(versionDir, `.extract-${process.pid}`);
       tmps.push(staged);
       rmSync(staged, { force: true });
       try {
-        await extractMember(download, req.recipe.payload.member, staged, INSTALL_LIMITS.binaryBytes);
+        await extractMember(download, req.source.payload.member, staged, INSTALL_LIMITS.binaryBytes);
       } catch (e) {
         throw new InstallFailure('unknown', (e as Error).message);
       }

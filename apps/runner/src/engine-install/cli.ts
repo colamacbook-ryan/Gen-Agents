@@ -1,14 +1,19 @@
-import { ENGINE_INSTALL_COMMANDS, type EngineInstallStatus, runnerBundleSchemas } from '@ga/contracts';
+import {
+  ENGINE_INSTALL_COMMANDS,
+  type EngineInstallStatus,
+  type InstallPlatform,
+  runnerBundleSchemas,
+} from '@ga/contracts';
+import type { InstallSource } from '@ga/engines';
 import { type AdapterRegistry, loadRegistry, requireAdapter } from '../adapters.ts';
 import { FIXED_ROOTS, RunnerError, type RunnerRoots } from '../paths.ts';
 import { EXIT_RUNNER_ERROR, emitError } from '../report.ts';
 import { readFirstLine } from '../stdin.ts';
 import { installEngine, readInstallStatus, writeStatusLine } from './install.ts';
-import type { InstallRecipe } from './recipe.ts';
 
 // `ga-engine-install install|status` — đúng hai phần tử argv (contracts EXEC_ARGV 'engine-install' | 'engine-status');
-// stdin = EngineInstallBundle {v:2, engineSlug (enum registry), source}. Công thức cài lấy từ adapter đóng sẵn trong image
-// (không nhận URL từ ngoài). Nguồn `fake` nằm ở module riêng KHÔNG có trong image phát hành (Dockerfile.runtime chỉ chép tệp
+// stdin = EngineInstallBundle {v:2, engineSlug (enum registry), source}. Nguồn cài lấy từ adapter đóng sẵn trong image
+// (`installSource` + `installSpec.platforms`; không nhận URL từ ngoài). Nguồn `fake` nằm ở module riêng KHÔNG có trong image phát hành (Dockerfile.runtime chỉ chép tệp
 // đã liệt kê) ⇒ image phát hành luôn trả failed. Proxy = ga-egress (HTTPS_PROXY / HTTP_PROXY của container).
 // stdout: mỗi dòng một EngineInstallStatus (installing … rồi installed | failed); status ⇒ đúng một dòng.
 
@@ -23,7 +28,13 @@ function proxyFromEnv(env: NodeJS.ProcessEnv): URL | null {
   }
 }
 
-type FakeSourceModule = { fakeRecipe(slug: string, binaryName: string, env: NodeJS.ProcessEnv): InstallRecipe };
+type FakeSourceModule = {
+  fakeInstall(
+    slug: string,
+    binaryName: string,
+    env: NodeJS.ProcessEnv,
+  ): { source: InstallSource; platforms: readonly InstallPlatform[] };
+};
 
 /** Module nguồn giả: chỉ có trong image test. Không có ⇒ null. */
 async function loadFakeSource(): Promise<FakeSourceModule | null> {
@@ -67,22 +78,25 @@ export async function engineInstallMain(
       out(readInstallStatus(roots, b.engineSlug, new Date()));
       return 0;
     }
-    if (!adapter.install) {
-      out({ state: 'failed', reason: 'unknown', detail: 'adapter chưa khai công thức cài' });
+    if (!adapter.installSource) {
+      out({ state: 'failed', reason: 'unknown', detail: 'adapter chưa khai nguồn cài (installSource)' });
       return 1;
     }
-    let recipe: InstallRecipe = adapter.install;
+    let target: { source: InstallSource; platforms: readonly InstallPlatform[] } = {
+      source: adapter.installSource,
+      platforms: adapter.installSpec.platforms,
+    };
     if (b.source === 'fake') {
       const fake = await loadFakeSource();
       if (!fake) {
         out({ state: 'failed', reason: 'unknown', detail: 'nguồn fake chỉ có ở image test' });
         return 1;
       }
-      recipe = fake.fakeRecipe(b.engineSlug, adapter.install.binaryName, process.env);
+      target = fake.fakeInstall(b.engineSlug, adapter.installSource.binaryName, process.env);
     }
     const r = await installEngine(
       roots,
-      { slug: b.engineSlug, recipe, httpsOnly: b.source === 'official', proxy: proxyFromEnv(process.env) },
+      { slug: b.engineSlug, ...target, httpsOnly: b.source === 'official', proxy: proxyFromEnv(process.env) },
       { emit: out, now: () => new Date() },
     );
     return r.state === 'installed' ? 0 : 1;

@@ -1,15 +1,14 @@
 import { type EngineAdapter, runnerBundleSchemas } from '@ga/contracts';
-import { BUILTIN_ADAPTERS } from '@ga/engines';
-import type { InstallRecipe } from './engine-install/recipe.ts';
+import { BUILTIN_ADAPTERS, type InstallSource } from '@ga/engines';
 import { RunnerError } from './paths.ts';
 
 // Registry adapter ĐÓNG SẴN trong image runner (Gen quyết, HIGH allowlist-semantic-escape): runner tự dựng argv / env / tệp
 // từ adapter; ga-app chỉ gửi ý định. Slug của mọi bundle là ENUM lấy từ registry này (runnerBundleSchemas).
 // Nguồn: @ga/engines (L-ENG) — BUILTIN_ADAPTERS, import tĩnh (ranh giới apps/runner → packages/engines được phép).
 
-/** Adapter như contracts EngineAdapter + công thức cài (EngineAdapterExt.install của L-ENG). */
+/** Adapter như contracts EngineAdapter (+ installSpec.platforms) + nguồn cài (EngineAdapterExt.installSource của L-ENG). */
 export interface RunnerAdapter extends EngineAdapter {
-  readonly install?: InstallRecipe;
+  readonly installSource?: InstallSource;
 }
 
 export interface AdapterRegistry {
