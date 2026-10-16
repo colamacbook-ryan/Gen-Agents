@@ -106,7 +106,9 @@ describe('mcp-bridge — chuyển JSON-RPC, gắn vé từ tệp', () => {
   });
 
   it('gateway từ chối vé (401) ⇒ lỗi JSON-RPC cho đúng id', async () => {
-    writeFileSync(ticketPath, 'S'.repeat(43), { mode: 0o400 });
+    // tệp vé đã có ở mode 0400: mở quyền ghi trước (user thường không ghi đè được tệp 0400; root thì được)
+    chmodSync(ticketPath, 0o600);
+    writeFileSync(ticketPath, 'S'.repeat(43));
     chmodSync(ticketPath, 0o400);
     const r = await bridge(`${JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'ping' })}\n`);
     expect(r.stdout.json()[0]).toMatchObject({ id: 7, error: { code: -32001, message: 'gateway trả 401' } });
