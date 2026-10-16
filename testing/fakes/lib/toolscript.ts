@@ -43,7 +43,25 @@ export function pickMcpServer(servers: unknown, env: NodeJS.ProcessEnv = process
   const headers: Record<string, string> = {};
   if (isObj(s.headers)) for (const [k, v] of Object.entries(s.headers)) headers[k] = expandEnv(String(v), env);
   if (typeof s.ticketFile === 'string') headers.authorization = `Bearer ${readFileSync(s.ticketFile, 'utf8').trim()}`;
+  const hasAuth = Object.keys(headers).some((k) => k.toLowerCase() === 'authorization');
+  const ticket = hasAuth ? null : defaultTicketFile(env);
+  if (ticket) headers.authorization = `Bearer ${readFileSync(ticket, 'utf8').trim()}`;
   return { url: expandEnv(s.url as string, env), headers };
+}
+
+/**
+ * Bố cục lượt của contracts (TURN_EXEC): HOME = /run/ga/<lượt>/home, vé = /run/ga/<lượt>/ticket (0400). Cấu hình MCP không nêu
+ * Authorization ⇒ lấy vé ở đó, như runner nối vé vào cấu hình. `GA_FAKE_TICKET_FILE` ép đường khác. Không có tệp ⇒ null.
+ */
+export function defaultTicketFile(env: NodeJS.ProcessEnv, runRoot = '/run/ga'): string | null {
+  const explicit = env.GA_FAKE_TICKET_FILE;
+  if (explicit) return existsSync(explicit) ? explicit : null;
+  const home = env.HOME?.replace(/\/+$/, '');
+  if (!home?.startsWith(`${runRoot}/`) || !home.endsWith('/home')) return null;
+  const turn = home.slice(runRoot.length + 1, -'/home'.length);
+  if (!turn || turn.includes('/')) return null;
+  const t = join(runRoot, turn, 'ticket');
+  return existsSync(t) ? t : null;
 }
 
 /** Nội dung mọi tệp (cấp 1) trong thư mục credential — nguồn của placeholder "$AUTH". */

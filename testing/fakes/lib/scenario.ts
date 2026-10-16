@@ -265,6 +265,15 @@ export function interpretReply(status: number, body: string, headers: Record<str
 }
 
 /**
+ * Giá trị header `x-fake-scenario`: chỉ phần vendor cần (bỏ `script` — chứa văn bản tiếng Việt, header HTTP chỉ nhận ASCII —
+ * và `exitAfterLogin`, vốn là chuyện của CLI).
+ */
+export function scenarioHeader(sc: Scenario): string {
+  const { script: _script, exitAfterLogin: _exit, ...vendorPart } = sc;
+  return JSON.stringify(vendorPart);
+}
+
+/**
  * Một lượt gọi "hãng" của CLI giả. Có GA_FAKE_VENDOR_URL ⇒ POST sang fake-vendor (qua proxy nếu HTTP_PROXY, tức đi qua ga-egress);
  * không có ⇒ tự đóng vai hãng tại chỗ bằng đúng hàm vendorReply. Mất kết nối / bị egress chặn / timeout ⇒ kind 'network'.
  */
@@ -285,7 +294,7 @@ export async function callVendor(
     return interpretReply(v.status, v.body, v.headers);
   }
   const headers: Record<string, string> = { 'x-fake-account': ctx.account };
-  if (sc && (VENDOR_SCENARIOS as readonly string[]).includes(sc.name)) headers['x-fake-scenario'] = JSON.stringify(sc);
+  if (sc && (VENDOR_SCENARIOS as readonly string[]).includes(sc.name)) headers['x-fake-scenario'] = scenarioHeader(sc);
   try {
     const timeoutMs = Number(env.GA_FAKE_VENDOR_TIMEOUT_MS ?? 120_000);
     const r = await postJson(
@@ -308,7 +317,7 @@ export async function whoami(
   const base = env.GA_FAKE_VENDOR_URL;
   if (!base) return sc?.name === 'identity_changed' ? FAKE_ACCOUNT_B : account;
   const headers: Record<string, string> = { 'x-fake-account': account };
-  if (sc && (VENDOR_SCENARIOS as readonly string[]).includes(sc.name)) headers['x-fake-scenario'] = JSON.stringify(sc);
+  if (sc && (VENDOR_SCENARIOS as readonly string[]).includes(sc.name)) headers['x-fake-scenario'] = scenarioHeader(sc);
   try {
     const r = await postJson(`${base}/v1/whoami`, {}, { headers, timeoutMs: 10_000, env });
     const j = JSON.parse(r.body) as { account?: unknown };
