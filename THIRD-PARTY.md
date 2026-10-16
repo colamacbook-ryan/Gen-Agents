@@ -3,7 +3,7 @@
 > SINH TỰ ĐỘNG bởi `pnpm license:check -- --write` (scripts/license-gate.mjs). Không sửa tay — CI đỏ nếu lệch.
 > License đọc từ chính tệp LICENSE của từng gói (STD-04 §6). Chính sách: `scripts/license-policy.json`.
 
-## Đi vào sản phẩm (5 gói, gồm phụ thuộc gián tiếp)
+## Đi vào sản phẩm (6 gói, gồm phụ thuộc gián tiếp)
 
 | Gói | Phiên bản | License | Nhận ra từ tệp LICENSE | Ghi chú |
 |---|---|---|---|---|
@@ -11,11 +11,12 @@
 | hash-wasm | 4.12.0 | MIT | MIT |  |
 | kysely | 0.29.6 | MIT | MIT |  |
 | node-addon-api | 8.9.2 | MIT | MIT |  |
+| ws | 8.18.3 | MIT | MIT |  |
 | zod | 4.6.7 | MIT | MIT |  |
 
 Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — sqlite.org/copyright.html) trong bản build N-API.
 
-## Chỉ dùng lúc dev / build / test — không đóng gói vào sản phẩm (53 gói)
+## Chỉ dùng lúc dev / build / test — không đóng gói vào sản phẩm (54 gói)
 
 | Gói | Phiên bản | License | Nhận ra từ tệp LICENSE | Ghi chú |
 |---|---|---|---|---|
@@ -33,6 +34,7 @@ Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — s
 | @types/deep-eql | 4.0.2 | MIT | MIT |  |
 | @types/estree | 1.0.9 | MIT | MIT |  |
 | @types/node | 22.20.5 | MIT | MIT |  |
+| @types/ws | 8.18.2 | MIT | MIT |  |
 | @vitest/expect | 4.1.12 | MIT | MIT |  |
 | @vitest/mocker | 4.1.12 | MIT | MIT |  |
 | @vitest/pretty-format | 4.1.12 | MIT | MIT |  |
