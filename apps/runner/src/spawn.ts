@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { accessSync, constants, realpathSync, statSync } from 'node:fs';
 import { basename, join, sep } from 'node:path';
+import { isForbiddenArgv0Name } from '@ga/contracts';
 import { lstatOrNull } from './fsutil.ts';
-import { FIXED_ROOTS, FORBIDDEN_ARGV0, isCliBinName, isEngineSlug, RunnerError, type RunnerRoots } from './paths.ts';
+import { FIXED_ROOTS, isCliBinName, isEngineSlug, RunnerError, type RunnerRoots } from './paths.ts';
 
 // Chạy CLI không tương tác (STD-10 §4): stdin đóng, không TTY, timeout tường minh, nhóm tiến trình riêng để giết cả cây.
 // Binary CLI CHỈ được nằm dưới /opt/engines/<engineSlug>/ (volume chỉ đọc, ga-engine-install đặt) — không đi theo PATH của
@@ -20,7 +21,7 @@ export function resolveCliBin(roots: RunnerRoots, slug: string, argv0: string): 
   const real = realpathSync(p);
   if (!real.startsWith(realpathSync(slugDir) + sep))
     throw new RunnerError('bad_cli', 'CLI trỏ ra ngoài /opt/engines/<slug>');
-  if (FORBIDDEN_ARGV0.has(basename(real))) throw new RunnerError('bad_cli', 'argv[0] là shell / trình thông dịch');
+  if (isForbiddenArgv0Name(basename(real))) throw new RunnerError('bad_cli', 'argv[0] là shell / trình thông dịch');
   if (!statSync(real).isFile()) throw new RunnerError('bad_cli', 'CLI không phải tệp thường');
   accessSync(real, constants.X_OK);
   return real;

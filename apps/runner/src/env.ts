@@ -1,21 +1,15 @@
+import { type EngineFlagTable, engineEnvViolations } from '@ga/contracts';
 import { RunnerError } from './paths.ts';
 
-// Luật tên biến môi trường cho tiến trình CLI trong container (CNS-142; contracts EnvMap / FORBIDDEN_ENV_NAME_PATTERNS).
-// Lặp lại ở đây vì ga-runner không import giá trị contracts lúc chạy; test parity bảo đảm trùng.
+// Env của tiến trình CLI trong container (CNS-142; review bảo mật MEDIUM code-execution — Gen quyết, STD-11 1.14.0).
+// MỘT NGUỒN LUẬT: contracts `engineEnvViolations` —
+//   1. ALLOWLIST: chỉ tên có trong bảng ĐÓNG của adapter (`flagTable.env`); bundle không mang env tự do (schema contracts);
+//   2. CHẶN CỨNG kể cả khi adapter khai nhầm: LD_* / DYLD_* / NODE_* / PYTHON* / PERL* / RUBY* / BASH_ENV / ENV / SHELLOPTS /
+//      PS4 / GIT_* / CA (SSL_CERT_*…) / *_PROXY / HOME / PATH / TMPDIR / TERM… + tên bí mật (SESSION, *_OAUTH_TOKEN, khoá).
+// Runner gọi hàm này cho MỌI env của plan trước khi spawn; vi phạm ⇒ không chạy.
 
-/** = contracts FORBIDDEN_ENV_NAME_PATTERNS (test parity). */
-export const FORBIDDEN_ENV_NAME_PATTERNS: readonly RegExp[] = [
-  /SESSION/i,
-  /_OAUTH_TOKEN/i,
-  /^GENAGENTS_MASTER_KEY$/,
-  /^GA_(SUPERVISOR|TERM_TICKET|UPDATER|EGRESS)_KEY$/,
-];
-const ENV_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
-/** Biến do ga-runner tự đặt — plan không được ghi đè. */
-const RESERVED_ENV = new Set(['HOME', 'PATH', 'TMPDIR', 'PWD', 'SHELL', 'USER', 'LOGNAME']);
-
-export function checkEnvName(name: string): void {
-  if (!ENV_NAME_RE.test(name)) throw new RunnerError('bad_env', 'tên env không hợp lệ');
-  if (FORBIDDEN_ENV_NAME_PATTERNS.some((re) => re.test(name))) throw new RunnerError('forbidden_env', 'env bị cấm');
-  if (RESERVED_ENV.has(name) || name.startsWith('GA_')) throw new RunnerError('reserved_env', 'env do ga-runner đặt');
+export function assertPlanEnv(env: Readonly<Record<string, string>>, table: EngineFlagTable): Record<string, string> {
+  const v = engineEnvViolations(env, table);
+  if (v.length > 0) throw new RunnerError('forbidden_env', `env của plan bị từ chối: ${v.slice(0, 3).join('; ')}`);
+  return { ...env };
 }

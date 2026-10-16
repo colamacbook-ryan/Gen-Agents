@@ -1,6 +1,8 @@
+import { ENGINE_SLUG_RE, isForbiddenArgv0Name } from '@ga/contracts';
+
 // Hằng số đường dẫn + bộ kiểm tên của ga-runner (BUILD-PLAN §B.5, §B.6; contracts TURN_EXEC).
-// ga-runner chạy TRONG container runtime chỉ với thư viện chuẩn Node ⇒ KHÔNG import giá trị từ @ga/contracts lúc chạy
-// (chỉ `import type`). Test `contracts-parity.test.ts` bảo đảm các hằng ở đây trùng TURN_EXEC / PTY của contracts.
+// Image runtime mang kèm @ga/contracts + @ga/engines (Gen quyết: runner tự dựng argv từ adapter) ⇒ luật dùng chung
+// (slug, argv[0] cấm, env) lấy thẳng từ contracts. Test `paths.test.ts` bảo đảm hằng đường ở đây trùng TURN_EXEC.
 
 /** Gốc các thư mục mà ga-runner được phép đụng tới. CLI thật luôn dùng FIXED_ROOTS; test truyền thư mục tạm. */
 export interface RunnerRoots {
@@ -29,75 +31,8 @@ export function cliPath(roots: RunnerRoots, slug: string): string {
   return `${engineCurrentDir(roots, slug)}:/usr/local/bin:/usr/bin:/bin`;
 }
 
-/**
- * Shell / trình thông dịch / bộ chạy lệnh KHÔNG được làm argv[0] (Gen quyết sau review bảo mật HIGH): kể cả khi nằm trong
- * /opt/engines/<slug>/. So theo tên trần và theo basename của đường thật (realpath).
- */
-export const FORBIDDEN_ARGV0 = new Set([
-  'sh',
-  'bash',
-  'dash',
-  'ash',
-  'zsh',
-  'ksh',
-  'mksh',
-  'csh',
-  'tcsh',
-  'fish',
-  'busybox',
-  'toybox',
-  'env',
-  'node',
-  'nodejs',
-  'deno',
-  'bun',
-  'python',
-  'python2',
-  'python3',
-  'perl',
-  'ruby',
-  'php',
-  'lua',
-  'tclsh',
-  'wish',
-  'awk',
-  'gawk',
-  'mawk',
-  'nawk',
-  'sed',
-  'xargs',
-  'find',
-  'script',
-  'expect',
-  'su',
-  'sudo',
-  'doas',
-  'nohup',
-  'timeout',
-  'nice',
-  'ionice',
-  'setsid',
-  'stdbuf',
-  'chroot',
-  'unshare',
-  'nsenter',
-  'strace',
-  'gdb',
-  'socat',
-  'nc',
-  'ncat',
-  'netcat',
-  'curl',
-  'wget',
-  'ssh',
-  'scp',
-  'docker',
-  'ga-runner',
-  'ga-engine-install',
-]);
-
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
-export const isEngineSlug = (s: string): boolean => SLUG_RE.test(s);
+/** = contracts ENGINE_SLUG_RE (một nguồn luật). */
+export const isEngineSlug = (s: string): boolean => ENGINE_SLUG_RE.test(s);
 
 // ---------------------------------------------------------------- bộ kiểm (regex một lớp ký tự, không lồng ⇒ tuyến tính)
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -114,7 +49,7 @@ export const isPtyId = (s: string): boolean => PTY_ID_RE.test(s);
 
 /** Tên binary CLI: tên trần, không '/', không bắt đầu bằng 'ga-', không phải shell / trình thông dịch. */
 export function isCliBinName(s: string): boolean {
-  return BIN_RE.test(s) && !s.startsWith('ga-') && s !== '.' && s !== '..' && !FORBIDDEN_ARGV0.has(s);
+  return BIN_RE.test(s) && !s.startsWith('ga-') && s !== '.' && s !== '..' && !isForbiddenArgv0Name(s);
 }
 
 /**

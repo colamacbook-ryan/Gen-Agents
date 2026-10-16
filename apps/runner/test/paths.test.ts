@@ -1,10 +1,9 @@
-import { FORBIDDEN_ENV_NAME_PATTERNS as CONTRACT_FORBIDDEN, PTY, TURN_EXEC, TURN_TICKET } from '@ga/contracts';
+import { PTY, TURN_EXEC, TURN_TICKET } from '@ga/contracts';
 import { describe, expect, it } from 'vitest';
-import { FORBIDDEN_ENV_NAME_PATTERNS } from '../src/env.ts';
 import { FIXED_ROOTS, isCliBinName, isSafeRelPath, TICKET_FILE_MODE, TURN_ENV } from '../src/paths.ts';
 import { TURN_ID } from './helpers.ts';
 
-describe('hằng của ga-runner trùng contracts (ga-runner không import giá trị contracts lúc chạy)', () => {
+describe('hằng đường của ga-runner trùng contracts', () => {
   it('đường, tên env, mode tệp vé', () => {
     expect(FIXED_ROOTS.run).toBe(TURN_EXEC.turnDir('x').replace(/\/x$/, ''));
     expect(FIXED_ROOTS.auth).toBe(TURN_EXEC.authRoot);
@@ -16,11 +15,6 @@ describe('hằng của ga-runner trùng contracts (ga-runner không import giá 
     expect(`${FIXED_ROOTS.run}/${TURN_ID}/home`).toBe(TURN_EXEC.homeDir(TURN_ID));
     expect(TURN_TICKET.bundlePath).toBe('/turn/bundle');
     expect(PTY.maxDurationSeconds).toBe(600);
-  });
-  it('luật tên env cấm giống hệt contracts', () => {
-    expect(FORBIDDEN_ENV_NAME_PATTERNS.map((r) => `${r.source}/${r.flags}`)).toEqual(
-      CONTRACT_FORBIDDEN.map((r) => `${r.source}/${r.flags}`),
-    );
   });
 });
 

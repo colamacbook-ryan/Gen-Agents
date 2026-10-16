@@ -1,7 +1,8 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { EngineFlagTable } from '@ga/contracts';
 import { type AuthAllowlist, type AuthGcResult, authDirOf, authGc, validateAllowlist } from './auth-gc.ts';
-import { checkEnvName } from './env.ts';
+import { assertPlanEnv } from './env.ts';
 import { mkdirInside, writeNewFileInside } from './fsutil.ts';
 import { type HomeLink, linkAllowlist, syncBack } from './home.ts';
 import { cliPath, type RunnerRoots } from './paths.ts';
@@ -56,46 +57,33 @@ export function prepareSession(
   return { dir, home, tmp, authDir, cliHome: home, links, allowlist, account };
 }
 
-const PASS_THROUGH = ['HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy', 'TZ', 'LANG'];
+/** Proxy do supervisor đặt trong env của CONTAINER (ga-egress) — runner chuyển cho CLI; plan không đặt được (*_PROXY bị chặn). */
+const CONTAINER_PROXY_VARS = ['HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy'];
 
-/** Env của tiến trình CLI: chỉ biến cơ bản + proxy của container + `extra` (đã kiểm tên). Không mang biến GA_*. */
+/**
+ * Env của tiến trình CLI = biến cơ bản (LANG) + proxy của container + env của plan đã kiểm theo bảng ĐÓNG của adapter
+ * (`assertPlanEnv` = contracts engineEnvViolations: allowlist + chặn cứng) + PATH / HOME / TMPDIR do runner đặt. Không mang biến GA_*, không kế thừa env
+ * khác của tiến trình cha.
+ */
 export function buildCliEnv(
   roots: RunnerRoots,
   slug: string,
   cliHome: string,
   tmp: string,
-  parentEnv: NodeJS.ProcessEnv,
-  extra: Record<string, string>,
+  containerEnv: NodeJS.ProcessEnv,
+  planEnv: Readonly<Record<string, string>>,
+  table: EngineFlagTable,
 ): Record<string, string> {
   const env: Record<string, string> = { LANG: 'C.UTF-8' };
-  for (const k of PASS_THROUGH) {
-    const v = parentEnv[k];
-    if (typeof v === 'string') env[k] = v;
+  for (const k of CONTAINER_PROXY_VARS) {
+    const v = containerEnv[k];
+    if (typeof v === 'string' && /^[A-Za-z0-9.:/,_-]{1,512}$/.test(v)) env[k] = v;
   }
-  for (const [k, v] of Object.entries(extra)) {
-    checkEnvName(k);
-    env[k] = v;
-  }
+  Object.assign(env, assertPlanEnv(planEnv, table));
   env.PATH = cliPath(roots, slug);
   env.HOME = cliHome;
   env.TMPDIR = tmp;
   return env;
-}
-
-/** Env của tiến trình cha (exec env) đã lọc theo luật tên — dùng cho probe (plan env đi qua env của exec). */
-export function filteredParentEnv(parentEnv: NodeJS.ProcessEnv): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(parentEnv)) {
-    if (typeof v !== 'string' || PASS_THROUGH.includes(k)) continue;
-    try {
-      checkEnvName(k);
-    } catch {
-      continue;
-    }
-    if (k === 'HOSTNAME' || k === 'NODE_VERSION' || k === 'YARN_VERSION') continue;
-    out[k] = v;
-  }
-  return out;
 }
 
 export interface SessionEnd {
