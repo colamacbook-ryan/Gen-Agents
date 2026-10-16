@@ -389,6 +389,10 @@ export const CREDENTIAL_KEY_NAMES = [
   'api_secret',
   'api_token',
   'aws_secret_access_key',
+  // L-RT / L-SEC đề xuất (Gen duyệt): chỉ khớp ở dạng KHOÁ object hoặc PHÉP GÁN có giá trị ≥ 8 ký tự — không khớp từ trần
+  // trong câu văn ("quên password?", "password: tối thiểu 12 ký tự" không bị chặn; test đo trên văn bản thật của repo).
+  'password',
+  'passwd',
 ] as const;
 
 /** Trần độ dài tên khoá TRƯỚC khi chuẩn hoá (= trần một chuỗi của payload, đã chặn trước khi quét). */
@@ -822,4 +826,6 @@ export const TURN_TICKET = {
   scheme: 'Bearer',
   /** GET → TurnBundle (contracts/runner.ts — ý định, không argv). Kiểm đăng nhập / probe: bundle đi qua stdin (ProbeBundle). */
   bundlePath: '/turn/bundle',
+  /** Đường MCP (Streamable HTTP) trên gateway: adapter nhận `${GA_GATEWAY_URL}${mcpPath}` (thay hằng tạm của runner). */
+  mcpPath: '/mcp',
 } as const;

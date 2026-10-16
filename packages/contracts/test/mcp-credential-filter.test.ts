@@ -476,6 +476,29 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     }
   });
 
+  it('password / passwd: chỉ khớp dạng khoá hoặc phép gán có giá trị, không khớp từ trần trong câu văn', () => {
+    const v = fake(12, 'pAsS1w0rD');
+    for (const s of [
+      { password: 'x' },
+      { Passwd: v },
+      `password=${v}`,
+      `"password": "${v}"`,
+      `login with passwd: '${v}'`,
+    ]) {
+      expect(findCredentialLike(s), JSON.stringify(s)).not.toBeNull();
+    }
+    for (const s of [
+      'Quên password? Bấm "Đặt lại mật khẩu"',
+      'password: tối thiểu 12 ký tự',
+      'Đổi password mỗi 90 ngày, không dùng lại passwd cũ',
+      'the password field is required',
+      'password=****',
+      'password = short',
+    ]) {
+      expect(findCredentialLike(s), s).toBeNull();
+    }
+  });
+
   it('superset: mọi khoá bản cũ của packages/security bắt (bỏ mọi ký tự ngoài a–z0–9, không NFKC) thì bản mới cũng bắt', () => {
     // fixture = SENSITIVE_KEY_NAMES của packages/security @ d211309 / d39d676 (dạng đã chuẩn hoá cũ)
     const OLD = [
