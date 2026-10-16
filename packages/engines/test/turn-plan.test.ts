@@ -14,6 +14,7 @@ import {
   assertEnvTable,
   assertPlanEnv,
   assertSecretEnvValue,
+  assertToolRestriction,
   DEFAULT_TURN_TIMEOUT_MS,
   type EngineAdapterExt,
   type EnvSpec,
@@ -23,7 +24,16 @@ import {
   planKit,
   TurnPlanError,
 } from '../src/index.ts';
-import { ADAPTERS, cases, fixture, probeInput, TICKET_FILE, TURN_ID, turnInput } from './helpers.ts';
+import {
+  ADAPTERS,
+  ALL_DECLARED_FLAGS,
+  cases,
+  fixture,
+  probeInput,
+  TICKET_FILE,
+  TURN_ID,
+  turnInput,
+} from './helpers.ts';
 
 // turnPlan / loginCheck / capabilityScan / loginArgv chạy TRONG ga-runner (contracts 5d4490b): argv[0] dưới
 // /opt/engines/<slug>/, lệnh con + cờ chỉ từ bảng đóng của adapter, env chỉ từ bảng env đóng (mẫu giá trị chặt), model /
@@ -94,7 +104,11 @@ for (const adapter of ADAPTERS) {
     });
 
     it('bảng cờ ⊆ cờ có thật ở --help (Spike 1b; hoặc đã gọi thật); cờ lượt ⊆ requiredTurnFlags ⊆ bảng', () => {
-      const observed = new Set([...helpFlags, ...c.adapter.flagsObservedOutsideHelp]);
+      const observed = new Set([
+        ...helpFlags,
+        ...c.adapter.flagsObservedOutsideHelp,
+        ...c.adapter.flagsAssumedNotInHelp,
+      ]);
       for (const f of Object.keys(adapter.flagTable.flags))
         expect(observed.has(f), `${f} không có trong --help`).toBe(true);
       for (const f of adapter.requiredTurnFlags) expect(Object.keys(adapter.flagTable.flags)).toContain(f);
@@ -123,6 +137,49 @@ for (const adapter of ADAPTERS) {
           );
         }
       }
+    });
+
+    it('giới hạn công cụ (sandbox-parity): (a) thiếu năng lực ⇒ engine_unrestricted, không dựng plan', () => {
+      const r = adapter.toolRestriction;
+      expect(r).not.toBeNull();
+      const cases: Array<readonly string[] | undefined> = [
+        undefined,
+        [],
+        [...helpFlags].filter((f) => !(r?.requiredFlags ?? []).includes(f)),
+      ];
+      for (const req of r?.requiredFlags ?? []) cases.push(ALL_DECLARED_FLAGS.filter((f) => f !== req));
+      for (const detectedFlags of cases) {
+        let err: unknown;
+        try {
+          adapter.turnPlan(turnInput({ detectedFlags }));
+        } catch (e) {
+          err = e;
+        }
+        expect(err, JSON.stringify(detectedFlags)?.slice(0, 60)).toBeInstanceOf(TurnPlanError);
+        expect((err as TurnPlanError).code).toBe('engine_unrestricted');
+      }
+      expect(() => assertToolRestriction(null, ALL_DECLARED_FLAGS)).toThrow(/giới hạn công cụ/);
+    });
+
+    it('giới hạn công cụ: (b) có năng lực ⇒ plan mang đủ cờ giới hạn, chỉ cho công cụ của gateway', () => {
+      const plan = cli(adapter.turnPlan(turnInput({ detectedFlags: adapter.toolRestriction?.requiredFlags })));
+      const joined = plan.argv.join('\u0001');
+      for (const want of c.adapter.toolRestriction.argvContains) expect(plan.argv, want).toContain(want);
+      expect(joined).not.toContain('dangerously');
+      expect(joined).not.toContain('bypassPermissions');
+    });
+
+    it('giới hạn công cụ: (c) cờ của cơ chế ∈ requiredTurnFlags ∈ bảng cờ (thiếu ⇒ đỏ)', () => {
+      expect(adapter.toolRestriction?.requiredFlags).toEqual(c.adapter.toolRestriction.flags);
+      for (const f of c.adapter.toolRestriction.flags) {
+        expect(adapter.requiredTurnFlags, f).toContain(f);
+        expect(Object.keys(adapter.flagTable.flags), f).toContain(f);
+      }
+      // Bản CLI đã quét thật (help Spike 1b) có đủ cờ giới hạn không ⇒ quyết định chạy được hay bị từ chối.
+      const realHelpHasAll = c.adapter.toolRestriction.flags.every((f) => helpFlags.has(f));
+      const run = () => adapter.turnPlan(turnInput({ detectedFlags: [...helpFlags] }));
+      if (realHelpHasAll) expect(run).not.toThrow();
+      else expect(run).toThrow(/thiếu cờ giới hạn công cụ/);
     });
 
     it('prompt là đối số cuối; prompt bắt đầu bằng `-` không thành cờ', () => {

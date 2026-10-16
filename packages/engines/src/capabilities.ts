@@ -247,3 +247,14 @@ export function helpCapabilities(r: ExecResult | undefined, spec: HelpScanSpec):
   }
   return out;
 }
+
+/** Cờ CLI đã quét (mục `flag:<cờ>` biết giá trị) — đầu vào `detectedFlags` của turnPlan. */
+export function detectedFlags(entries: readonly CapabilityEntry[]): string[] {
+  const out: string[] = [];
+  for (const e of entries) {
+    if (e.valueState !== 'known') continue;
+    const k = parseCapabilityKey(e.key);
+    if (k?.kind === 'flag') out.push(k.itemKey);
+  }
+  return out;
+}

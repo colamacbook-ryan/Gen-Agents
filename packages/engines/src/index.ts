@@ -8,6 +8,7 @@ export {
   CAPABILITY_KINDS,
   type CapabilityKind,
   capKey,
+  detectedFlags,
   parseCapabilityKey,
   UNKNOWN_REQUIRES_LOGIN,
 } from './capabilities.ts';
@@ -47,6 +48,7 @@ export {
 export { MAX_LINE_BYTES, maskAccountHint } from './text.ts';
 export {
   ArgvBuilder,
+  assertToolRestriction,
   DEFAULT_TURN_TIMEOUT_MS,
   engineBinaryPath,
   GATEWAY_MCP_SERVER,
@@ -65,6 +67,7 @@ export type {
   InstallPlatform,
   InstallRecipe,
   OutputSignals,
+  ToolRestriction,
   TurnLineParser,
   TurnPhase,
   TurnPlanInputExt,

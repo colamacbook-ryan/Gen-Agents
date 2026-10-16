@@ -19,6 +19,13 @@ import type { DetailedClassification, ErrorRule } from '../../types.ts';
 // api_error_status:null, …} và `rate_limit_event` {rate_limit_info:{status:'allowed', resetsAt:<giây Unix>, …}}.
 // MỌI dạng lỗi còn lại: chưa kiểm — suy từ hợp đồng HTTP của API hãng + chuỗi lỗi quen thuộc của CLI; kiểm thật ở M6
 // (ID CC-E.. trong packages/engines/ASSUMPTIONS.md). Không có luật nào ở đây được coi là "đã chặn" trước M6.
+//
+// Chống "classification injection" (review bảo mật 2026-10-16, MEDIUM): câu trả lời của model / nội dung bị prompt injection
+// không bao giờ được quyết định lý do lỗi.
+//   - Ưu tiên trường CÓ CẤU TRÚC: is_error, subtype, api_error_status, assistant.error, rate_limit_event.
+//   - Chỉ dò chữ khi đang ở trạng thái lỗi (result.is_error === true, hoặc không có result và mã thoát ≠ 0), và chỉ dò thông
+//     điệp lỗi (result.result khi is_error) + stderr — không bao giờ dò nội dung trả lời (delta, assistant, result thành công).
+//   - resetAt CHỈ lấy từ rate_limit_event status=rejected (giây Unix có cấu trúc). Không có ⇒ null (backoff mặc định).
 
 export interface ClaudeSignals {
   exitCode: number | null;
@@ -28,13 +35,13 @@ export interface ClaudeSignals {
   resultSeen: boolean;
   resultIsError: boolean;
   resultSubtype: string | null;
-  /** `result.api_error_status`, hoặc mã HTTP trong chuỗi "API Error: <mã>". */
+  /** `result.api_error_status`, hoặc mã HTTP trong thông điệp lỗi "API Error: <mã>" (chỉ khi is_error). */
   httpStatus: number | null;
   /** Trường `error` của dòng `assistant` cuối (vd 'rate_limit', 'authentication_failed') — chưa kiểm (CC-E07). */
   assistantError: string | null;
   rateLimitStatus: string | null;
   rateLimitResetsAt: string | null;
-  /** Văn bản lỗi đã hạ chữ thường, chặn độ dài: result.result + stderr. */
+  /** Thông điệp LỖI đã hạ chữ thường, chặn độ dài (rỗng khi không ở trạng thái lỗi) — không chứa nội dung trả lời. */
   text: string;
 }
 
@@ -45,14 +52,6 @@ function statusFromText(text: string): number | null {
   if (i < 0) return null;
   const m = /^\s*(\d{3})\b/.exec(text.slice(i + API_ERROR_PREFIX.length, i + API_ERROR_PREFIX.length + 8));
   return m ? Number(m[1]) : null;
-}
-
-/** Mốc reset dạng "…limit reached|<giây Unix>" trong văn bản (CC-E03, chưa kiểm). */
-function resetFromText(text: string): string | null {
-  const i = text.indexOf('|');
-  if (i < 0) return null;
-  const m = /^(\d{9,11})\b/.exec(text.slice(i + 1, i + 13));
-  return m ? epochSecondsToDb(Number(m[1])) : null;
 }
 
 export function extractSignals(
@@ -75,21 +74,30 @@ export function extractSignals(
       const info = obj(line.rate_limit_info);
       if (info !== null) {
         rateLimitStatus = str(info.status);
-        rateLimitResetsAt = epochSecondsToDb(info.resetsAt);
+        // Giờ reset chỉ khi CLI báo BỊ CHẶN (rejected); sự kiện 'allowed' không phải giờ hết quota.
+        rateLimitResetsAt = rateLimitStatus === 'rejected' ? epochSecondsToDb(info.resetsAt) : null;
       }
     }
   }
-  const resultText = result === null ? null : str(result.result);
-  const text = haystack(resultText, tail(stderr, MAX_CLASSIFY_STDERR_CHARS));
+  const resultIsError = result !== null && result.is_error === true;
+  // Trạng thái lỗi: result báo lỗi, hoặc CLI không ra result mà thoát ≠ 0 (lỗi cấp CLI, vd mất mạng trước khi gọi API).
+  const errorState = resultIsError || (result === null && exit.exitCode !== null && exit.exitCode !== 0);
+  const errorMessage = resultIsError ? str(result?.result) : null;
+  const text = errorState ? haystack(errorMessage, tail(stderr, MAX_CLASSIFY_STDERR_CHARS)) : '';
   const apiStatus = result === null ? null : result.api_error_status;
   return {
     exitCode: exit.exitCode,
     signal: exit.signal,
     timedOut: exit.timedOut,
     resultSeen: result !== null,
-    resultIsError: result !== null && result.is_error === true,
+    resultIsError,
     resultSubtype: result === null ? null : str(result.subtype),
-    httpStatus: typeof apiStatus === 'number' && Number.isInteger(apiStatus) ? apiStatus : statusFromText(text),
+    httpStatus:
+      typeof apiStatus === 'number' && Number.isInteger(apiStatus)
+        ? apiStatus
+        : resultIsError
+          ? statusFromText(text)
+          : null,
     assistantError,
     rateLimitStatus,
     rateLimitResetsAt,
@@ -120,7 +128,7 @@ export const ERROR_RULES: readonly ErrorRule<ClaudeSignals>[] = [
     id: 'CC-E03',
     outcome: 'quota_exhausted',
     evidence: 'assumed',
-    source: `HTTP 429 / "usage limit reached" / assistant.error=rate_limit: ${UNVERIFIED}`,
+    source: `HTTP 429 / assistant.error=rate_limit / thông điệp lỗi "usage limit reached" (chỉ khi is_error): ${UNVERIFIED}`,
     match: (s) =>
       s.httpStatus === 429 ||
       s.assistantError === 'rate_limit' ||
@@ -215,7 +223,8 @@ export function classifyDetailed(
 ): DetailedClassification {
   const s = extractSignals(exit, stdout, stderr);
   const rule = ERROR_RULES.find((r) => r.match(s)) ?? (ERROR_RULES[ERROR_RULES.length - 1] as ErrorRule<ClaudeSignals>);
-  const resetAt = rule.outcome === 'quota_exhausted' ? (s.rateLimitResetsAt ?? resetFromText(s.text)) : null;
+  // resetAt chỉ từ trường có cấu trúc (rate_limit_event rejected); chữ tự do không bao giờ đặt giờ reset.
+  const resetAt = rule.outcome === 'quota_exhausted' ? s.rateLimitResetsAt : null;
   const classification: TurnClassification = {
     outcome: rule.outcome,
     resetAt,

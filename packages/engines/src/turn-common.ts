@@ -12,7 +12,7 @@ import {
   type TurnPlanInput,
 } from '@ga/contracts';
 import { assertEnvTable, assertPlanEnv, type EnvSpec, EnvTableError } from './env.ts';
-import type { TurnPlanInputExt } from './types.ts';
+import type { ToolRestriction, TurnPlanInputExt } from './types.ts';
 
 // Phần dùng chung khi dựng EnginePlan (§B.5 bước 4, CNS-168): kiểm đầu vào, argv chỉ từ BẢNG CỜ ĐÓNG của adapter,
 // chặn tiêm cờ qua giá trị, cấu hình MCP trỏ gateway. Hàm thuần — chạy được trong ga-runner (chỉ phụ thuộc contracts).
@@ -30,7 +30,8 @@ export class TurnPlanError extends Error {
     | 'prompt_too_large'
     | 'system_prompt_too_large'
     | 'invalid_timeout'
-    | 'plan_policy_violation';
+    | 'plan_policy_violation'
+    | 'engine_unrestricted';
   constructor(code: TurnPlanError['code'], message: string) {
     super(message);
     this.name = 'TurnPlanError';
@@ -231,6 +232,27 @@ export function relativeInside(outer: string, inner: string): string {
     throw new TurnPlanError('invalid_path', 'homeDir / ticketFile phải nằm trong thư mục tmpfs của lần chạy');
   }
   return i.slice(o.length + 1);
+}
+
+/**
+ * Fail-closed (sandbox-parity): chỉ cho dựng plan lượt khi adapter có cơ chế giới hạn công cụ VÀ mọi cờ của cơ chế có trong
+ * bảng năng lực đã quét. Không có ⇒ ném engine_unrestricted (runner không chạy lượt, báo lý do).
+ */
+export function assertToolRestriction(
+  restriction: ToolRestriction | null,
+  detectedFlags: readonly string[] | undefined,
+): ToolRestriction {
+  if (restriction === null) {
+    throw new TurnPlanError('engine_unrestricted', 'CLI không có cơ chế giới hạn công cụ đã biết — không chạy lượt');
+  }
+  if (detectedFlags === undefined) {
+    throw new TurnPlanError('engine_unrestricted', 'thiếu bảng năng lực đã quét (detectedFlags) — không chạy lượt');
+  }
+  const missing = restriction.requiredFlags.filter((f) => !detectedFlags.includes(f));
+  if (missing.length > 0) {
+    throw new TurnPlanError('engine_unrestricted', `CLI đã quét thiếu cờ giới hạn công cụ: ${missing.join(', ')}`);
+  }
+  return restriction;
 }
 
 export interface CheckedTurnInput {

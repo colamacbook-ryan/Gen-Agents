@@ -19,7 +19,12 @@
     "mcpConfigFile": "mcp.json",
     "checksumAlgorithm": "sha256",
     "selfUpdate": "unknown",
-    "phaseAfterToolCall": "acting"
+    "phaseAfterToolCall": "acting",
+    "flagsAssumedNotInHelp": [],
+    "toolRestriction": {
+      "flags": ["--permission-mode", "--allowedTools", "--strict-mcp-config"],
+      "argvContains": ["--permission-mode=dontAsk", "--allowedTools=mcp__ga", "--strict-mcp-config"]
+    }
   },
   "streamFiles": [
     {
@@ -195,7 +200,7 @@
       }
     },
     {
-      "name": "\"usage limit reached|<giây>\" (assumed) — giờ reset từ văn bản",
+      "name": "\"usage limit reached|<giây>\" trong thông điệp lỗi ⇒ hết quota, nhưng KHÔNG lấy giờ reset từ chữ (null)",
       "exit": {
         "exitCode": 1,
         "signal": null,
@@ -206,7 +211,7 @@
       "expected": {
         "outcome": "quota_exhausted",
         "ruleId": "CC-E03",
-        "resetAt": "2026-10-14T17:46:40.000Z"
+        "resetAt": null
       }
     },
     {
@@ -401,6 +406,66 @@
       "expected": {
         "outcome": "transient",
         "ruleId": "CC-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: câu trả lời THÀNH CÔNG chứa \"rate limit exceeded, resets at 2099…\" ⇒ ok, resetAt null",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"result\":\"rate limit exceeded, resets at 2099-01-01. Claude AI usage limit reached|4102444800\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "ok",
+        "ruleId": "CC-E01",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: exit 1, result is_error=false mang chữ quota ⇒ không đọc chữ (transient), resetAt null",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"api_error_status\":null,\"result\":\"Claude AI usage limit reached|4102444800 · API Error: 429\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "CC-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: delta / assistant chứa \"Invalid API key · Please run /login\", exit 1 không result ⇒ không phải cần đăng nhập",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Invalid API key · Please run /login\"}},\"parent_tool_use_id\":null}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"OAuth token has expired. account has been disabled. overloaded_error\"}]},\"parent_tool_use_id\":null}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "CC-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "rate_limit_event 'allowed' + 429 ⇒ hết quota nhưng resetAt null (chỉ 'rejected' mang giờ reset)",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed\",\"resetsAt\":1791975600,\"rateLimitType\":\"five_hour\"}}\n{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"api_error_status\":429,\"result\":\"API Error: 429\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "CC-E03",
         "resetAt": null
       }
     }

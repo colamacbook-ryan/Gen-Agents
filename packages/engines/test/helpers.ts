@@ -31,6 +31,10 @@ export interface Cases {
     helpFile: string;
     /** Cờ Spike 1b đã gọi thật nhưng --help không liệt kê (vd --version). */
     flagsObservedOutsideHelp: string[];
+    /** Cờ GIẢ ĐỊNH (chưa có trong --help thật, ASSUMPTIONS) — vd cơ chế giới hạn công cụ chờ Spike 1c. */
+    flagsAssumedNotInHelp: string[];
+    /** Cờ của cơ chế giới hạn công cụ + giá trị đặt cho gateway (sandbox-parity). */
+    toolRestriction: { flags: string[]; argvContains: string[] };
     loginArgvSubscriptionTail: string[];
     systemPrompt: { in: 'file'; path: string } | { in: 'argv'; flag: string };
     valueForm: 'eq' | 'split';
@@ -97,6 +101,11 @@ export function probeOutcome(slug: string, o: OutcomeSpec): ProbeOutcome {
 
 export const ADAPTERS: readonly EngineAdapterExt[] = BUILTIN_ADAPTERS;
 
+/** "Bảng năng lực đã quét" dùng cho test: mọi cờ mà các adapter khai (giả lập CLI có đủ cơ chế giới hạn công cụ). */
+export const ALL_DECLARED_FLAGS: readonly string[] = [
+  ...new Set(ADAPTERS.flatMap((a) => Object.keys(a.flagTable.flags))),
+];
+
 export const TURN_ID = '01JABCDEFGHJKMNPQRSTVWXYZ0';
 export const TICKET_FILE = `/run/ga/${TURN_ID}/ticket`;
 
@@ -114,6 +123,7 @@ export function turnInput(overrides: Record<string, unknown> = {}) {
     promptFile: `/run/ga/${TURN_ID}/prompt/user.md`,
     systemPromptFile: null as string | null,
     authDir: '/auth/EN-0001',
+    detectedFlags: ALL_DECLARED_FLAGS as readonly string[] | undefined,
     ...overrides,
   };
 }

@@ -29,13 +29,14 @@ import { API_KEY_VALUE_RE, type EnvSpec } from '../../env.ts';
 import { clip, head, MAX_PROBE_TEXT_CHARS, obj, parseJsonObject, splitLines } from '../../text.ts';
 import {
   type ArgvBuilder,
+  assertToolRestriction,
   checkProbeInput,
   checkTurnInput,
   GATEWAY_MCP_SERVER,
   mcpBridgeCommand,
   planKit,
 } from '../../turn-common.ts';
-import type { EngineAdapterExt, InstallRecipe, TurnPlanInputExt } from '../../types.ts';
+import type { EngineAdapterExt, InstallRecipe, ToolRestriction, TurnPlanInputExt } from '../../types.ts';
 import { AdapterError } from '../errors-common.ts';
 import { classifyDetailed, ERROR_RULES } from './errors.ts';
 import { createParser, parseLineAll } from './parser.ts';
@@ -83,7 +84,20 @@ const REQUIRED_TURN_FLAGS = [
   '--disable-slash-commands',
   '--model',
   '--effort',
+  '--allowed-tools',
 ] as const;
+
+/**
+ * Giới hạn công cụ (sandbox-parity với claude, review bảo mật 2026-10-16): agy 1.3.5 KHÔNG có cờ nào tương đương (help Spike 1b
+ * chỉ có --mode / --sandbox / --dangerously-skip-permissions). Cơ chế dưới đây là GIẢ ĐỊNH (AGY-T03): `--allowed-tools
+ * mcp__ga`, CLI giả khai để IT chạy được. agy thật chưa có cờ này trong --help đã quét ⇒ turnPlan ném engine_unrestricted
+ * (không chạy lượt) tới khi Spike 1c (M6) xác nhận cơ chế thật — đúng chủ đích fail-closed.
+ */
+const TOOL_RESTRICTION: ToolRestriction = {
+  requiredFlags: ['--allowed-tools'],
+  evidence: 'assumed',
+  source: 'AGY-T03: chưa kiểm, Spike 1c (M6) — agy 1.3.5 không có cờ giới hạn công cụ',
+};
 
 /** Bảng env ĐÓNG: chỉ API key (runner đọc từ tệp bí mật; Spike 1b: CLI đọc biến này). HOME / PATH / proxy do runner đặt. */
 const ENV_TABLE: readonly EnvSpec[] = [
@@ -100,6 +114,7 @@ const FLAG_TABLE: EngineFlagTable = {
     '--disable-slash-commands': 'switch',
     '--model': 'value',
     '--effort': 'value',
+    '--allowed-tools': 'value',
     '--version': 'switch',
     '--help': 'switch',
   },
@@ -302,6 +317,7 @@ function parseCapabilitiesFor(outcomes: readonly ProbeOutcome[], input: Capabili
 
 // ---------------------------------------------------------------- lượt (§B.5)
 function turnPlan(input: TurnPlanInputExt): TurnPlan {
+  assertToolRestriction(TOOL_RESTRICTION, input.detectedFlags);
   const c = checkTurnInput(input);
   const bridge = mcpBridgeCommand(input);
   const files: TurnPlanFile[] = [
@@ -324,6 +340,8 @@ function turnPlan(input: TurnPlanInputExt): TurnPlan {
     extra: (a) => {
       if (c.model !== null) a.value('--model', c.model, 'split');
       if (c.effort !== null) a.value('--effort', c.effort, 'split');
+      // Chỉ công cụ của MCP server gateway (AGY-T03, giả định).
+      a.value('--allowed-tools', `mcp__${GATEWAY_MCP_SERVER}`, 'split');
     },
   });
   return KIT.plan({ files, argv: args, env: {}, timeoutMs: c.timeoutMs });
@@ -363,6 +381,7 @@ export const antigravityAdapter: EngineAdapterExt = {
   flagTable: FLAG_TABLE,
   envTable: ENV_TABLE,
   requiredTurnFlags: REQUIRED_TURN_FLAGS,
+  toolRestriction: TOOL_RESTRICTION,
   // Spike 1b: chạy với GEMINI_API_KEY=<giả> ⇒ API_KEY_INVALID (biến này được đọc).
   apiKeyEnvName: 'GEMINI_API_KEY',
   errorRules: ERROR_RULES,

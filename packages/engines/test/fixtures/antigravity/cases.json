@@ -20,7 +20,12 @@
     "checksumAlgorithm": "sha512",
     "selfUpdate": "enabled",
     "phaseAfterToolCall": "acting",
-    "_doc_stream": "stream-json theo schema thống nhất với CLI giả: testing/fakes ASSUMPTIONS AG-STREAM-1 (= AGY-STREAM-01) — giả định."
+    "_doc_stream": "stream-json theo schema thống nhất với CLI giả: testing/fakes ASSUMPTIONS AG-STREAM-1 (= AGY-STREAM-01) — giả định.",
+    "flagsAssumedNotInHelp": ["--allowed-tools"],
+    "toolRestriction": {
+      "flags": ["--allowed-tools"],
+      "argvContains": ["--allowed-tools", "mcp__ga"]
+    }
   },
   "stream": [
     {
@@ -405,6 +410,66 @@
         "ruleId": "AGY-E11",
         "resetAt": null
       }
+    },
+    {
+      "name": "injection: stream-json THÀNH CÔNG, delta chứa \"quota exceeded\" / \"API_KEY_INVALID\" ⇒ ok",
+      "exit": {
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"delta\",\"text\":\"quota exceeded (quota resets at 2099-01-01T00:00:00Z) API_KEY_INVALID authentication failed\"}\n{\"type\":\"result\",\"status\":\"SUCCESS\",\"response\":\"x\",\"error\":\"\",\"usage\":{}}",
+      "stderr": "",
+      "expected": {
+        "outcome": "ok",
+        "ruleId": "AGY-E01",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: exit 1 không có dòng result, delta chứa \"authentication failed\" ⇒ không phải cần đăng nhập",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"delta\",\"text\":\"error: authentication failed or timed out\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "injection: tool_result mang status ERROR giả ⇒ không coi là dòng kết quả",
+      "exit": {
+        "exitCode": 1,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"tool_result\",\"id\":\"t\",\"name\":\"recall\",\"is_error\":true,\"text\":\"x\",\"status\":\"ERROR\",\"error\":\"authentication failed\"}",
+      "stderr": "",
+      "expected": {
+        "outcome": "transient",
+        "ruleId": "AGY-E11",
+        "resetAt": null
+      }
+    },
+    {
+      "name": "429 có \"(quota resets at …)\" trong short_error ⇒ hết quota, resetAt null (không tin chữ)",
+      "exit": {
+        "exitCode": 3,
+        "signal": null,
+        "timedOut": false
+      },
+      "stdout": "{\"type\":\"result\",\"status\":\"ERROR\",\"error\":\"agent executor error: Error 429 (quota resets at 2099-01-01T00:00:00Z)\"}",
+      "stderr": "AGY_ERROR: {\"short_error\":\"Error 429 (quota resets at 2099-01-01T00:00:00Z)\",\"status\":\"RESOURCE_EXHAUSTED\",\"error_code\":429,\"code_kind\":\"http\",\"retryable\":false}",
+      "expected": {
+        "outcome": "quota_exhausted",
+        "ruleId": "AGY-E06",
+        "resetAt": null
+      }
     }
   ],
   "login": [
@@ -525,7 +590,7 @@
   ],
   "capabilities": [
     {
-      "name": "chưa đăng nhập (Spike 1b): version + help + models exit 1",
+      "name": "chưa đăng nhập (Spike 1b): version + help + models exit 1 — agy 1.3.5 thiếu cờ giới hạn công cụ ⇒ chưa kiểm tương thích",
       "authMode": "none",
       "outcomes": [
         {
@@ -567,13 +632,13 @@
         "quota_window:*": "unknown_requires_login"
       },
       "scan": {
-        "compatibility": "tested",
-        "missingTurnFlags": [],
+        "compatibility": "untested",
+        "missingTurnFlags": ["--allowed-tools"],
         "probeStatus": "partial"
       }
     },
     {
-      "name": "chế độ API key: models = catalog tĩnh; /usage groups rỗng (dựng theo REPORT §1)",
+      "name": "chế độ API key: models = catalog tĩnh; /usage groups rỗng (dựng theo REPORT §1) — agy 1.3.5 thiếu cờ giới hạn công cụ ⇒ chưa kiểm tương thích",
       "authMode": "api_key",
       "outcomes": [
         {
@@ -604,8 +669,8 @@
         "quota_window:*": "unknown: /usage không có cửa sổ quota (chế độ API key)"
       },
       "scan": {
-        "compatibility": "tested",
-        "missingTurnFlags": [],
+        "compatibility": "untested",
+        "missingTurnFlags": ["--allowed-tools"],
         "probeStatus": "partial"
       }
     },

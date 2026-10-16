@@ -28,13 +28,14 @@ import { API_KEY_VALUE_RE, type EnvSpec } from '../../env.ts';
 import { clip, maskAccountHint, parseJsonObject, str } from '../../text.ts';
 import {
   type ArgvBuilder,
+  assertToolRestriction,
   checkProbeInput,
   checkTurnInput,
   GATEWAY_MCP_SERVER,
   mcpBridgeCommand,
   planKit,
 } from '../../turn-common.ts';
-import type { EngineAdapterExt, InstallRecipe, TurnPlanInputExt } from '../../types.ts';
+import type { EngineAdapterExt, InstallRecipe, ToolRestriction, TurnPlanInputExt } from '../../types.ts';
 import { AdapterError } from '../errors-common.ts';
 import { classifyDetailed, ERROR_RULES } from './errors.ts';
 import { createParser, parseLineAll } from './parser.ts';
@@ -118,6 +119,16 @@ const FLAG_TABLE: EngineFlagTable = {
 };
 
 const KIT = planKit({ slug: SLUG, binaryName: BIN, flagTable: FLAG_TABLE, envTable: ENV_TABLE });
+
+/**
+ * Giới hạn công cụ (INT-07, sandbox-parity): chỉ MCP server gateway + chỉ cấu hình MCP của lượt; công cụ khác tự bị từ chối
+ * (`dontAsk`). Ba cờ có trong --help 2.1.299 (Spike 1b); ngữ nghĩa chưa kiểm với CLI thật (CC-T02, M6).
+ */
+const TOOL_RESTRICTION: ToolRestriction = {
+  requiredFlags: ['--permission-mode', '--allowedTools', '--strict-mcp-config'],
+  evidence: 'partial',
+  source: 'CC-T02: cờ có trong --help 2.1.299; ngữ nghĩa "chỉ tool của gateway" chưa kiểm (M6)',
+};
 
 const SCAN_TIMEOUT_MS = 30_000;
 const SCAN_PRINT_TIMEOUT_MS = 90_000;
@@ -297,6 +308,7 @@ function parseCapabilitiesFor(outcomes: readonly ProbeOutcome[], input: Capabili
 
 // ---------------------------------------------------------------- lượt (§B.5)
 function turnPlan(input: TurnPlanInputExt): TurnPlan {
+  assertToolRestriction(TOOL_RESTRICTION, input.detectedFlags);
   const c = checkTurnInput(input);
   const bridge = mcpBridgeCommand(input);
   const mcpConfig = {
@@ -359,6 +371,7 @@ export const claudeCodeAdapter: EngineAdapterExt = {
   flagTable: FLAG_TABLE,
   envTable: ENV_TABLE,
   requiredTurnFlags: REQUIRED_TURN_FLAGS,
+  toolRestriction: TOOL_RESTRICTION,
   apiKeyEnvName: 'ANTHROPIC_API_KEY',
   errorRules: ERROR_RULES,
   // Pha tách được từ stream (sự kiện công cụ đầu tiên); nhãn chưa chắc: chưa đo được (G-13, M6).

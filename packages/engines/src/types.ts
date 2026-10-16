@@ -74,7 +74,26 @@ export interface InstallRecipe {
   readonly verifiedAt: string;
 }
 
+/**
+ * Cơ chế giới hạn công cụ của lượt (sandbox-parity, review bảo mật 2026-10-16): chỉ công cụ của MCP server gateway được
+ * chạy; công cụ dựng sẵn (shell, đọc / ghi tệp…) bị từ chối. turnPlan CHỈ dựng plan khi mọi cờ của cơ chế có trong bảng
+ * năng lực đã quét (`detectedFlags`); thiếu ⇒ TurnPlanError('engine_unrestricted') — fail-closed. Cờ của cơ chế luôn có
+ * trong argv: CLI không hiểu cờ thì tự từ chối chạy (không bao giờ chạy không giới hạn).
+ */
+export interface ToolRestriction {
+  /** Cờ của cơ chế (⊆ requiredTurnFlags ⊆ flagTable). */
+  readonly requiredFlags: readonly string[];
+  readonly evidence: Evidence;
+  /** Nguồn / ID giả định (ASSUMPTIONS.md). */
+  readonly source: string;
+}
+
 export interface TurnPlanInputExt extends TurnPlanInput {
+  /**
+   * Cờ CLI đã quét lúc chạy (capability registry `flag:*`, STD-10) của đúng phiên bản đang cài. Thiếu ⇒ không biết CLI có
+   * cơ chế giới hạn công cụ ⇒ turnPlan từ chối (engine_unrestricted).
+   */
+  detectedFlags?: readonly string[];
   /** Trần thời gian lượt; thiếu thì dùng DEFAULT_TURN_TIMEOUT_MS (đề xuất đưa vào contracts TurnPlanInput). */
   timeoutMs?: number;
   /** Cách đăng nhập của tài khoản (API key cần cấu hình riêng ở một số CLI); thiếu = 'subscription'. */
@@ -110,6 +129,8 @@ export interface EngineAdapterExt extends EngineAdapter {
   readonly envTable: readonly EnvSpec[];
   /** Cờ turnPlan dùng (⊆ flagTable.flags); thiếu trong `--help` đã quét ⇒ "chưa kiểm tương thích" (STD-10 §4). */
   readonly requiredTurnFlags: readonly string[];
+  /** Cơ chế giới hạn công cụ; null = CLI không có cơ chế đã biết ⇒ không bao giờ dựng plan lượt. */
+  readonly toolRestriction: ToolRestriction | null;
   /** Tên env CLI đọc API key (runner đọc bí mật từ tệp mount rồi đặt env cho tiến trình con, không qua Docker env). */
   readonly apiKeyEnvName: string | null;
   turnPlan(input: TurnPlanInputExt): TurnPlan;

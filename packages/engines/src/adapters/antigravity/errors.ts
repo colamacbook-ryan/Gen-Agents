@@ -19,6 +19,11 @@ import type { DetailedClassification, ErrorRule } from '../../types.ts';
 // stderr có dòng `AGY_ERROR: {short_error, status, error_code, code_kind, retryable, error_id}` (key sai ⇒ exit 3,
 // status INVALID_ARGUMENT, error_code 400, reason API_KEY_INVALID). Bị `timeout` giết vẫn in JSON lỗi trước khi chết.
 // MỌI ánh xạ khác (401/403/429/5xx, giờ reset quota): chưa kiểm, Spike 1c (M6) — ID AGY-E.. trong ASSUMPTIONS.md.
+//
+// Chống "classification injection" (review bảo mật 2026-10-16): ưu tiên trường có cấu trúc (mã thoát, `status` của dòng
+// result, AGY_ERROR.error_code / status / code_kind / retryable); chỉ dò chữ khi ở trạng thái lỗi (status ERROR hoặc mã thoát
+// ≠ 0 mà không có SUCCESS) và chỉ dò thông điệp lỗi (`error`, AGY_ERROR.short_error, stderr) — không dò `response` / `delta`
+// / `tool_result`. Giờ reset: không có trường có cấu trúc ⇒ luôn null (chữ "(quota resets at …)" không được tin).
 
 export interface AgySignals {
   exitCode: number | null;
@@ -33,7 +38,7 @@ export interface AgySignals {
   /** `AGY_ERROR.code_kind` ('http' đã thấy; 'network' / 'decode' / 'timeout': giả định của CLI giả). */
   codeKind: string | null;
   retryable: boolean | null;
-  /** Văn bản lỗi đã hạ chữ thường, chặn độ dài: json.error + AGY_ERROR.short_error + stderr. */
+  /** Thông điệp LỖI đã hạ chữ thường, chặn độ dài (rỗng khi không ở trạng thái lỗi): json.error + short_error + stderr. */
   text: string;
 }
 
@@ -47,7 +52,10 @@ export function extractSignals(
   let json: Record<string, unknown> | null = null;
   for (const raw of splitLines(tail(stdout, MAX_CLASSIFY_STDOUT_CHARS))) {
     const line = parseJsonObject(raw);
-    if (line !== null && typeof line.status === 'string') json = line;
+    // Chỉ dòng kết quả (stream-json `type:"result"` hoặc object `json` không có `type`) — không dòng nội dung.
+    if (line !== null && typeof line.status === 'string' && (line.type === 'result' || line.type === undefined)) {
+      json = line;
+    }
   }
   const errTail = tail(stderr, MAX_CLASSIFY_STDERR_CHARS);
   let agyError: Record<string, unknown> | null = null;
@@ -59,20 +67,25 @@ export function extractSignals(
   }
   const code = agyError?.error_code;
   const retryable = agyError?.retryable;
+  const jsonStatus = json === null ? null : str(json.status);
+  const errorState =
+    jsonStatus === 'ERROR' || (jsonStatus !== 'SUCCESS' && exit.exitCode !== null && exit.exitCode !== 0);
   return {
     exitCode: exit.exitCode,
     signal: exit.signal,
     timedOut: exit.timedOut,
-    jsonStatus: json === null ? null : str(json.status),
+    jsonStatus,
     errorCode: typeof code === 'number' && Number.isInteger(code) ? code : null,
     rpcStatus: agyError === null ? null : str(agyError.status),
     codeKind: agyError === null ? null : str(agyError.code_kind),
     retryable: typeof retryable === 'boolean' ? retryable : null,
-    text: haystack(
-      json === null ? null : str(json.error),
-      agyError === null ? null : str(agyError.short_error),
-      errTail,
-    ),
+    text: errorState
+      ? haystack(
+          jsonStatus === 'ERROR' && json !== null ? str(json.error) : null,
+          agyError === null ? null : str(agyError.short_error),
+          errTail,
+        )
+      : '',
   };
 }
 

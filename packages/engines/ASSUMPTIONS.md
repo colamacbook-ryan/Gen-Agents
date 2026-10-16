@@ -18,7 +18,7 @@ Test `test/errors.test.ts` đỏ nếu một luật lỗi `partial` / `assumed` 
 | CC-A01 | `claude auth login` chạy với HOME=/auth/<en> ghi credential vào `.claude/.credentials.json`; allowlist `/auth` chỉ cần tệp này (không giữ `.claude.json`) | suy ra; IT với CLI giả ở M1 | đăng nhập thật trong container, liệt kê tên tệp trong /auth/<en> |
 | CC-A02 | Trạng thái native: `.claude/projects/<cwd>/<phiên>.jsonl`, `.claude/history.jsonl`, `.claude.json` (danh sách có thể thiếu; khớp testing/fakes `CL-NATIVE-1`); lượt dùng thêm `--no-session-persistence` | tài liệu hãng | chạy một lượt, liệt kê HOME tmpfs trước khi xoá |
 | CC-T01 | Bộ parse cờ nhận `--cờ=giá-trị`; `-p` là cờ boolean, prompt là toán hạng cuối; cờ nhiều giá trị (`--mcp-config`, `--allowedTools`) đặt trước cờ boolean nên không nuốt prompt | help 2.1.299 (dạng commander) | một lượt thật với prompt bắt đầu bằng `-` |
-| CC-T02 | `--permission-mode=dontAsk` + `--allowedTools=mcp__ga` ⇒ chỉ công cụ của gateway chạy được, công cụ khác tự bị từ chối (INT-07) | help 2.1.299 có hai cờ; ngữ nghĩa chưa kiểm | lượt thử gọi Bash / WebFetch ⇒ phải bị từ chối |
+| CC-T02 | Giới hạn công cụ (sandbox-parity): `--permission-mode=dontAsk` + `--allowedTools=mcp__ga` + `--strict-mcp-config` ⇒ chỉ công cụ của gateway chạy được, công cụ khác tự bị từ chối (INT-07). turnPlan chỉ dựng plan khi ba cờ có trong bảng năng lực đã quét (thiếu ⇒ `engine_unrestricted`) | help 2.1.299 có ba cờ; ngữ nghĩa chưa kiểm | lượt thử gọi Bash / WebFetch / Read ⇒ phải bị từ chối |
 | CC-T03 | `-p` chạy được khi HOME chỉ có `.claude/.credentials.json` (không có `.claude.json`) | suy ra | lượt thật sau auth-gc |
 | CC-I02 | Env `DISABLE_AUTOUPDATER=1` chặn tự cập nhật vào volume chỉ đọc; `selfUpdate` = unknown | tài liệu hãng | chạy CLI trên mount chỉ đọc, xem log |
 | CC-L01 | `claude auth status` khi chưa đăng nhập in JSON `{"loggedIn":false}` (mã thoát chưa biết) | Spike 1b chỉ thấy trạng thái đã đăng nhập | chạy trên HOME trống |
@@ -28,7 +28,7 @@ Test `test/errors.test.ts` đỏ nếu một luật lỗi `partial` / `assumed` 
 | CC-STREAM-02 | Kết quả công cụ là dòng `user` với `tool_result` (`tool_use_id`) | giao thức Messages API | như trên |
 | CC-Q01 | `/usage` không có cửa sổ quota gói ⇒ `quota_window` unknown. `rate_limit_event` của lượt có `unifiedWindows.five_hour.utilization` + `resetsAt` (đã thấy) nhưng contracts chưa có sự kiện quota | Spike 1b | — (đề xuất contracts) |
 | CC-E02 | `rate_limit_event.status = rejected` ⇒ hết quota, `resetsAt` (giây Unix) = giờ reset | `status = allowed` đã thấy | chạm giới hạn thật hoặc đọc log hãng |
-| CC-E03 | HTTP 429 / "usage limit reached[\|<giây>]" / `assistant.error = rate_limit` ⇒ hết quota | chuỗi quen thuộc của CLI | như trên |
+| CC-E03 | HTTP 429 / `assistant.error = rate_limit` / thông điệp lỗi "usage limit reached" ⇒ hết quota. Chữ chỉ được dò khi `result.is_error = true` (thông điệp lỗi + stderr, không bao giờ câu trả lời); **giờ reset không lấy từ chữ** | chuỗi quen thuộc của CLI | như trên |
 | CC-E04 | `assistant.error = billing_error` / "credit balance is too low" ⇒ hết quota | suy ra | tài khoản API hết credit |
 | CC-E05 | HTTP 403 / "account / organization has been disabled" ⇒ bị khoá | suy ra | không tái hiện được an toàn — giữ giả định |
 | CC-E06 | "OAuth token has expired" / "token has been revoked" ⇒ hết hạn đăng nhập | chuỗi quen thuộc | thu hồi token |
@@ -48,7 +48,7 @@ Test `test/errors.test.ts` đỏ nếu một luật lỗi `partial` / `assumed` 
 | AGY-MCP-01 | Cấu hình MCP đọc từ `$HOME/.gemini/antigravity-cli/mcp_servers.json`, dạng phẳng `{"<tên>":{"type":"stdio","command","args","env"}}` như `agy mcp add` ghi (thống nhất testing/fakes `AG-MCP-1`), kể cả ở chế độ `-p` | chưa kiểm (Spike 1b chỉ thấy `agy mcp add/list`) | `agy mcp add` rồi xem tệp nó ghi; lượt `-p` gọi tool |
 | AGY-T01 | `GEMINI.md` trong cwd (tmpfs của lượt) được nạp ở chế độ `-p` | tài liệu đi kèm (rules.md) | lượt thật có chỉ dẫn |
 | AGY-T02 | `--print-timeout <N>s` (dạng Go duration) — chạm trần thì in JSON lỗi rồi thoát | help ("default 0s") | lượt dài |
-| AGY-T03 | Không có cờ giới hạn công cụ dựng sẵn; không dùng `--sandbox` (có thể cần namespace trong container cap_drop ALL) ⇒ công cụ dựng sẵn chưa bị chặn, chỉ còn cô lập container + egress | help 1.3.5 | lượt thử gọi terminal |
+| AGY-T03 | **Giới hạn công cụ (sandbox-parity, review bảo mật 2026-10-16):** agy 1.3.5 KHÔNG có cờ giới hạn công cụ (help chỉ có `--mode`, `--sandbox`, `--dangerously-skip-permissions`). Adapter khai cơ chế GIẢ ĐỊNH `--allowed-tools mcp__ga` (CLI giả khai để IT chạy được). turnPlan chỉ dựng plan khi cờ này có trong bảng năng lực đã quét ⇒ **agy thật (1.3.5 / 1.4.0) bị từ chối `engine_unrestricted`, không chạy lượt** tới khi Spike 1c tìm được cơ chế thật (cờ, settings, hay policy) và sửa adapter + CLI giả | chưa kiểm, Spike 1c (M6) | tìm cơ chế chặn shell / tệp ở chế độ `-p`; lượt thử gọi terminal phải bị từ chối |
 | AGY-T04 | Chế độ API key cần `settings.json` `{"modelProvider":"gemini"}` + env `GEMINI_API_KEY` | **partial** (Spike 1b: `models` + `-p` với key giả ⇒ API_KEY_INVALID) | key thật |
 | AGY-L01 | Sau đăng nhập, `agy models` thoát 0 + có dòng TSV ⇒ đã đăng nhập; CLI có in danh tính không: chưa biết ⇒ account_hint null | chưa đăng nhập: exit 1 "Please sign in" (observed) | đăng nhập thật |
 | AGY-MODELS-01 | Danh sách model khi OAuth là quyền thật hay catalog: chưa biết ⇒ giữ `static_catalog` | chế độ API key = catalog tĩnh (observed) | so hai tài khoản khác gói |
@@ -62,6 +62,14 @@ Test `test/errors.test.ts` đỏ nếu một luật lỗi `partial` / `assumed` 
 | AGY-E12 | Mất mạng tới hãng (`code_kind = network` / "no such host" / "connection refused") ⇒ sự cố hãng (PS §8.4: outage = lỗi mạng hoặc 5xx) — testing/fakes `AG-ERR-NET` | suy ra | chặn egress |
 | AGY-E09 | `retryable = true` / `DEADLINE_EXCEEDED` ⇒ transient | suy ra | — |
 | AGY-E11 | Còn lại ⇒ transient (không đoán là sự cố hãng) | quyết định thiết kế | — |
+
+## Chống "classification injection" (review bảo mật 2026-10-16)
+
+Cả hai bảng lỗi: ưu tiên trường có cấu trúc (mã thoát, `is_error`, `subtype`, `api_error_status`, `assistant.error`,
+`rate_limit_event`; agy: `status` của dòng result, `AGY_ERROR.error_code / status / code_kind / retryable`). Chỉ dò chữ khi ở
+trạng thái lỗi và chỉ trên thông điệp lỗi + stderr — không dò nội dung trả lời (delta, assistant, result thành công,
+tool_result). `resetAt` chỉ từ `rate_limit_event` status `rejected` (claude); agy luôn null. Test âm: câu trả lời chứa
+"rate limit exceeded, resets at 2099…" ⇒ ok, `resetAt` null.
 
 ## Chung (không riêng hãng)
 
