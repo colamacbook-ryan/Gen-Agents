@@ -311,7 +311,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     ).toBe(true);
   });
 
-  it('url_userinfo tách authority như parser URL: mật khẩu chứa " \' < > @, userinfo dài, username rỗng', () => {
+  it('url_userinfo tách như parser WHATWG: ký tự lạ trong mật khẩu, userinfo dài, scheme đặc biệt không cần //', () => {
     const pw = (x: string) => `${x}${fake(6, 'Pw9x')}`;
     for (const s of [
       `https://u:${pw('"')}@h/x`,
@@ -323,36 +323,59 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       `https://:${pw('')}@h`,
       `log: ftp://deploy:${pw('')}@files.internal:21/up`,
       `https://u:p\t${pw('')}@h`,
+      // TAB / LF / CR bị parser bỏ — kể cả giữa scheme
+      `ht\ntps://u:${pw('')}@h`,
+      `HTTPS://u:${pw('')}@h`,
+      // scheme đặc biệt: số gạch / gạch ngược tuỳ ý, kể cả không có
+      `https:\\\\u:${pw('')}@h`,
+      `https:/u:${pw('')}@h`,
+      `https:u:${pw('')}@h`,
+      `https:///u:${pw('')}@h`,
+      `wss:\\/u:${pw('')}@h`,
+      // scheme khác có //
+      `postgres://app:${pw('')}@db:5432/x`,
     ]) {
-      expect(findCredentialLike(s)?.patternId, s.slice(0, 60)).toBe('url_userinfo');
+      expect(findCredentialLike(s)?.patternId, JSON.stringify(s.slice(0, 60))).toBe('url_userinfo');
     }
     for (const s of [
       'https://u@h',
       'mailto:a@b',
+      'mailto:a:b@c',
+      'urn:x:y@z',
       'a:b@c',
       'https://h:8080/x@y',
       'https://u@h:8080',
       'https://h/a:b@c',
+      'x:/u:p@h',
+      'x:///u:p@h',
+      'https:\\h\\a:b@c',
+      'http: lỗi kết nối: xem log@server',
     ]) {
-      expect(findCredentialLike(s), s).toBeNull();
+      expect(findCredentialLike(s), JSON.stringify(s)).toBeNull();
     }
   });
 
-  it('url_userinfo ⊇ new URL(): mọi chuỗi URL hợp lệ có password khác rỗng đều bị bắt (corpus ngẫu nhiên tất định)', () => {
-    // Khoảng trắng (trừ TAB / LF / CR mà parser URL bỏ qua) kết thúc authority khi quét văn bản — corpus không chèn khoảng
-    // trắng vào userinfo (URL có khoảng trắng thô không đứng nguyên trong văn bản chạy).
+  it('url_userinfo ⊇ new URL(): mọi chuỗi có URL.password ≠ "" đều bị bắt (corpus tất định, đủ các dạng lệch)', () => {
     let seed = 20261016;
     const rnd = () => {
       seed = (seed * 1103515245 + 12345) >>> 0;
       return seed / 4294967296;
     };
-    const ALPHA = 'abcXYZ019:@"\'<>%!$&()*+,;=~._-\t\n[]';
-    const pick = (n: number) => Array.from({ length: n }, () => ALPHA[Math.floor(rnd() * ALPHA.length)]).join('');
+    const one = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)] as T;
+    // không có khoảng trắng thô (xem chú thích hasUrlUserinfo); có TAB / LF / CR, \\, @, :, ký tự lạ
+    const ALPHA = 'abcXYZ019:@"\'<>%!$&()*+,;=~._-\t\n\r[]\\/';
+    const pick = (n: number) => Array.from({ length: n }, () => one([...ALPHA])).join('');
+    const withTab = (x: string) => {
+      if (rnd() < 0.8) return x;
+      const k = Math.floor(rnd() * (x.length + 1));
+      return `${x.slice(0, k)}${one(['\t', '\n', '\r'])}${x.slice(k)}`;
+    };
+    const SCHEMES = ['https', 'HTTPS', 'Http', 'http', 'ws', 'WSS', 'ftp', 'file', 'postgres', 'x-y', 'mailto', 'urn'];
+    const SEPS = ['', '/', '//', '///', '\\', '\\\\', '/\\', '\\/', '//\\'];
     let withPassword = 0;
     const misses: string[] = [];
-    for (let k = 0; k < 20_000; k++) {
-      const scheme = ['https', 'http', 'ftp', 'postgres', 'x-y', 'ws'][Math.floor(rnd() * 6)];
-      const s = `${scheme}://${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${['', '/p', '?q=1', '#f', ':8080/x'][Math.floor(rnd() * 5)]}`;
+    for (let k = 0; k < 40_000; k++) {
+      const s = `${withTab(one(SCHEMES))}:${one(SEPS)}${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${one(['', '/p', '?q=1', '#f', ':8080/x', '\\p'])}`;
       let u: URL;
       try {
         u = new URL(s);
@@ -363,7 +386,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       withPassword++;
       if (findCredentialLike(s) === null || findCredentialLike(`xem ${s} nhé`) === null) misses.push(JSON.stringify(s));
     }
-    expect(withPassword).toBeGreaterThan(500);
+    expect(withPassword).toBeGreaterThan(2000);
     expect(misses.slice(0, 5)).toEqual([]);
   });
 
@@ -471,6 +494,12 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
     '://@ lặp': '://@'.repeat(Math.floor(MB / 4)),
     ':// + 1 MiB TAB/LF': `://${'\t\n'.repeat(MB / 2)}`,
     ':/:/ lặp (gần ://)': ':/:/'.repeat(Math.floor(MB / 4)),
+    'a: lặp': 'a:'.repeat(MB / 2),
+    'https: lặp (authority lồng nhau)': 'https:'.repeat(Math.floor(MB / 6)),
+    'https:a:@ lặp': 'https:a:@'.repeat(Math.floor(MB / 9)),
+    'https: + 1 MiB gạch': `https:${'/'.repeat(MB)}`,
+    'x// lặp': 'x://'.repeat(Math.floor(MB / 4)),
+    'TAB lặp giữa scheme': 'ht\ttps:'.repeat(Math.floor(MB / 8)),
     '://u:p lặp (không @)': '://u:pppppppppp '.repeat(Math.floor(MB / 16)),
     'Bearer lặp': 'Bearer '.repeat(Math.floor(MB / 7)),
     'bearer + 1 MiB tab': `bearer${'\t'.repeat(MB)}`,
