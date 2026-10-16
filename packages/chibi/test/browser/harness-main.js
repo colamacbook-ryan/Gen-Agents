@@ -2,6 +2,7 @@
 import './harness-zod.js'; // phải chạy trước mọi import dựng schema zod
 import * as C from '/src/index.ts';
 import { ST } from '/src/states.ts';
+import * as T from '/src/testing.ts'; // svg() dạng chuỗi (style nội tuyến) chỉ để làm ca âm CSP + ảnh đối chứng
 
 const base = '/skins/tam-quoc-chibi/1.0.0/';
 const manifest = await (await fetch(`${base}manifest.json`)).json();
@@ -41,7 +42,7 @@ window.__api = {
   /** đường CŨ (chuỗi svg() có style="…" nội tuyến): ca âm CSP + ảnh đối chứng cho so khớp điểm ảnh */
   mountLegacy: (id, s, v) => {
     C.injectCSS();
-    el.innerHTML = C.svg(id, s, { size: 160, fixedPhase: true, variant: v || undefined });
+    el.innerHTML = T.svg(id, s, { size: 160, fixedPhase: true, variant: v || undefined });
     return el.querySelector('svg.chb');
   },
 };

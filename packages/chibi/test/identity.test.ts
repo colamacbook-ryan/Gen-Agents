@@ -11,10 +11,10 @@ import {
   evaluateIdentity,
   register,
   registerAll,
-  svg,
   unregister,
   viewOfString,
 } from '../src/index.ts';
+import { svg } from '../src/testing.ts';
 import { CODES, clone, rawSpec, rawSpecs, SLUGS } from './support/pack.ts';
 
 beforeAll(() => {

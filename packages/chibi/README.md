@@ -5,7 +5,7 @@ Port TypeScript ESM của spike 4 v3 (BUILD-PLAN §D.5). Không framework, chỉ
 ## Dùng nhanh
 
 ```ts
-import { loadSkinPack, mount, svg, validate, register, evaluateIdentity, viewOfElement } from '@ga/chibi';
+import { loadSkinPack, mount, validate, register, evaluateIdentity, viewOfElement } from '@ga/chibi';
 
 // 1. nạp gói skin (manifest + 10 tệp skins/tam-quoc-chibi/1.0.0/characters/<asset_code>.json) hoặc params_json từ DB
 loadSkinPack(manifest, (file) => characters[file]);   // kiểm schema cả gói, không đăng ký nếu có một nhân vật sai
@@ -14,11 +14,12 @@ register(JSON.parse(row.params_json));                // một nhân vật; ném
 // 2. vẽ
 const h = mount(el, 'tq046', 'wait', { size: 160, motion: 'full' }); // → { svg, setState, setMotion, destroy }
 h.setState('reward');                                 // gom theo lô, chuyển tiếp mượt 260 ms
-html = svg('tq046', 'normal', { size: 64 });          // chuỗi SVG tự chứa (SSR / React dangerouslySetInnerHTML qua wrapper của ui)
 
 // 3. cổng nhận diện khai báo
 evaluateIdentity('tq046', viewOfElement(h.svg));      // { must:[{p,label,ok}], extra:[…], pass }
 ```
+
+`svg()` dạng chuỗi (mang `style="…"` nội tuyến) **không** nằm ở export chính mà ở subpath `@ga/chibi/testing`, chỉ cho test so khớp; `apps/**` không được import (`test/boundary.test.ts` chặn).
 
 `validate(spec)` / `parse(jsonText)` trả `{ok, value | errors}` không ném. `Chibi.schema` là schema zod (`ChibiParamsV1`); `toJsonSchema()` xuất JSON Schema.
 
@@ -42,9 +43,9 @@ Khoá lấy từ `@ga/contracts` (`AVATAR_STATES`, thứ tự ưu tiên của `v
 
 `mount()` chạy được dưới `Content-Security-Policy: default-src 'self'; style-src 'self'`:
 
-- CSS của engine là constructable stylesheet (`new CSSStyleSheet()` + `replaceSync`, gắn bằng `adoptedStyleSheets`) vào `document` hoặc chính shadow root chứa avatar. Đường này không bị `style-src` chặn.
-- Markup từ `svg()` đi qua `strictMarkup()` (`src/strict.ts`) trước khi chèn: `style="stroke-width:Npx"` → thuộc tính trình bày `stroke-width`; `calc(var(--chb-sw,3.4) * k)` → `data-chb-k` + luật `[data-chb-k]` trong stylesheet (k thuộc tập đóng `K_VALUES`); `overflow` / `opacity` → thuộc tính SVG; biến `--chb-*` → `data-chb-sty` rồi `hydrateStyles()` áp bằng `el.style.setProperty` (CSSOM, không bị CSP chặn). Kiểu `style` nào khác thì **ném lỗi**, không bỏ lặng. Lớp dựng lại khi `setState` cũng đi đường này.
-- Test Chromium thật (`test/browser/csp.test.ts`) với header trên: 0 `securitypolicyviolation`, 0 lỗi console, style thực sự được áp (nét theo hệ số, biến tuỳ ý, keyframes chạy), shadow root, đổi trạng thái / mức chuyển động; ảnh khớp đường nội tuyến cũ (điểm ảnh lệch > 24/255 = 0). Đo ngoài test: 540 khung (10 × 18 × 3 mốc) chụp dưới CSP chặt so với bản ngay trước khi đổi: 534 giống từng điểm ảnh, 6 khung lệch ≤ 6/255 trên ≤ 27 điểm ảnh, 0 điểm ảnh vượt ngưỡng 24/255, 0 vi phạm CSP. Ca âm: chuỗi `svg()` cũ và việc chèn lại `style="…"` đều bị CSP báo `style-src-attr` ⇒ bộ bắt còn sống. `test/strict.test.ts` quét `src/` cấm `setAttribute('style'`, `.cssText =` và thẻ `<style>` ngoài nhánh dự phòng.
+- CSS của engine là constructable stylesheet (`new CSSStyleSheet()` + `replaceSync`, gắn bằng `adoptedStyleSheets`) vào `document` hoặc chính shadow root chứa avatar. Đường này không bị `style-src` chặn. **Không có đường dự phòng bằng thẻ `<style>`**: trình duyệt thiếu constructable stylesheet (Chromium < 73, Firefox < 101, Safari < 16.4) thì `mount()` ném lỗi rõ ràng (fail-closed), không lặng lẽ đòi `style-src` rộng hơn.
+- Markup do engine dựng (nội bộ là chuỗi `svg()`) đi qua `strictMarkup()` (`src/strict.ts`) trước khi chèn: `style="stroke-width:Npx"` → thuộc tính trình bày `stroke-width`; `calc(var(--chb-sw,3.4) * k)` → `data-chb-k` + luật `[data-chb-k]` trong stylesheet (k thuộc tập đóng `K_VALUES`); `overflow` / `opacity` → thuộc tính SVG; biến `--chb-*` → `data-chb-sty` rồi `hydrateStyles()` áp bằng `el.style.setProperty` (CSSOM, không bị CSP chặn). Kiểu `style` nào khác thì **ném lỗi**, không bỏ lặng. Lớp dựng lại khi `setState` cũng đi đường này.
+- Test Chromium thật (`test/browser/csp.test.ts`) với header trên: 0 `securitypolicyviolation`, 0 lỗi console, style thực sự được áp (nét theo hệ số, biến tuỳ ý, keyframes chạy), shadow root, đổi trạng thái / mức chuyển động; ảnh khớp đường nội tuyến cũ (điểm ảnh lệch > 24/255 = 0). Đo ngoài test: 540 khung (10 × 18 × 3 mốc) chụp dưới CSP chặt so với bản ngay trước khi đổi: 534 giống từng điểm ảnh, 6 khung lệch ≤ 6/255 trên ≤ 27 điểm ảnh, 0 điểm ảnh vượt ngưỡng 24/255, 0 vi phạm CSP. Ca âm: chuỗi `svg()` cũ và việc chèn lại `style="…"` đều bị CSP báo `style-src-attr` ⇒ bộ bắt còn sống. `test/strict.test.ts` quét toàn bộ `src/` cấm `setAttribute('style'`, `.cssText =` và mọi chỗ tạo thẻ `<style>` (0 chỗ).
 
 ## Chuyển động
 
@@ -99,6 +100,6 @@ Headless raster bằng CPU (không GPU): số tuyệt đối chỉ để so sán
 - Nhân vật khoá tay (Triệu Vân, `lockR`) cầm hồ lô / máy game ở chỗ tay đang giữ em bé; hồ lô không lên tới miệng.
 - Tua / cán đạo cụ (phần "đuôi") vẫn có thể chạm vùng cằm khi chúng chúc xuống từ bàn tay ở ngang cằm; phần chính (lông quạt, lưỡi kiếm, mặt quạt) không cắt vùng mắt–mũi ở các trạng thái chắp tay / nghĩ / xoa tay.
 - `transform-origin: 0 0` của SVG tính theo gốc `viewBox`: với avatar tròn có `crop` lệch gốc, tâm quay của tay / thân lệch vài đơn vị so với bản không cắt (kế thừa từ spike, chưa sửa).
-- CSP: chỉ đường `mount()` chạy dưới CSP chặt. Chuỗi `svg()` (dùng cho test so khớp / render phía máy chủ) vẫn mang `style="…"` nội tuyến nên cần `style-src-attr 'unsafe-inline'`: đừng chèn chuỗi đó vào trang có CSP chặt, hãy dùng `mount()`. Nhánh dự phòng cho trình duyệt không có constructable stylesheet dùng thẻ `<style id="chb-css">` và cần `style-src` cho phép; trình duyệt hiện đại không đi nhánh này.
+- CSP: chỉ đường `mount()` chạy dưới CSP chặt. Chuỗi `svg()` (subpath `@ga/chibi/testing`, dùng cho test so khớp) vẫn mang `style="…"` nội tuyến nên cần `style-src-attr 'unsafe-inline'`: không chèn chuỗi đó vào trang có CSP chặt, và `apps/**` không được import subpath đó. Cần Chromium 73+ / Firefox 101+ / Safari 16.4+ (constructable stylesheet); trình duyệt cũ hơn thì `mount()` ném lỗi.
 - zod 4 dò `new Function('')` khi dựng schema; dưới CSP không có `'unsafe-eval'` lần dò này bị báo `script-src` dù lỗi được bắt. Ứng dụng chủ phải gọi `z.config({ jitless: true })` TRƯỚC khi nạp `@ga/contracts` / `@ga/chibi` (xem `test/browser/harness-zod.js`). Việc này thuộc về ứng dụng chủ, không phải riêng gói chibi.
 - Chỉ kiểm trên Chromium (Playwright 1.56). Chưa kiểm Firefox / Safari: tay dùng thuộc tính `rotate` / `scale` riêng lẻ trên phần tử SVG, cần xác minh ở hai trình duyệt đó.

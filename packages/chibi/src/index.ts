@@ -3,7 +3,6 @@
 import { evaluate, evaluateIdentity, viewOfElement, viewOfString } from './identity.ts';
 import { mount } from './mount.ts';
 import { cast, getChar, hasChar, register, registerAll, unregister } from './registry.ts';
-import { svg } from './render.ts';
 import { resolve } from './resolve.ts';
 import { freeze, getBudget, injectCSS, keyframeNames, scan, setBudget } from './runtime.ts';
 import { ChibiParamsV1, parse, toJsonSchema, validate } from './schema.ts';
@@ -19,7 +18,6 @@ export type { ChibiHandle } from './mount.ts';
 export { mount } from './mount.ts';
 export { ChibiSpecError, cast, getChar, hasChar, register, registerAll, unregister } from './registry.ts';
 export type { SvgOptions } from './render.ts';
-export { svg } from './render.ts';
 export type { Resolved } from './resolve.ts';
 export { resolve } from './resolve.ts';
 export type { StateOptions } from './runtime.ts';
@@ -61,7 +59,6 @@ export const Chibi = {
   /** 16 khoá trạng thái theo thứ tự ưu tiên (contracts AVATAR_STATES) */
   states: AVATAR_STATES,
   stateI18nKeys,
-  svg,
   mount,
   resolve,
   injectCSS,

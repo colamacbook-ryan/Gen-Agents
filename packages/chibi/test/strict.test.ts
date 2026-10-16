@@ -3,8 +3,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildCss } from '../src/css.ts';
-import { AVATAR_STATES, cast, IDLE_VARIANTS, registerAll, svg, unregister } from '../src/index.ts';
+import { AVATAR_STATES, cast, IDLE_VARIANTS, registerAll, unregister } from '../src/index.ts';
 import { K_VALUES, strictMarkup } from '../src/strict.ts';
+import { svg } from '../src/testing.ts';
 import { rawSpecs } from './support/pack.ts';
 
 beforeAll(() => {
@@ -65,18 +66,24 @@ describe('strictMarkup(): không còn style="…" nội tuyến', () => {
     expect(() => strictMarkup(markup)).toThrow(/Chibi:/);
   });
 
-  it('mã nguồn engine không tự ghép style nội tuyến mới ngoài các mẫu đã biết (quét src/)', () => {
-    // mọi ' style="' trong src/ phải nằm trong chuỗi SVG sinh bởi svg() — và đã được kiểm 0 sót ở test trên; ở đây chặn việc đưa style
-    // nội tuyến vào đường mount(): mount.ts / runtime.ts / strict.ts không được có `setAttribute('style'` hay `.cssText`.
+  it('mã nguồn engine không tạo thẻ <style>, không ghép style nội tuyến mới (quét toàn bộ src/, kể cả parts/)', () => {
+    // mọi ' style="' trong src/ phải nằm trong chuỗi SVG sinh bởi svg() — và đã được kiểm 0 sót ở test trên. Ở đây: không có đường
+    // nào tạo thẻ <style> (bỏ nhánh dự phòng: thiếu constructable stylesheet thì ném lỗi, không lặng lẽ đòi style-src rộng hơn).
     const dir = join(import.meta.dirname, '..', 'src');
-    for (const f of ['mount.ts', 'runtime.ts', 'strict.ts']) {
-      const src = readFileSync(join(dir, f), 'utf8');
+    const files = readdirSync(dir, { recursive: true, withFileTypes: false })
+      .map(String)
+      .filter((f) => f.endsWith('.ts'));
+    expect(files.length).toBeGreaterThan(20);
+    for (const f of files) {
+      // bỏ chú thích (có nhắc tới <style> để giải thích) trước khi quét mã
+      const src = readFileSync(join(dir, f), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|\s)\/\/.*$/gm, '$1');
       expect(src, f).not.toMatch(/setAttribute\(\s*['"]style['"]/);
       expect(src, f).not.toMatch(/\.cssText\s*=/);
-      // thẻ <style> chỉ được có ở adoptCSS() của runtime.ts (nhánh dự phòng cho trình duyệt không có constructable stylesheet: đúng 2 chỗ)
-      const n = (src.match(/createElement\(\s*['"]style['"]\s*\)/g) ?? []).length;
-      expect(n, `${f}: số createElement('style')`).toBe(f === 'runtime.ts' ? 2 : 0);
+      expect(src, `${f}: createElement('style')`).not.toMatch(/createElement\(\s*['"]style['"]\s*\)/);
+      expect(src, `${f}: thẻ <style> trong chuỗi`).not.toMatch(/<style[\s>]/i);
+      expect(src, `${f}: id chb-css (nhánh dự phòng đã bỏ)`).not.toMatch(/['"]chb-css['"]/);
     }
-    expect(readdirSync(dir).length).toBeGreaterThan(10);
   });
 });

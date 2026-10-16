@@ -95,38 +95,30 @@ let sheet: CSSStyleSheet | null = null;
 const adopted = new WeakSet<object>();
 type StyleRoot = Document | ShadowRoot;
 
-/** CSSStyleSheet dựng bằng CSSOM (replaceSync): không bị style-src chặn. null nếu trình duyệt không hỗ trợ constructable stylesheet. */
-function engineSheet(): CSSStyleSheet | null {
+/**
+ * CSSStyleSheet dựng bằng CSSOM (replaceSync): không bị style-src chặn. KHÔNG có đường dự phòng bằng thẻ <style> (sẽ buộc CSP phải
+ * nới style-src): trình duyệt thiếu constructable stylesheet (Chromium < 73, Firefox < 101, Safari < 16.4) thì ném lỗi rõ ràng (fail-closed).
+ */
+function engineSheet(): CSSStyleSheet {
   if (sheet) return sheet;
-  if (typeof CSSStyleSheet === 'undefined' || !('replaceSync' in CSSStyleSheet.prototype)) return null;
+  if (typeof CSSStyleSheet === 'undefined' || !('replaceSync' in CSSStyleSheet.prototype))
+    throw new Error(
+      'Chibi: trình duyệt không hỗ trợ constructable stylesheet (CSSStyleSheet.replaceSync + adoptedStyleSheets); cần Chromium 73+, Firefox 101+ hoặc Safari 16.4+',
+    );
   const s = new CSSStyleSheet();
   s.replaceSync(buildCss());
   sheet = s;
   return s;
 }
 
-/**
- * Gắn stylesheet của engine vào document hoặc shadow root chứa avatar (idempotent). Đường chính: adoptedStyleSheets (CSP chặt).
- * Dự phòng cho trình duyệt cũ (không có constructable stylesheet): thẻ <style id="chb-css"> — đường này CẦN style-src cho phép.
- */
+/** Gắn stylesheet của engine vào document hoặc shadow root chứa avatar (idempotent) bằng adoptedStyleSheets: CSP chặt, không cần <style>. */
 export function adoptCSS(root: StyleRoot): void {
   if (adopted.has(root)) return;
-  adopted.add(root);
   const s = engineSheet();
-  if (s && 'adoptedStyleSheets' in root) {
-    if (!root.adoptedStyleSheets.includes(s)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, s];
-    return;
-  }
-  if (root instanceof Document && !root.getElementById('chb-css')) {
-    const st = root.createElement('style');
-    st.id = 'chb-css';
-    st.textContent = buildCss();
-    (root.head || root.documentElement).appendChild(st);
-  } else if (!(root instanceof Document)) {
-    const st = document.createElement('style');
-    st.textContent = buildCss();
-    root.appendChild(st);
-  }
+  if (!('adoptedStyleSheets' in root))
+    throw new Error('Chibi: trình duyệt không hỗ trợ adoptedStyleSheets trên document / shadow root');
+  if (!root.adoptedStyleSheets.includes(s)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, s];
+  adopted.add(root);
 }
 
 /** document hoặc shadow root chứa phần tử (phần tử chưa gắn vào cây ⇒ document) */
@@ -554,13 +546,13 @@ export function freeze(node: Svg, frac = 0, emMs = 900): void {
 /** các @keyframes của stylesheet engine (tên → cssText), cho công cụ tự kiểm */
 export function keyframeNames(): Record<string, string> {
   const out: Record<string, string> = {};
-  const sh = engineSheet() ?? (document.getElementById('chb-css') as HTMLStyleElement | null)?.sheet;
+  const sh = engineSheet();
   const walk = (rules: CSSRuleList): void => {
     for (const r of Array.from(rules)) {
       if (r instanceof CSSKeyframesRule) out[r.name] = r.cssText;
       else if ('cssRules' in r) walk((r as CSSGroupingRule).cssRules);
     }
   };
-  if (sh) walk(sh.cssRules);
+  walk(sh.cssRules);
   return out;
 }

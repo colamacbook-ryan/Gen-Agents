@@ -63,7 +63,7 @@ describe.skipIf(!enabled)(
     }
 
     /** mở trang thử; strict=true → máy chủ gửi header CSP chặt */
-    async function open(strict: boolean): Promise<Session> {
+    async function open(strict: boolean, init?: () => void): Promise<Session> {
       const ctx = await browser.newContext({ reducedMotion: 'no-preference', viewport: { width: 300, height: 320 } });
       contexts.push(ctx);
       const page = await ctx.newPage();
@@ -72,6 +72,7 @@ describe.skipIf(!enabled)(
         if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text()}`);
       });
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+      if (init) await page.addInitScript(init);
       const res = await page.goto(`${server.url}/test/browser/harness.html${strict ? '?csp=strict' : ''}`);
       await page.waitForFunction(() => (window as unknown as Win).__api?.ready === true);
       return {
@@ -226,6 +227,24 @@ describe.skipIf(!enabled)(
       expect(res).toEqual([]);
       expect(await csp()).toEqual([]);
       expect(errors).toEqual([]);
+    });
+
+    it('fail-closed: trình duyệt thiếu constructable stylesheet → mount() ném lỗi rõ ràng, KHÔNG rơi về thẻ <style>, 0 vi phạm CSP', async () => {
+      const { page, csp } = await open(true, () => {
+        Reflect.deleteProperty(CSSStyleSheet.prototype, 'replaceSync'); // giả lập Chromium < 73 / Firefox < 101 / Safari < 16.4
+      });
+      const res = await page.evaluate(() => {
+        try {
+          (window as unknown as Win).__api.mount('tq046', 'run');
+          return { threw: false, msg: '', styleTags: document.querySelectorAll('style').length };
+        } catch (e) {
+          return { threw: true, msg: (e as Error).message, styleTags: document.querySelectorAll('style').length };
+        }
+      });
+      expect(res.threw).toBe(true);
+      expect(res.msg).toMatch(/constructable stylesheet/);
+      expect(res.styleTags).toBe(0);
+      expect(await csp()).toEqual([]);
     });
 
     it('CA ÂM 1: đường svg() cũ (style="…" nội tuyến) bị CSP báo style-src-attr → bộ bắt còn sống', async () => {

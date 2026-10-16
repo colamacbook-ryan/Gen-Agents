@@ -10,11 +10,11 @@ import {
   parse,
   register,
   registerAll,
-  svg,
   toJsonSchema,
   unregister,
   validate,
 } from '../src/index.ts';
+import { svg } from '../src/testing.ts';
 import { CODES, clone, rawSpec, rawSpecs } from './support/pack.ts';
 
 type Obj = Record<string, unknown>;

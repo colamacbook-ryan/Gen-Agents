@@ -676,7 +676,7 @@ function faceRules(): string {
   return `${eyes}{opacity:1}${mouths}{opacity:1}${ems}{display:inline}`;
 }
 
-/** toàn bộ stylesheet đã gắn tiền tố, không chú thích (chèn đúng một lần vào <style id="chb-css">) */
+/** toàn bộ stylesheet đã gắn tiền tố, không chú thích (dựng một lần thành constructable stylesheet, xem runtime.ts) */
 export function buildCss(): string {
   const css = nsCss(
     `${CSS_BASE}${faceRules()}${CSS_REDUCE}${CSS_STATIC}@media (prefers-reduced-motion: no-preference){${genKeyframes()}\n${armKeyframes()}}${stepify(expandArm(CSS_MOTION))}`,
