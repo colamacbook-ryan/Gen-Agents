@@ -1,0 +1,6 @@
+# gitleaks: các phát hiện đã rà tay, KHÔNG phải bí mật thật. Mỗi dòng là fingerprint chính xác (commit:tệp:luật:dòng);
+# tệp / dòng đổi (vd `pnpm db:sync` vendor bản DB mới) ⇒ fingerprint mới ⇒ CI đỏ lại ⇒ phải rà lại, không tự lọt.
+#
+# db/spec/tests_v2_2.py:1400 — JWT GIẢ của bộ test DB (vendor từ Second-Brain @ f54d06a, ca NO-session-token):
+#   header {"alg":"RS256"}, payload {"sub":"…"}, chữ ký = 'a' * 40 ⇒ không ký bởi ai, không mở được gì.
+c5b82ecd8e135a9bddf493c82b0f037896a3be14:db/spec/tests_v2_2.py:jwt:1400

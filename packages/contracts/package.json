@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "node ../../scripts/vitest-run.mjs"
   },
   "dependencies": {
     "zod": "4.6.7"

@@ -1,0 +1,17 @@
+# Kiểm mạng của Docker trên máy chạy (BUILD-PLAN §E.1: "mạng internal: true + nhiều network trên Docker của máy cloud").
+# Dựng đúng hình dạng mạng sản phẩm (§B.1): `roles` internal (container Role không ra Internet), ga-app ở HAI mạng.
+# Dùng bởi: pnpm docker:netcheck (scripts/docker-netcheck.sh). Không phải compose sản phẩm.
+name: ga-netcheck
+services:
+  app-probe: # đóng vai ga-app: core (ra ngoài được) + roles (internal) — gateway :7410 lắng nghe trên roles
+    image: busybox:1.37
+    command: ["sh", "-c", "echo ok > /tmp/index.html && exec httpd -f -p 7410 -h /tmp"]
+    networks: [core, roles]
+  role-probe: # đóng vai container Role: CHỈ ở roles
+    image: busybox:1.37
+    command: ["sleep", "600"]
+    networks: [roles]
+networks:
+  core: {}
+  roles:
+    internal: true
