@@ -152,7 +152,7 @@ describe('connection — ghi qua kết nối đọc bị từ chối; thiếu ap
     writer.write(SYS_ACTOR, (w) =>
       w.run(
         'INSERT INTO blobs (id, workspace_id, created_by, sha256, size_bytes, storage_path) VALUES (?, ?, ?, ?, ?, ?)',
-        ['01JBLOB0000000000000000001', SYS_WS, SYS_ACTOR, BLOB_SHA, 10, `/data/blobs/${SYS_WS}/ab/ab/${BLOB_SHA}`],
+        ['01JB10B0000000000000000001', SYS_WS, SYS_ACTOR, BLOB_SHA, 10, `/data/blobs/${SYS_WS}/ab/ab/${BLOB_SHA}`],
       ),
     );
   });
