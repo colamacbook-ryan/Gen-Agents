@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ENTITY_TYPES, type EntityPrefix } from './ids.ts';
+import { CERTAINTY_LEVELS } from './sessions.ts';
 
 // Hợp đồng MCP gateway (BUILD-PLAN §B.4 `gateway/`, STD-08 §3–§5; CNS-133).
 //
@@ -149,7 +150,7 @@ export const ToolArgs = {
     status: z.enum(['done', 'failed', 'blocked', 'waiting_approval']),
     summary: z.string().max(4000),
     /** Role tự khai chưa chắc (nguồn chat_messages.certainty / avatar 'unsure', G-13). */
-    certainty: z.enum(['sure', 'unsure']).nullable(),
+    certainty: z.enum(CERTAINTY_LEVELS).nullable(),
   }),
   send_telegram: z.strictObject({ chatRef: z.string().min(1), text: z.string().min(1).max(4096) }),
   propose_change: z.strictObject({ title: z.string().min(1).max(200), items: z.array(z.json()).min(1) }),
@@ -288,8 +289,8 @@ export function payloadLimitExceeded(value: unknown): string | null {
 }
 
 // ---------------------------------------------------------------- bộ phát hiện credential (tối thiểu, BUILD-PLAN §B.4)
-// Chạy TUYẾN TÍNH: tách chuỗi thành các "đoạn token" tối đại bằng một regex một lớp ký tự (không lồng, không lookahead),
-// rồi kiểm từng mẫu bằng code (indexOf + đếm). Không regex nào ở đây có quantifier lồng hoặc lookahead chứa * / +.
+// Chạy TUYẾN TÍNH: regex tiền tố có quantifier GIỚI HẠN ({N}), regex một lớp ký tự cho đoạn token, JWT / PEM kiểm bằng code
+// (indexOf + đếm). Không regex nào ở đây có quantifier lồng hoặc lookahead chứa * / + (lint no-redos-regex); test 1 MiB.
 // Ngữ nghĩa phải KHÔNG YẾU HƠN bộ regex tham chiếu (test đối chiếu `mcp-detector-differential.test.ts`).
 
 /** Ký tự "từ" của `\b` trong regex JS: [0-9A-Za-z_] (KHÔNG gồm '-'). */
@@ -322,23 +323,6 @@ function runEndOf(s: string): Int32Array {
 function tokenRunLength(s: string, from: number): number {
   if (from >= s.length) return 0;
   return (runEndOf(s)[from] as number) - from;
-}
-
-/** Có xuất hiện `prefix` mà ngay sau đó là ≥ `min` ký tự token không? indexOf + O(1) mỗi lần ⇒ tuyến tính. */
-function prefixThenRun(s: string, prefix: string, min: number, needWordStart = false): boolean {
-  let from = 0;
-  for (;;) {
-    const at = s.indexOf(prefix, from);
-    if (at < 0) return false;
-    if (
-      // đầu từ đúng nghĩa `\b` (ký tự trước không thuộc [0-9A-Za-z_]; '-' VẪN là ranh giới — `x-sk-…`, `--sk-…` bị bắt)
-      (!needWordStart || at === 0 || !isWordCode(s.charCodeAt(at - 1))) &&
-      tokenRunLength(s, at + prefix.length) >= min
-    ) {
-      return true;
-    }
-    from = at + 1;
-  }
 }
 
 /** JWT: eyJ… . … . … — ba đoạn token ≥ 8 nối bằng dấu chấm. */
@@ -381,47 +365,191 @@ function hasPemPrivateKey(s: string): boolean {
   }
 }
 
-/** Đoạn token liền ≥ 32 ký tự có cả chữ số lẫn chữ cái (hex 40, base64url thường…). Một lượt quét. */
-function hasLongTokenRun(s: string): boolean {
-  let run = 0;
-  let digit = false;
-  let alpha = false;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (isTokenCode(c)) {
-      run++;
-      if (c >= 48 && c <= 57) digit = true;
-      else if (c !== 95 && c !== 45) alpha = true;
-      if (run >= 32 && digit && alpha) return true;
-    } else {
-      run = 0;
-      digit = false;
-      alpha = false;
-    }
+/**
+ * Tên khoá mang credential — khoá object trong payload (bất kể giá trị) và vế trái của phép gán trong chuỗi thô
+ * (`credential_assignment`). Không gồm từ chung chung (`password`, `token`, `secret`) để không chặn câu văn thường.
+ */
+export const CREDENTIAL_KEY_NAMES = [
+  'refresh_token',
+  'access_token',
+  'id_token',
+  'auth_token',
+  'session_token',
+  'bearer_token',
+  'client_secret',
+  'secret_key',
+  'private_key',
+  'api_key',
+  'apikey',
+  'x-api-key',
+  'aws_secret_access_key',
+] as const;
+const CREDENTIAL_NAMES_ALT = CREDENTIAL_KEY_NAMES.map((n) => n.replace('-', '\\-')).join('|');
+
+/**
+ * Chuỗi thô chứa phép gán credential (security review L-RT — parser-differential: khoá JSON NHÚNG trong chuỗi, vd log
+ * `INFO got {"refresh_token":"…"}` hay `access_token=…`, không phải khoá object nên CREDENTIAL_KEY_RE không thấy).
+ * Hai `\s*` nối tiếp (không lồng), phần giá trị giới hạn {8} ⇒ tuyến tính (đo trên 1 MiB đối nghịch trong test).
+ */
+const CREDENTIAL_ASSIGNMENT_RE = new RegExp(
+  `(?:${CREDENTIAL_NAMES_ALT})["']?\\s*[:=]\\s*["']?[A-Za-z0-9._~+/=-]{8}`,
+  'i',
+);
+
+/**
+ * Đoạn token tối đại ≥ 32: lookbehind MỘT ký tự (không quantifier) ⇒ chỉ thử ở ĐẦU đoạn, mỗi đoạn quét một lần (nhanh ~3×
+ * so với thử ở mọi vị trí trên chuỗi nhiều đoạn ngắn); lastIndex nhảy qua cả đoạn ⇒ tuyến tính.
+ */
+const LONG_TOKEN_RUN_RE = /(?<![0-9A-Za-z_-])[0-9A-Za-z_-]{32,}/g;
+
+/**
+ * Đoạn token liền ≥ 32 ký tự có CẢ chữ hoa, chữ thường VÀ chữ số (Gen quyết 2026-10-16, CNS-169). Đoạn chỉ gồm chữ số hex
+ * + '-' (hex mọi độ dài / hoa thường, UUID) KHÔNG bị chặn — mã commit, checksum, UUID là dữ liệu làm việc hợp lệ.
+ * Miễn hex vì CNS-169 (commit hash / checksum là dữ liệu lõi của agent code; sink MCP do owner kiểm soát; lối ra ngoài
+ * qua egress allowlist). Chỗ key hex / chữ thường hay nằm được BÙ bằng `credential_assignment` (tên credential + gán) và
+ * `env_secret_assignment` (dòng kiểu `.env`: `ABC_SECRET=…`, `X_API_KEY=…`).
+ */
+function hasHighEntropyRun(s: string): boolean {
+  const re = LONG_TOKEN_RUN_RE;
+  re.lastIndex = 0;
+  for (let m = re.exec(s); m !== null; m = re.exec(s)) {
+    const r = m[0];
+    if (/\d/.test(r) && /[a-z]/.test(r) && /[A-Z]/.test(r) && /[G-Zg-z_]/.test(r)) return true;
   }
   return false;
 }
 
-/** Bộ phát hiện ở packages/security phải phủ ÍT NHẤT các mẫu này (+ biến thể). Canary do CLI giả ghi: `GA-CANARY-<uuid>`. */
+/** `\s` của regex JS (WhiteSpace + LineTerminator), so mã ký tự. */
+function isJsSpace(c: number): boolean {
+  return (
+    (c >= 9 && c <= 13) ||
+    c === 32 ||
+    c === 0xa0 ||
+    c === 0x1680 ||
+    (c >= 0x2000 && c <= 0x200a) ||
+    c === 0x2028 ||
+    c === 0x2029 ||
+    c === 0x202f ||
+    c === 0x205f ||
+    c === 0x3000 ||
+    c === 0xfeff
+  );
+}
+
+/**
+ * Mật khẩu trong URL `scheme://user:password@host` — tách authority NHƯ parser URL (security review, parser-differential:
+ * bản regex cũ loại `"'<>` và có trần 1024 ⇒ mật khẩu chứa `"` / `<` hay userinfo dài lọt, trong khi `new URL()` vẫn coi
+ * là userinfo). Sau mỗi `://`: authority kéo tới ký tự đầu tiên trong `/ ? #` hoặc khoảng trắng (TAB / LF / CR bị parser URL
+ * bỏ qua ⇒ đi xuyên qua); có `@` và đoạn trước `@` CUỐI CÙNG chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng). Một lượt duyệt mỗi
+ * authority, các authority không chồng nhau ⇒ tuyến tính (kích thước đã chặn trước khi quét).
+ */
+function hasUrlUserinfo(s: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = s.indexOf('://', from);
+    if (at < 0) return false;
+    let firstColon = -1;
+    let lastAt = -1;
+    let i = at + 3;
+    for (; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c === 9 || c === 10 || c === 13) continue;
+      if (c === 47 || c === 63 || c === 35 || isJsSpace(c)) break;
+      if (c === 58 && firstColon < 0) firstColon = i;
+      else if (c === 64) lastAt = i;
+    }
+    if (lastAt >= 0 && firstColon >= 0 && firstColon < lastAt) return true;
+    // `://` kế tiếp nằm SAU authority này (authority không chứa '/'), trừ khi nó bắt đầu ngay tại ký tự dừng
+    from = Math.max(at + 1, i - 1);
+  }
+}
+
+/** Tiền tố của canary do CLI giả ghi: `GA-CANARY-<uuid>` — bằng chứng chắc duy nhất (chỉ có trong test). */
+export const CANARY_PREFIX = 'GA-CANARY-';
+
+/**
+ * Bộ phát hiện ở packages/security phải phủ ÍT NHẤT các mẫu này (+ biến thể). CNS-169 (Gen quyết 2026-10-16):
+ *   - chặn: tiền tố đã biết, JWT, PEM, phép gán / khoá tên credential, canary, đoạn entropy cao (hoa + thường + số ≥ 32);
+ *   - KHÔNG chặn (cố ý): hex thuần mọi độ dài / hoa thường, UUID dạng chuẩn, đoạn ≥ 32 thiếu một trong ba lớp ký tự
+ *     (vd base32 / base64url chỉ chữ thường) — trừ khi khớp tiền tố đã biết;
+ *   - lần chặn ⇒ `denied` + audit `credential.blocked` (cảnh báo owner), KHÔNG phải harness.violation (xem CREDENTIAL_BLOCKED).
+ * Regex tiền tố dùng quantifier GIỚI HẠN ({N} — "có ≥ N ký tự" ⇔ "có đúng N ký tự kế tiếp") ⇒ mỗi vị trí thử ≤ N bước.
+ */
 export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string) => boolean }> = [
   { id: 'jwt', test: hasJwt },
-  { id: 'google_oauth_access_token', test: (s) => prefixThenRun(s, 'ya29.', 10) },
-  { id: 'google_refresh_token', test: (s) => prefixThenRun(s, '1//0', 10) },
-  { id: 'google_api_key', test: (s) => prefixThenRun(s, 'AIza', 30) },
-  { id: 'vendor_api_key_sk_ant', test: (s) => prefixThenRun(s, 'sk-ant-', 10) },
-  // regex có quantifier GIỚI HẠN ({0,40}) ⇒ tuyến tính
+  { id: 'google_oauth_access_token', test: (s) => /ya29\.[0-9A-Za-z_-]{10}/.test(s) },
+  { id: 'google_refresh_token', test: (s) => /1\/\/0[0-9A-Za-z_-]{10}/.test(s) },
+  { id: 'google_api_key', test: (s) => /AIza[0-9A-Za-z_-]{30}/.test(s) },
+  { id: 'vendor_api_key_sk_ant', test: (s) => /sk-ant-[0-9A-Za-z_-]{10}/.test(s) },
+  /** Khoá kiểu `sk-…` của các hãng (không riêng một hãng); `\b`: '-' trước vẫn là ranh giới (`x-sk-…` bị bắt). */
+  { id: 'generic_sk_key', test: (s) => /\bsk-[0-9A-Za-z_-]{20}/.test(s) },
+  { id: 'stripe_secret_key', test: (s) => /\b[sr]k_(?:live|test)_[0-9A-Za-z_-]{16}/.test(s) },
+  { id: 'github_token', test: (s) => /\bgh[pousr]_[0-9A-Za-z_-]{30}|\bgithub_pat_[0-9A-Za-z_-]{40}/.test(s) },
+  { id: 'slack_token', test: (s) => /\bxox[abpre]-[0-9A-Za-z_-]{10}/.test(s) },
+  { id: 'gitlab_token', test: (s) => /\bglpat-[0-9A-Za-z_-]{20}/.test(s) },
+  // L-SEC đề xuất (Gen duyệt): ranh giới trước = lookbehind MỘT ký tự [0-9A-Za-z] (như packages/security), không quantifier
+  { id: 'npm_token', test: (s) => /(?<![0-9A-Za-z])npm_[0-9A-Za-z_-]{30}/.test(s) },
+  { id: 'huggingface_token', test: (s) => /(?<![0-9A-Za-z])hf_[0-9A-Za-z_-]{30}/.test(s) },
+  { id: 'google_oauth_client_secret', test: (s) => /(?<![0-9A-Za-z])GOCSPX-[0-9A-Za-z_-]{20}/.test(s) },
+  /** Header `Authorization: Bearer <token ≥ 16>` trong log / payload; "the bearer of …" / "Bearer short" không bắt. */
+  { id: 'bearer_token', test: (s) => /(?<![0-9A-Za-z])bearer[ \t]{1,16}[0-9A-Za-z_.~+/=-]{16}/i.test(s) },
+  { id: 'url_userinfo', test: hasUrlUserinfo },
+  { id: 'aws_access_key_id', test: (s) => /\b(?:AKIA|ASIA)[0-9A-Z]{16}/.test(s) },
+  { id: 'telegram_bot_token', test: (s) => /\b\d{8,10}:[0-9A-Za-z_-]{35}/.test(s) },
   { id: 'pem_private_key', test: hasPemPrivateKey },
-  // tiền tố cố định + MỘT quantifier (\s*) ⇒ tuyến tính; không giới hạn số khoảng trắng (bản \s{0,8} cũ lọt khi chèn 9)
+  // tiền tố cố định + MỘT quantifier (\s*) ⇒ tuyến tính; refresh_token + phép gán ⇒ chặn bất kể giá trị (giữ từ v0)
   { id: 'refresh_token_field', test: (s) => /refresh_token["']?\s*[:=]/i.test(s) },
+  { id: 'credential_assignment', test: (s) => CREDENTIAL_ASSIGNMENT_RE.test(s) },
+  /**
+   * Gán kiểu `.env` (Gen, security review "miễn hex làm lọt key hãng không prefix"): tên UPPER_SNAKE kết thúc bằng
+   * _SECRET / _TOKEN / _PASSWORD / _PASSWD / _KEY / _PAT + [:=] + ≥ 8 ký tự giá trị. PHÂN BIỆT hoa thường (câu văn không
+   * bắt). `\b` chỉ ở đầu đoạn từ, `[A-Z0-9_]*` không lồng, giá trị giới hạn {8} ⇒ tuyến tính (test 1 MiB `A_A_A_…`).
+   */
+  {
+    id: 'env_secret_assignment',
+    test: (s) => /\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|PASSWORD|PASSWD|KEY|PAT)\s*[:=]\s*["']?[^\s"']{8}/.test(s),
+  },
   { id: 'canary', test: (s) => /GA-CANARY-[0-9a-f-]{8}/i.test(s) },
-  /** Khoá kiểu `sk-…` của các hãng (không riêng một hãng). */
-  { id: 'generic_sk_key', test: (s) => prefixThenRun(s, 'sk-', 20, true) },
-  /** ULID (26) và display_id không chạm ngưỡng; UUID có gạch nối (36) BỊ bắt — chấp nhận (không phải ID của hệ). */
-  { id: 'long_token_run', test: hasLongTokenRun },
+  { id: 'high_entropy_run', test: hasHighEntropyRun },
 ];
 
 /** Tên khoá JSON mang credential: payload có khoá này (bất kể giá trị) ⇒ chặn. */
-export const CREDENTIAL_KEY_RE = /^(?:refresh_token|access_token|id_token|client_secret|private_key)$/i;
+export const CREDENTIAL_KEY_RE = new RegExp(`^(?:${CREDENTIAL_NAMES_ALT})$`, 'i');
+
+/** Mọi patternId có thể trả về (audit `credential.blocked` chỉ mang id này, không mang payload). */
+/**
+ * = id của CREDENTIAL_DETECTORS (đúng thứ tự, test giữ đồng bộ) + `encoded_marker_flood` (chỉ bộ quét giải mã của
+ * packages/security sinh: quá nhiều dấu hiệu trong đoạn mã hoá ⇒ chặn cả chuỗi) + `credential_field_name` + `too_deep`.
+ */
+export const CREDENTIAL_PATTERN_IDS = [
+  'jwt',
+  'google_oauth_access_token',
+  'google_refresh_token',
+  'google_api_key',
+  'vendor_api_key_sk_ant',
+  'generic_sk_key',
+  'stripe_secret_key',
+  'github_token',
+  'slack_token',
+  'gitlab_token',
+  'npm_token',
+  'huggingface_token',
+  'google_oauth_client_secret',
+  'bearer_token',
+  'url_userinfo',
+  'aws_access_key_id',
+  'telegram_bot_token',
+  'pem_private_key',
+  'refresh_token_field',
+  'credential_assignment',
+  'env_secret_assignment',
+  'canary',
+  'high_entropy_run',
+  'encoded_marker_flood',
+  'credential_field_name',
+  'too_deep',
+] as const;
+export type CredentialPatternId = (typeof CREDENTIAL_PATTERN_IDS)[number];
 
 /**
  * Duyệt mọi chuỗi (giá trị và khoá) trong payload; trả mẫu khớp đầu tiên, không trả đoạn khớp (gateway băm).
@@ -452,7 +580,7 @@ export function findCredentialLike(value: unknown, depth = 0): { patternId: stri
 
 export type ScreenResult =
   | { status: 'ok'; tool: McpToolName; args: unknown }
-  | { status: 'denied'; code: 'credential_like_payload'; patternId: string }
+  | { status: 'denied'; code: 'credential_like_payload'; patternId: string; audit: CredentialBlockedAudit }
   | { status: 'denied'; code: 'payload_too_large'; reason: string }
   | { status: 'invalid'; reason: string };
 
@@ -467,7 +595,14 @@ export function screenToolPayload(tool: string, rawArgs: unknown): ScreenResult 
   if (tooBig) return { status: 'denied', code: 'payload_too_large', reason: tooBig };
   // luôn quét — không có tool nào, không có cờ nào bỏ qua được bước này
   const hit = findCredentialLike(tool) ?? findCredentialLike(rawArgs);
-  if (hit) return { status: 'denied', code: 'credential_like_payload', patternId: hit.patternId };
+  if (hit) {
+    return {
+      status: 'denied',
+      code: 'credential_like_payload',
+      patternId: hit.patternId,
+      audit: credentialBlockedAudit(tool, hit.patternId),
+    };
+  }
   if (!(MCP_TOOLS as readonly string[]).includes(tool)) return { status: 'invalid', reason: `tool lạ: ${tool}` };
   const parsed = ToolArgs[tool as McpToolName].safeParse(rawArgs);
   if (!parsed.success) return { status: 'invalid', reason: parsed.error.issues.map((i) => i.message).join('; ') };
@@ -476,7 +611,7 @@ export function screenToolPayload(tool: string, rawArgs: unknown): ScreenResult 
 
 // ---------------------------------------------------------------- từ chối
 export const TOOL_DENIAL_CODES = [
-  /** Payload giống credential (JWT, ya29., sk-ant-, 1//0, AIza, PEM, "refresh_token") hoặc canary. */
+  /** Payload giống credential (CREDENTIAL_DETECTORS) hoặc canary — audit `credential.blocked`, KHÔNG phải harness.violation. */
   'credential_like_payload',
   /** Payload thô vượt TOOL_PAYLOAD_LIMITS — từ chối trước khi quét. */
   'payload_too_large',
@@ -488,6 +623,46 @@ export const TOOL_DENIAL_CODES = [
   'rate_limited',
 ] as const;
 export type ToolDenialCode = (typeof TOOL_DENIAL_CODES)[number];
+
+// ---------------------------------------------------------------- audit lần chặn credential (CNS-169, Gen quyết 2026-10-16)
+/** Action audit mà trigger ví (`ledger_entries_bi`) coi là "máy phát hiện" ⇒ khoá hạng phạt 100 % — KHÔNG dùng cho lần chặn. */
+export const PENALTY_EVIDENCE_ACTIONS = ['harness.violation', 'concealment.detected'] as const;
+
+/**
+ * Lần chặn payload giống credential ⇒ audit_log `action = 'credential.blocked'`, `result = 'denied'`, `channel = 'gateway'`,
+ * cột `tool`, `role_id`; `detail_json` CHỈ {patternId, tool} — không payload, không đoạn khớp. Owner thấy CẢNH BÁO (A0,
+ * severity `warn`, SSE `credential.blocked`). Không bao giờ là harness.violation / concealment.detected ⇒ không khoá hạng
+ * phạt, không tự trừ ₲; owner tự quyết nếu muốn phạt (canary trong test là bằng chứng chắc duy nhất).
+ */
+export const CREDENTIAL_BLOCKED = {
+  action: 'credential.blocked',
+  result: 'denied',
+  channel: 'gateway',
+  severity: 'warn',
+} as const;
+
+export const CredentialBlockedDetail = z.strictObject({
+  patternId: z.enum(CREDENTIAL_PATTERN_IDS),
+  /** Tên tool trong registry; tên lạ ghi `unknown` (tên tool thô có thể chính là credential). */
+  tool: z.union([z.enum(MCP_TOOLS), z.literal('unknown')]),
+});
+export type CredentialBlockedDetail = z.infer<typeof CredentialBlockedDetail>;
+
+export interface CredentialBlockedAudit {
+  action: typeof CREDENTIAL_BLOCKED.action;
+  result: typeof CREDENTIAL_BLOCKED.result;
+  channel: typeof CREDENTIAL_BLOCKED.channel;
+  severity: typeof CREDENTIAL_BLOCKED.severity;
+  tool: McpToolName | 'unknown';
+  detail: CredentialBlockedDetail;
+}
+
+/** Bản ghi audit cho một lần chặn (gateway thêm role_id / request_id / actor). Không nhận payload — không lộ được. */
+export function credentialBlockedAudit(tool: string, patternId: string): CredentialBlockedAudit {
+  const knownTool = (MCP_TOOLS as readonly string[]).includes(tool) ? (tool as McpToolName) : 'unknown';
+  const detail = CredentialBlockedDetail.parse({ patternId, tool: knownTool });
+  return { ...CREDENTIAL_BLOCKED, tool: knownTool, detail };
+}
 
 export const ToolResult = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('ok'), data: z.json() }),

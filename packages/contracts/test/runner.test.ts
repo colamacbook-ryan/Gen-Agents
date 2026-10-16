@@ -18,6 +18,7 @@ import {
   engineEnvViolations,
   execEnv,
   execStdinPayload,
+  FORBIDDEN_ARGV0_NAMES,
   InstallEngineRequest,
   isAllowedExecArgv,
   isForbiddenArgv0Name,
@@ -32,13 +33,20 @@ import {
   PROBE_KINDS,
   ProbeBundle,
   type ProbePlan,
+  parseRunnerStdout,
   promptDir,
+  RUNNER_CLI_LINE_MAX_CHARS,
   RUNNER_OPS,
+  RUNNER_STDOUT_LINE_MAX_CHARS,
   RunnerReport,
   runnerBundleSchemas,
+  runnerReportLine,
+  runnerStdoutLine,
   TermTicketClaims,
   TURN_EXEC,
   TurnBundle,
+  type TurnPlanInput,
+  TurnStreamEvent,
 } from '../src/index.ts';
 
 const ULID = '01JABCDEFGHJKMNPQRSTVWXYZ0';
@@ -54,8 +62,11 @@ const turn = (over: Record<string, unknown> = {}) => ({
   engineSlug: 'alpha',
   engineAccount: 'EN-0002',
   params: { model: 'vendor-model-4.5', effort: 'high' },
+  authMethod: 'subscription',
+  detectedFlags: ['--model', '--effort', '-p'],
   prompt: { user: { path: 'user.md', content: 'xin chào' }, system: { path: 'system.md', content: 'quy tắc' } },
   timeoutMs: 600_000,
+  measure: null,
   nativeMemoryPolicy: 'tmpfs-per-turn',
   expiresAt: TS,
   ...over,
@@ -176,6 +187,18 @@ describe('bundle = ý định có schema đóng', () => {
     }
     expect(TurnBundle.safeParse(turn({ params: { model: null, effort: null, flags: ['--x'] } })).success).toBe(false);
     expect(TurnBundle.safeParse(turn({ v: 1 })).success).toBe(false);
+    // detectedFlags: chỉ tên cờ hợp lệ, ≤ 256 phần tử; authMethod enum
+    for (const f of ['--x=1', 'a b', '--', 'model', '-', '--a;b', `--${'a'.repeat(64)}`]) {
+      expect(TurnBundle.safeParse(turn({ detectedFlags: [f] })).success, f).toBe(false);
+    }
+    expect(TurnBundle.safeParse(turn({ detectedFlags: Array.from({ length: 257 }, () => '--x') })).success).toBe(false);
+    expect(TurnBundle.safeParse(turn({ detectedFlags: [] })).success).toBe(true);
+    expect(TurnBundle.safeParse(turn({ authMethod: 'password' })).success).toBe(false);
+    // phiên đo: enum đóng (CNS-178); thiếu trường measure ⇒ từ chối
+    expect(TurnBundle.safeParse(turn({ measure: 'overhead_bare' })).success).toBe(true);
+    expect(TurnBundle.safeParse(turn({ measure: '--bare' })).success).toBe(false);
+    const { measure: _m, ...noMeasure } = turn();
+    expect(TurnBundle.safeParse(noMeasure).success).toBe(false);
     expect(ProbeBundle.safeParse(loginCheck({ op: 'probe:shell' })).success).toBe(false);
     expect(ProbeBundle.safeParse(loginCheck({ authMethod: 'password' })).success).toBe(false);
   });
@@ -220,6 +243,17 @@ describe('bundle = ý định có schema đóng', () => {
       'x'.repeat(97),
       '.hidden',
       '/abs',
+      // hậu tố [..] chỉ dạng hẹp ở cuối
+      'a[',
+      'a[]',
+      'a[x y]',
+      'a]',
+      'a[1M]',
+      'a[123456789]',
+      'a[1m][2m]',
+      'a[1m]x',
+      '[1m]',
+      'a[--x]',
     ];
     for (const model of badModels) {
       expect(TurnBundle.safeParse(turn({ params: { model, effort: null } })).success, JSON.stringify(model)).toBe(
@@ -231,7 +265,14 @@ describe('bundle = ý định có schema đóng', () => {
         false,
       );
     }
-    for (const model of ['vendor-model-4.5', 'models/x-1', 'q3:32b', 'A1']) {
+    for (const model of [
+      'vendor-model-4.5',
+      'models/x-1',
+      'q3:32b',
+      'A1',
+      'model-x[1m]',
+      `${'m'.repeat(96)}[12345678]`,
+    ]) {
       expect(TurnBundle.safeParse(turn({ params: { model, effort: 'xhigh' } })).success, model).toBe(true);
     }
   });
@@ -321,6 +362,98 @@ describe('argv do runner dựng: argv[0] dưới /opt/engines/<slug>/, cấm she
     for (const n of ['vendor-cli', 'shell-tool', 'nodex', 'envoy']) expect(isForbiddenArgv0Name(n), n).toBe(false);
   });
 
+  it('danh sách cấm chung ⊇ danh sách gốc của runner (L-RT 2b19a58); mỗi tên bổ sung bị isSafeEngineArgv0 chặn', () => {
+    // fixture = FORBIDDEN_ARGV0 của apps/runner/src/paths.ts @ 2b19a58 (feat/m1-rt) — không sửa, chỉ thêm
+    const RUNNER_2B19A58 = [
+      'sh',
+      'bash',
+      'dash',
+      'ash',
+      'zsh',
+      'ksh',
+      'mksh',
+      'csh',
+      'tcsh',
+      'fish',
+      'busybox',
+      'toybox',
+      'env',
+      'node',
+      'nodejs',
+      'deno',
+      'bun',
+      'python',
+      'python2',
+      'python3',
+      'perl',
+      'ruby',
+      'php',
+      'lua',
+      'tclsh',
+      'wish',
+      'awk',
+      'gawk',
+      'mawk',
+      'nawk',
+      'sed',
+      'xargs',
+      'find',
+      'script',
+      'expect',
+      'su',
+      'sudo',
+      'doas',
+      'nohup',
+      'timeout',
+      'nice',
+      'ionice',
+      'setsid',
+      'stdbuf',
+      'chroot',
+      'unshare',
+      'nsenter',
+      'strace',
+      'gdb',
+      'socat',
+      'nc',
+      'ncat',
+      'netcat',
+      'curl',
+      'wget',
+      'ssh',
+      'scp',
+      'docker',
+      'ga-runner',
+      'ga-engine-install',
+    ];
+    expect(RUNNER_2B19A58.filter((n) => !FORBIDDEN_ARGV0_NAMES.has(n))).toEqual([]);
+    for (const n of RUNNER_2B19A58) {
+      expect(isForbiddenArgv0Name(n), n).toBe(true);
+      expect(isSafeEngineArgv0(`/opt/engines/alpha/current/${n}`, 'alpha'), n).toBe(false);
+    }
+    const added = [
+      'ionice',
+      'socat',
+      'nc',
+      'ncat',
+      'netcat',
+      'curl',
+      'wget',
+      'ssh',
+      'scp',
+      'docker',
+      'ga-runner',
+      'ga-engine-install',
+    ];
+    for (const n of added) {
+      expect(isSafeEngineArgv0(`/opt/engines/alpha/bin/${n}`, 'alpha'), n).toBe(false);
+      expect(engineArgvViolations([`/opt/engines/alpha/bin/${n}`], 'alpha', table).length, n).toBeGreaterThan(0);
+    }
+    // mọi chương trình của hệ (ga-*) đều cấm, kể cả tên mới
+    expect(isForbiddenArgv0Name('ga-supervisor')).toBe(true);
+    expect(isForbiddenArgv0Name('curl8')).toBe(true);
+  });
+
   it('chỉ cờ / lệnh con trong bảng; giá trị không dạng cờ; toán hạng không bắt đầu bằng -', () => {
     expect(engineArgvViolations([BIN, 'auth', 'status', '--json'], 'alpha', table)).toEqual([]);
     expect(engineArgvViolations([BIN, '--model', 'm-1', '--effort=high', '-p', 'xin chào'], 'alpha', table)).toEqual(
@@ -401,6 +534,25 @@ describe('argv do runner dựng: argv[0] dưới /opt/engines/<slug>/, cấm she
     ).toBe(true);
   });
 
+  it('adapter: parseStreamLine trả mảng; TurnPlanInput có timeoutMs / authMethod / detectedFlags', () => {
+    expectTypeOf<ReturnType<EngineAdapter['parseStreamLine']>>().toEqualTypeOf<readonly TurnStreamEvent[]>();
+    expectTypeOf<TurnPlanInput['timeoutMs']>().toEqualTypeOf<number>();
+    expectTypeOf<TurnPlanInput['authMethod']>().toEqualTypeOf<'subscription' | 'api_key' | 'adc'>();
+    expectTypeOf<TurnPlanInput['detectedFlags']>().toEqualTypeOf<readonly string[]>();
+    expect(
+      TurnStreamEvent.safeParse({
+        type: 'quota',
+        quota: { window: 'five_hour', status: 'rejected', resetAt: TS, utilizationPct: null },
+      }).success,
+    ).toBe(true);
+    expect(
+      TurnStreamEvent.safeParse({
+        type: 'quota',
+        quota: { window: '5h', status: 'rejected', resetAt: null, utilizationPct: null },
+      }).success,
+    ).toBe(false);
+  });
+
   it('adapter khai bảng cờ; turnPlan / loginCheck / capabilityScan trả ProbePlan (chạy trong runner)', () => {
     expectTypeOf<EngineAdapter['flagTable']>().toEqualTypeOf<EngineFlagTable>();
     expectTypeOf<ReturnType<EngineAdapter['loginCheck']>['plan']>().toEqualTypeOf<ProbePlan>();
@@ -414,6 +566,24 @@ const defOf = (s: unknown): ZodDef => (s as { _zod: { def: ZodDef } })._zod.def;
 const COMMANDISH_KEY_RE =
   /^(?:argv\w*|cmd\w*|args|arguments|shell|program|binary|plans?|exec\w*|allowlist|authAllowlist)$/i;
 const LEAF_TYPES = new Set(['string', 'number', 'int', 'boolean', 'literal', 'enum', 'null', 'never', 'bigint']);
+/**
+ * Ngoại lệ CÓ CHỦ ĐÍCH (duyệt từng đường): mảng chuỗi chỉ được phép ở đây và phần tử phải là chuỗi có regex neo ^…$ + max.
+ * `detectedFlags`: cờ đã quét, chỉ làm cổng — không bao giờ vào argv (contracts engine.ts TurnPlanInput.detectedFlags).
+ */
+const ALLOWED_STRING_ARRAYS = new Set(['$.detectedFlags']);
+const isAnchoredStrictString = (s: unknown): boolean => {
+  const checks = (defOf(s).checks ?? []) as Array<{
+    _zod: { def: { check: string; format?: string; pattern?: RegExp } };
+  }>;
+  const re = checks.find((c) => c._zod.def.format === 'regex')?._zod.def.pattern;
+  return (
+    defOf(s).type === 'string' &&
+    re !== undefined &&
+    re.source.startsWith('^') &&
+    re.source.endsWith('$') &&
+    checks.some((c) => c._zod.def.check === 'max_length')
+  );
+};
 
 /**
  * Đường của mọi trường "mang lệnh": tên kiểu argv / cmd / args…, MẢNG CHUỖI ở bất kỳ đâu, record tự do (env). Kiểu zod
@@ -438,7 +608,9 @@ function commandLikeFields(schema: unknown, path = '$', seen = new Set<unknown>(
     case 'array': {
       let el = def.element;
       while (['nullable', 'optional', 'readonly', 'default'].includes(defOf(el).type)) el = defOf(el).innerType;
-      if (defOf(el).type === 'string') return [`${path}[] (mảng chuỗi)`];
+      if (defOf(el).type === 'string') {
+        return ALLOWED_STRING_ARRAYS.has(path) && isAnchoredStrictString(el) ? [] : [`${path}[] (mảng chuỗi)`];
+      }
       return walk(def.element, `${path}[]`);
     }
     case 'tuple':
@@ -519,6 +691,88 @@ describe('hợp đồng: không schema bundle / yêu cầu runner nào có argv 
       ),
     ).toEqual(['$[] (mảng chuỗi)', '$[] (mảng chuỗi)']);
     expect(() => commandLikeFields(z.date())).toThrow(/walker chưa hỗ trợ/);
+    // ngoại lệ detectedFlags chỉ đúng đường + đúng dạng: chuỗi tự do / regex không neo / đường khác ⇒ vẫn bị bắt
+    expect(commandLikeFields(z.strictObject({ detectedFlags: z.array(z.string()) }))).toEqual([
+      '$.detectedFlags[] (mảng chuỗi)',
+    ]);
+    expect(commandLikeFields(z.strictObject({ detectedFlags: z.array(z.string().max(9).regex(/--x/)) }))).toEqual([
+      '$.detectedFlags[] (mảng chuỗi)',
+    ]);
+    expect(commandLikeFields(z.strictObject({ flags: z.array(z.string().max(9).regex(/^--x$/)) }))).toEqual([
+      '$.flags[] (mảng chuỗi)',
+    ]);
+    expect(commandLikeFields(z.strictObject({ detectedFlags: z.array(z.string().max(9).regex(/^--x$/)) }))).toEqual([]);
+  });
+});
+
+describe('stdout của ga-runner: bọc mọi dòng, đúng một report ở cuối (output-injection)', () => {
+  const report = {
+    $ga: 'report',
+    command: 'turn',
+    turnId: ULID,
+    exit: { exitCode: 0, signal: null, timedOut: false, durationMs: 1200 },
+    authGc: { removed: 1, nativeMemory: 'off' },
+  } as const;
+  const REPORT = runnerReportLine(report);
+  const L = runnerStdoutLine;
+
+  it('luồng hợp lệ: các dòng CLI (đã bọc) + report cuối', () => {
+    const r = parseRunnerStdout([L('{"type":"delta","text":"xin chào"}'), L(''), REPORT]);
+    expect(r).toEqual({ ok: true, lines: ['{"type":"delta","text":"xin chào"}', ''], report });
+  });
+
+  it('dòng CLI chứa {"$ga":"report",…} vẫn chỉ là line — không thành report', () => {
+    const forged = L(REPORT);
+    expect(parseRunnerStdout([forged, REPORT])).toMatchObject({ ok: true, lines: [REPORT] });
+    // runner chết trước khi in report thật: report giả trong `l` KHÔNG được tin
+    expect(parseRunnerStdout([L('x'), forged])).toMatchObject({
+      ok: false,
+      code: 'runner_protocol_error',
+      reason: 'thiếu report',
+    });
+  });
+
+  it('thiếu report / hai report / report giữa luồng ⇒ runner_protocol_error', () => {
+    expect(parseRunnerStdout([])).toMatchObject({ ok: false, reason: 'thiếu report' });
+    expect(parseRunnerStdout([L('a'), L('b')])).toMatchObject({ ok: false, reason: 'thiếu report' });
+    expect(parseRunnerStdout([REPORT, REPORT])).toMatchObject({ ok: false, reason: 'nhiều hơn một report', lineNo: 2 });
+    expect(parseRunnerStdout([L('a'), REPORT, L('b')])).toMatchObject({ ok: false, lineNo: 3 });
+  });
+
+  it('dòng thô không bọc / JSON không chuẩn (khoá trùng, khoảng trắng) / trường lạ / dòng rỗng ⇒ lỗi giao thức', () => {
+    const bad = [
+      'hello từ CLI',
+      '{"type":"delta","text":"x"}',
+      '{"$ga":"line","l":"a","l":"b"}',
+      '{"$ga": "line", "l": "x"}',
+      '{"l":"x","$ga":"line","extra":1}',
+      '{"$ga":"line","l":1}',
+      '{"$ga":"log","l":"x"}',
+      '["$ga","line"]',
+      'null',
+      '',
+    ];
+    for (const raw of bad) {
+      const r = parseRunnerStdout([raw, REPORT]);
+      expect(r.ok, raw).toBe(false);
+      if (!r.ok) {
+        expect(r.code).toBe('runner_protocol_error');
+        expect(r.lineNo, raw).toBe(1);
+      }
+    }
+    // report có khoá trùng (bản sau ghi đè bản trước khi JSON.parse) ⇒ từ chối
+    const dupReport = REPORT.replace('"exitCode":0', '"exitCode":1,"exitCode":0');
+    expect(parseRunnerStdout([dupReport])).toMatchObject({ ok: false, lineNo: 1 });
+  });
+
+  it('dòng quá cỡ bị chặn TRƯỚC khi parse; runner không bọc được dòng CLI vượt trần', () => {
+    const huge = 'x'.repeat(RUNNER_STDOUT_LINE_MAX_CHARS + 1);
+    expect(parseRunnerStdout([huge, REPORT])).toMatchObject({ ok: false, reason: 'dòng quá cỡ', lineNo: 1 });
+    expect(() => runnerStdoutLine('y'.repeat(RUNNER_CLI_LINE_MAX_CHARS + 1))).toThrow();
+    // dòng CLI tối đa toàn ký tự phải escape vẫn nằm trong trần dòng stdout
+    expect(runnerStdoutLine('\u0001'.repeat(RUNNER_CLI_LINE_MAX_CHARS)).length).toBeLessThanOrEqual(
+      RUNNER_STDOUT_LINE_MAX_CHARS,
+    );
   });
 });
 
