@@ -7,7 +7,7 @@ import { connect as tlsConnect } from 'node:tls';
 // GET qua ga-egress (proxy CONNECT cho https, absolute-form cho http) — container không có route ra Internet nên mọi lần tải
 // PHẢI đi qua egress, và egress ép allowlist domain ở từng bước (kể cả mỗi lần redirect).
 // Phân loại lỗi theo lý do cài của contracts (ENGINE_INSTALL_FAILURE_REASONS):
-//   egress từ chối (403 + header x-ga-egress: denied) ⇒ domain_blocked · DNS / kết nối / timeout / 5xx ⇒ network.
+//   egress từ chối (403 + header x-ga-egress: blocked) ⇒ domain_blocked · DNS / kết nối / timeout / 5xx ⇒ network.
 
 export type FetchFailure = 'domain_blocked' | 'network' | 'http_status' | 'too_large' | 'bad_url';
 
@@ -22,7 +22,9 @@ export class FetchError extends Error {
   }
 }
 
+/** Dấu hiệu egress chặn domain: HTTP 403 + `x-ga-egress: blocked` (chốt với L-FAKE, ASSUMPTIONS ES-1). */
 export const EGRESS_DENIED_HEADER = 'x-ga-egress';
+export const EGRESS_BLOCKED_VALUE = 'blocked';
 
 export interface FetchOptions {
   proxy: URL | null;
@@ -40,7 +42,9 @@ export interface FetchOptions {
 }
 
 function deniedByEgress(res: IncomingMessage): boolean {
-  return res.statusCode === 403 && String(res.headers[EGRESS_DENIED_HEADER] ?? '').toLowerCase() === 'denied';
+  return (
+    res.statusCode === 403 && String(res.headers[EGRESS_DENIED_HEADER] ?? '').toLowerCase() === EGRESS_BLOCKED_VALUE
+  );
 }
 
 function netError(e: unknown): FetchError {

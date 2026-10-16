@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
@@ -26,8 +26,12 @@ export function sandbox(): Sandbox {
   const authDir = join(roots.auth, ACCOUNT);
   mkdirSync(authDir, { recursive: true, mode: 0o700 });
   mkdirSync(join(roots.engines, 'fake', '1.0.0'), { recursive: true });
-  copyFileSync(FAKE_CLI, join(roots.engines, 'fake', '1.0.0', 'fake-cli'));
-  chmodSync(join(roots.engines, 'fake', '1.0.0', 'fake-cli'), 0o755);
+  // launcher không phụ thuộc PATH (runner dựng env mới, PATH chỉ có /opt/engines/<slug>/current + thư mục hệ thống)
+  writeFileSync(
+    join(roots.engines, 'fake', '1.0.0', 'fake-cli'),
+    `#!/bin/sh\nexec "${process.execPath}" "${FAKE_CLI}" "$@"\n`,
+    { mode: 0o755 },
+  );
   symlinkSync('1.0.0', join(roots.engines, 'fake', 'current'));
   return { base, roots, authDir, cleanup: () => rmSync(base, { recursive: true, force: true }) };
 }

@@ -21,7 +21,11 @@ export function linkAllowlist(home: string, authDir: string, allowlist: readonly
   const links: HomeLink[] = [];
   for (const rel of allowlist) {
     const parent = dirname(rel);
-    if (parent !== '.') mkdirInside(home, parent);
+    if (parent !== '.') {
+      mkdirInside(home, parent);
+      // thư mục cha trong /auth phải có để CLI ghi XUYÊN symlink (lần đăng nhập đầu: tệp chưa tồn tại)
+      mkdirInside(authDir, parent);
+    }
     const linkPath = join(home, rel);
     if (lstatOrNull(linkPath) !== null) {
       throw new RunnerError('plan_conflicts_auth', 'tệp của plan trùng đường với tệp credential trong allowlist');

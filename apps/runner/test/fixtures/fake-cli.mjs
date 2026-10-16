@@ -21,14 +21,18 @@ if (mode === 'turn') {
   writeFileSync(join(home, 'cred.json.tmp'), '{"token":"rotated-v2"}');
   renameSync(join(home, 'cred.json.tmp'), cred);
   const ticketPath = join(process.cwd(), 'ticket');
-  out({
-    type: 'env',
-    names: Object.keys(process.env).sort(),
-    values: Object.values(process.env),
-    cwd: process.cwd(),
-    ticketMode: existsSync(ticketPath) ? (statSync(ticketPath).mode & 0o777).toString(8) : null,
-    credBefore,
-  });
+  // ghi ra NGOÀI thư mục lượt (thư mục cha = /run/ga) để test đọc sau khi runner dọn; stdout có thể bị che cả dòng
+  writeFileSync(
+    join(process.cwd(), '..', 'env-dump.json'),
+    JSON.stringify({
+      names: Object.keys(process.env).sort(),
+      values: Object.values(process.env),
+      cwd: process.cwd(),
+      ticketMode: existsSync(ticketPath) ? (statSync(ticketPath).mode & 0o777).toString(8) : null,
+      credBefore,
+    }),
+  );
+  out({ type: 'env' });
   out({ type: 'text', text: `canary GA-CANARY-${'0123abcd'}-ffff lọt?` });
   process.stderr.write('stderr line\n');
   process.exit(Number(rest[0] ?? 0));

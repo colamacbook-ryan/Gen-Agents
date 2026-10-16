@@ -3,7 +3,8 @@ import type { InstallRecipe } from './recipe.ts';
 // CHỈ CÓ TRONG IMAGE TEST (deploy/docker/Dockerfile.runtime-test chép thêm tệp này; Dockerfile.runtime KHÔNG chép).
 // Nguồn `fake` của ga-engine-install (BUILD-PLAN §C.2, CNS-137): máy chủ "trình cài giả" (testing/fakes/engine-source của
 // L-FAKE; trong lúc chờ: stub ở testing/it/runtime/stubs/) phục vụ manifest theo nền tảng tại
-//   <GA_FAKE_ENGINE_SOURCE_URL>/manifests/<slug>/<platform>.json   = { version, url, sha512 }   (url tương đối hoặc tuyệt đối)
+//   <GA_FAKE_ENGINE_SOURCE_URL>/<slug>/manifests/<platform>.json   = { version, url, sha512 }   (platform linux_amd64 | linux_arm64;
+//   giao thức của testing/fakes/engine-source — ASSUMPTIONS ES-1..ES-4)
 // và đi qua ga-egress như nguồn thật ⇒ cùng đường code tải / %, checksum, phân loại lỗi. Tên binary lấy từ công thức thật
 // của adapter (để /opt/engines/<slug>/current/<bin> đúng chỗ adapter trỏ tới).
 
@@ -17,12 +18,12 @@ export function fakeRecipe(slug: string, binaryName: string, env: NodeJS.Process
   return {
     binaryName,
     platforms: [
-      { arch: 'x64', libc: 'glibc', key: 'linux-x64' },
-      { arch: 'arm64', libc: 'glibc', key: 'linux-arm64' },
+      { arch: 'x64', libc: 'glibc', key: 'linux_amd64' },
+      { arch: 'arm64', libc: 'glibc', key: 'linux_arm64' },
     ],
     manifest: {
       kind: 'per-platform',
-      urlTemplate: `${base}/manifests/${slug}/{platform}.json`,
+      urlTemplate: `${base}/${slug}/manifests/{platform}.json`,
       fields: { version: 'version', url: 'url', checksum: 'sha512' },
     },
     payload: { kind: 'raw' },

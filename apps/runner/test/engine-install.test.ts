@@ -13,7 +13,7 @@ import type { InstallRecipe } from '../src/engine-install/recipe.ts';
 import type { RunnerRoots } from '../src/paths.ts';
 import { type Sandbox, sandbox } from './helpers.ts';
 
-// Máy chủ "hãng" giả + proxy giả (đóng vai ga-egress: absolute-form cho http, CONNECT, từ chối = 403 + x-ga-egress: denied).
+// Máy chủ "hãng" giả + proxy giả (đóng vai ga-egress: absolute-form cho http, CONNECT, từ chối = 403 + x-ga-egress: blocked).
 
 const BINARY = Buffer.from(`#!/bin/sh\necho fake ${'x'.repeat(200_000)}\n`);
 const sha512 = (b: Buffer) => createHash('sha512').update(b).digest('hex');
@@ -54,7 +54,7 @@ beforeAll(async () => {
     const target = new URL(req.url ?? '');
     proxied.push(target.host + target.pathname);
     if (target.pathname.startsWith('/blocked/')) {
-      res.writeHead(403, { 'x-ga-egress': 'denied' }).end();
+      res.writeHead(403, { 'x-ga-egress': 'blocked' }).end();
       return;
     }
     const up = request(target, { method: req.method, headers: { host: target.host } }, (ur) => {
@@ -66,7 +66,7 @@ beforeAll(async () => {
   });
   proxy.on('connect', (req, socket) => {
     proxied.push(`CONNECT ${req.url}`);
-    socket.end('HTTP/1.1 403 Forbidden\r\nx-ga-egress: denied\r\ncontent-length: 0\r\n\r\n');
+    socket.end('HTTP/1.1 403 Forbidden\r\nx-ga-egress: blocked\r\ncontent-length: 0\r\n\r\n');
   });
   await new Promise<void>((r) => proxy.listen(0, '127.0.0.1', r));
   proxyUrl = new URL(`http://127.0.0.1:${(proxy.address() as AddressInfo).port}`);
@@ -193,7 +193,7 @@ describe('ga-engine-install — cài từ công thức của adapter, có %, đi
     ],
     ['manifest 404 cho nền tảng ⇒ unsupported_arch', () => {}, {}, 'unsupported_arch'],
     [
-      'egress chặn domain tải (403 + x-ga-egress: denied) ⇒ domain_blocked',
+      'egress chặn domain tải (403 + x-ga-egress: blocked) ⇒ domain_blocked',
       () => {
         routes.set('/manifests/linux-x64.json', {
           status: 200,
@@ -305,7 +305,7 @@ describe('nguồn fake (chỉ image test)', () => {
   it('dựng công thức per-platform từ GA_FAKE_ENGINE_SOURCE_URL, giữ tên binary của adapter', () => {
     const r = fakeRecipe('demo', 'democli', { GA_FAKE_ENGINE_SOURCE_URL: 'http://fake-source:8080' });
     expect(r.binaryName).toBe('democli');
-    expect(r.manifest).toMatchObject({ urlTemplate: 'http://fake-source:8080/manifests/demo/{platform}.json' });
+    expect(r.manifest).toMatchObject({ urlTemplate: 'http://fake-source:8080/demo/manifests/{platform}.json' });
   });
   it.each(['', 'file:///etc', 'http://x/path?q', 'http://a b'])('từ chối URL nguồn: %j', (u) => {
     expect(() => fakeRecipe('demo', 'democli', { GA_FAKE_ENGINE_SOURCE_URL: u })).toThrow();
