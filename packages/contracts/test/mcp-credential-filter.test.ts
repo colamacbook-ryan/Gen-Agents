@@ -311,7 +311,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     ).toBe(true);
   });
 
-  it('url_userinfo tách như parser WHATWG: ký tự lạ trong mật khẩu, userinfo dài, scheme đặc biệt không cần //', () => {
+  it('url_userinfo xấp xỉ TRÊN parser WHATWG: ký tự lạ, userinfo dài, scheme đặc biệt không cần //, không cần ranh giới', () => {
     const pw = (x: string) => `${x}${fake(6, 'Pw9x')}`;
     for (const s of [
       `https://u:${pw('"')}@h/x`,
@@ -334,6 +334,12 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       `wss:\\/u:${pw('')}@h`,
       // scheme khác có //
       `postgres://app:${pw('')}@db:5432/x`,
+      // review lần 3: ký tự scheme hợp lệ đứng trước scheme (fail-closed: không cần ranh giới trái)
+      `1.https://u:${pw('')}@h`,
+      `-https://u:${pw('')}@h`,
+      `x.ftp://u:${pw('')}@h`,
+      `xhttps:u:${pw('')}@h`,
+      `FILE:///u:${pw('')}@h`,
     ]) {
       expect(findCredentialLike(s)?.patternId, JSON.stringify(s.slice(0, 60))).toBe('url_userinfo');
     }
@@ -356,10 +362,14 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
   });
 
   it('url_userinfo ⊇ new URL(): mọi chuỗi có URL.password ≠ "" đều bị bắt (corpus tất định, đủ các dạng lệch)', () => {
+    // mulberry32 tất định (LCG 32-bit cho chuỗi ngẫu nhiên tương quan khi rút nhiều lần liên tiếp)
     let seed = 20261016;
     const rnd = () => {
-      seed = (seed * 1103515245 + 12345) >>> 0;
-      return seed / 4294967296;
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
     const one = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)] as T;
     // không có khoảng trắng thô (xem chú thích hasUrlUserinfo); có TAB / LF / CR, \\, @, :, ký tự lạ
@@ -371,11 +381,12 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       return `${x.slice(0, k)}${one(['\t', '\n', '\r'])}${x.slice(k)}`;
     };
     const SCHEMES = ['https', 'HTTPS', 'Http', 'http', 'ws', 'WSS', 'ftp', 'file', 'postgres', 'x-y', 'mailto', 'urn'];
+    const PREFIXES = ['', '', 'x.', 'a-', 'A+b.', 'z9'];
     const SEPS = ['', '/', '//', '///', '\\', '\\\\', '/\\', '\\/', '//\\'];
     let withPassword = 0;
     const misses: string[] = [];
-    for (let k = 0; k < 40_000; k++) {
-      const s = `${withTab(one(SCHEMES))}:${one(SEPS)}${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${one(['', '/p', '?q=1', '#f', ':8080/x', '\\p'])}`;
+    for (let k = 0; k < 80_000; k++) {
+      const s = `${one(PREFIXES)}${withTab(one(SCHEMES))}:${one(SEPS)}${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${one(['', '/p', '?q=1', '#f', ':8080/x', '\\p'])}`;
       let u: URL;
       try {
         u = new URL(s);
@@ -386,7 +397,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       withPassword++;
       if (findCredentialLike(s) === null || findCredentialLike(`xem ${s} nhé`) === null) misses.push(JSON.stringify(s));
     }
-    expect(withPassword).toBeGreaterThan(2000);
+    expect(withPassword).toBeGreaterThan(1500);
     expect(misses.slice(0, 5)).toEqual([]);
   });
 
@@ -495,6 +506,9 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
     ':// + 1 MiB TAB/LF': `://${'\t\n'.repeat(MB / 2)}`,
     ':/:/ lặp (gần ://)': ':/:/'.repeat(Math.floor(MB / 4)),
     'a: lặp': 'a:'.repeat(MB / 2),
+    '://a: lặp': '://a:'.repeat(Math.floor(MB / 5)),
+    '://a:@ lặp (mỗi authority có @)': ' ://a@'.repeat(Math.floor(MB / 6)),
+    'httpS:ftp:wss: lặp': 'httpS:ftp:wss:'.repeat(Math.floor(MB / 14)),
     'https: lặp (authority lồng nhau)': 'https:'.repeat(Math.floor(MB / 6)),
     'https:a:@ lặp': 'https:a:@'.repeat(Math.floor(MB / 9)),
     'https: + 1 MiB gạch': `https:${'/'.repeat(MB)}`,

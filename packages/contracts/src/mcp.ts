@@ -436,63 +436,58 @@ function isJsSpace(c: number): boolean {
   );
 }
 
-/** Scheme đặc biệt của WHATWG URL có userinfo (`file` không có userinfo ⇒ không cần). */
-const SPECIAL_URL_SCHEMES: ReadonlySet<string> = new Set(['http', 'https', 'ws', 'wss', 'ftp']);
-/** Ứng viên `scheme:` — lookbehind MỘT ký tự ⇒ chỉ thử ở đầu đoạn ký tự scheme, mỗi đoạn quét một lần (tuyến tính). */
-const URL_SCHEME_RE = /(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*:/g;
+/** Ứng viên A: scheme đặc biệt ở BẤT KỲ đâu (không cần ranh giới trái) — alternation chuỗi cố định, không quantifier. */
+const SPECIAL_SCHEME_ANYWHERE_RE = /(?:https?|wss?|ftp|file):/gi;
 
 /**
- * Mật khẩu trong URL — tách NHƯ parser WHATWG (hai vòng security review parser-differential, Gen xác nhận):
+ * Mật khẩu trong URL — XẤP XỈ TRÊN parser WHATWG (fail-closed, Gen quyết sau ba vòng review parser-differential: mô phỏng
+ * đúng từng nhánh của parser thì lỗ nào cũng phải vá riêng ⇒ chặn RỘNG hơn parser, không bao giờ hẹp hơn):
  *   1. bỏ mọi TAB / LF / CR (parser URL bỏ trước khi parse; trần kích thước đã đặt trước bước này);
- *   2. mỗi ứng viên `scheme:` (không phân biệt hoa thường):
- *      - scheme đặc biệt (http, https, ws, wss, ftp): bỏ qua mọi chuỗi `[/\\]*` (kể cả rỗng); authority kết thúc ở ký tự
- *        đầu tiên trong `/ \\ ? #`;
- *      - scheme khác: chỉ khi ngay sau là `//`; authority kết thúc ở `/ ? #`;
- *   3. authority có `@` và đoạn trước `@` CUỐI chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng).
- * Lệch có chủ đích với WHATWG: khoảng trắng còn lại (space, NBSP…) cũng kết thúc authority — parser URL percent-encode
- * khoảng trắng trong userinfo, nhưng quét VĂN BẢN mà không dừng ở khoảng trắng thì câu thường kiểu "http: lỗi: xem a@b" bị
- * chặn nhầm; URL trong văn bản không chứa khoảng trắng thô (corpus đối chiếu new URL() vì vậy không chèn khoảng trắng).
- * Tuyến tính: bảng tiền tố / hậu tố tính một lần (vị trí dừng kế tiếp, ':' đầu tiên từ i, '@' cuối trước p) ⇒ mỗi ứng viên
- * O(1), kể cả khi các authority lồng nhau (`https:https:…`).
+ *   2. ứng viên A — mọi `http: https: ws: wss: ftp: file:` (không phân biệt hoa thường, KHÔNG cần ranh giới trái:
+ *      `1.https:`, `-https:`, `x.ftp:` vẫn là ứng viên): bỏ qua `[/\\]*`, authority tới ký tự đầu tiên trong `/ \\ ? #` hoặc
+ *      khoảng trắng;
+ *   3. ứng viên B — mọi `://` (scheme bất kỳ): authority tới ký tự đầu tiên trong `/ ? #` hoặc khoảng trắng;
+ *   4. authority có `@` và đoạn trước `@` CUỐI chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng).
+ * Báo nhầm tăng nhẹ được chấp nhận (dòng chứa `user:pass@` sau một scheme). Khoảng trắng kết thúc authority (quét văn bản).
+ * Tuyến tính: bảng vị trí dừng (hai tập) / ':' đầu tiên từ i / '@' cuối trước p tính một lần ⇒ mỗi ứng viên O(1), kể cả khi
+ * các authority chồng nhau (`https:https:…`, `://a:` lặp).
  */
 function hasUrlUserinfo(raw: string): boolean {
   if (!raw.includes('@') || !raw.includes(':')) return false;
   const s = /[\t\n\r]/.test(raw) ? raw.replace(/[\t\n\r]/g, '') : raw;
   const n = s.length;
-  // stopOther[i] / stopSpecial[i] = vị trí dừng đầu tiên ≥ i; colonFrom[i] = ':' đầu tiên ≥ i; atBefore[p] = '@' cuối < p
-  const stopOther = new Int32Array(n + 1);
-  const stopSpecial = new Int32Array(n + 1);
+  const stopB = new Int32Array(n + 1); // / ? # khoảng trắng
+  const stopA = new Int32Array(n + 1); // + '\\'
   const colonFrom = new Int32Array(n + 1);
   const atBefore = new Int32Array(n + 1);
-  stopOther[n] = n;
-  stopSpecial[n] = n;
+  stopB[n] = n;
+  stopA[n] = n;
   colonFrom[n] = -1;
   for (let i = n - 1; i >= 0; i--) {
     const c = s.charCodeAt(i);
     const stop = c === 47 || c === 63 || c === 35 || isJsSpace(c);
-    stopOther[i] = stop ? i : (stopOther[i + 1] as number);
-    stopSpecial[i] = stop || c === 92 ? i : (stopSpecial[i + 1] as number);
+    stopB[i] = stop ? i : (stopB[i + 1] as number);
+    stopA[i] = stop || c === 92 ? i : (stopA[i + 1] as number);
     colonFrom[i] = c === 58 ? i : (colonFrom[i + 1] as number);
   }
   atBefore[0] = -1;
   for (let p = 1; p <= n; p++) atBefore[p] = s.charCodeAt(p - 1) === 64 ? p - 1 : (atBefore[p - 1] as number);
+  const hasPassword = (start: number, end: number): boolean => {
+    const lastAt = atBefore[end] as number;
+    const firstColon = colonFrom[start] as number;
+    return lastAt >= start && firstColon >= start && firstColon < lastAt;
+  };
 
-  const re = URL_SCHEME_RE;
+  const re = SPECIAL_SCHEME_ANYWHERE_RE;
   re.lastIndex = 0;
   for (let m = re.exec(s); m !== null; m = re.exec(s)) {
-    const special = SPECIAL_URL_SCHEMES.has(m[0].slice(0, -1).toLowerCase());
     let i = m.index + m[0].length;
-    if (special) {
-      while (i < n && (s.charCodeAt(i) === 47 || s.charCodeAt(i) === 92)) i++;
-    } else if (s.charCodeAt(i) === 47 && s.charCodeAt(i + 1) === 47) {
-      i += 2;
-    } else {
-      continue;
-    }
-    const end = (special ? stopSpecial : stopOther)[i] as number;
-    const lastAt = atBefore[end] as number;
-    const firstColon = colonFrom[i] as number;
-    if (lastAt >= i && firstColon >= i && firstColon < lastAt) return true;
+    while (i < n && (s.charCodeAt(i) === 47 || s.charCodeAt(i) === 92)) i++;
+    if (hasPassword(i, stopA[i] as number)) return true;
+    re.lastIndex = m.index + 1; // ứng viên chồng nhau (vd `https:` trong `xhttps:`) vẫn được xét
+  }
+  for (let at = s.indexOf('://'); at >= 0; at = s.indexOf('://', at + 1)) {
+    if (hasPassword(at + 3, stopB[at + 3] as number)) return true;
   }
   return false;
 }
