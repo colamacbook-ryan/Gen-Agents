@@ -24,6 +24,7 @@ describe('lint-rules', () => {
         'no-duplicate-component-names',
         'import-boundaries',
         'engine-plans-only-in-runner',
+        'db-privileged-api-paths',
       ]),
     );
   });
