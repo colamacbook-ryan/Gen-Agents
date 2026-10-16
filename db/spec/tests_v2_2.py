@@ -6396,6 +6396,9 @@ def t_v233_actor_guard():
     D.raw.execute("PRAGMA foreign_keys=ON")
     case("tasks: hàng mồ côi đổi FK sang hàng khác, không có app_actor()", _raw(D, None, "UPDATE tasks SET parent_task_id=? WHERE id=?", (X['tk'], torph)),
          MSG_GEN_UB_T)
+    # v2.3.4 (đột biến mệnh đề): hàng cha đã mất + FK về NULL thoả hai vế kia ⇒ chỉ vế "mọi cột khác giữ nguyên" chặn sửa kèm cột khác
+    case("tasks: hàng mồ côi — FK về NULL KÈM sửa cột khác, không có app_actor()",
+         _raw(D, None, "UPDATE tasks SET parent_task_id=NULL, title='đổi tên lén' WHERE id=?", (torph,)), MSG_GEN_UB_T)
     # thứ tự trong SQLite (chứng minh, không suy luận): lúc hành động ON DELETE SET NULL chạy trigger UPDATE ở hàng con, hàng cha ĐÃ rời b-tree
     D.raw.execute("CREATE TEMP TABLE fk_probe(parent_alive INTEGER)")
     D.raw.execute("CREATE TEMP TRIGGER fk_probe_t BEFORE UPDATE OF parent_task_id ON main.tasks BEGIN "
