@@ -26,6 +26,7 @@ describe('lint-rules', () => {
         'engine-plans-only-in-runner',
         'db-privileged-api-paths',
         'db-actor-columns-from-context',
+        'no-invisible-chars',
       ]),
     );
   });

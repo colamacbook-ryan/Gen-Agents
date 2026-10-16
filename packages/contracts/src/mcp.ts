@@ -442,6 +442,20 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   { id: 'github_token', test: (s) => /\bgh[pousr]_[0-9A-Za-z_-]{30}|\bgithub_pat_[0-9A-Za-z_-]{40}/.test(s) },
   { id: 'slack_token', test: (s) => /\bxox[abpre]-[0-9A-Za-z_-]{10}/.test(s) },
   { id: 'gitlab_token', test: (s) => /\bglpat-[0-9A-Za-z_-]{20}/.test(s) },
+  // L-SEC đề xuất (Gen duyệt): ranh giới trước = lookbehind MỘT ký tự [0-9A-Za-z] (như packages/security), không quantifier
+  { id: 'npm_token', test: (s) => /(?<![0-9A-Za-z])npm_[0-9A-Za-z_-]{30}/.test(s) },
+  { id: 'huggingface_token', test: (s) => /(?<![0-9A-Za-z])hf_[0-9A-Za-z_-]{30}/.test(s) },
+  { id: 'google_oauth_client_secret', test: (s) => /(?<![0-9A-Za-z])GOCSPX-[0-9A-Za-z_-]{20}/.test(s) },
+  /** Header `Authorization: Bearer <token ≥ 16>` trong log / payload; "the bearer of …" / "Bearer short" không bắt. */
+  { id: 'bearer_token', test: (s) => /(?<![0-9A-Za-z])bearer[ \t]{1,16}[0-9A-Za-z_.~+/=-]{16}/i.test(s) },
+  /**
+   * Mật khẩu trong URL `scheme://user:password@host` (tên đăng nhập có thể rỗng). Chỉ thử ở mỗi `://`; hai đoạn có trần
+   * ({0,1024} / {1,1024}), đoạn user không chứa ':' ⇒ tuyến tính.
+   */
+  {
+    id: 'url_userinfo',
+    test: (s) => /:\/\/[^\s/?#@"'<>:]{0,1024}:[^\s/?#@"'<>]{1,1024}@/.test(s),
+  },
   { id: 'aws_access_key_id', test: (s) => /\b(?:AKIA|ASIA)[0-9A-Z]{16}/.test(s) },
   { id: 'telegram_bot_token', test: (s) => /\b\d{8,10}:[0-9A-Za-z_-]{35}/.test(s) },
   { id: 'pem_private_key', test: hasPemPrivateKey },
@@ -465,7 +479,10 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
 export const CREDENTIAL_KEY_RE = new RegExp(`^(?:${CREDENTIAL_NAMES_ALT})$`, 'i');
 
 /** Mọi patternId có thể trả về (audit `credential.blocked` chỉ mang id này, không mang payload). */
-/** = id của CREDENTIAL_DETECTORS (đúng thứ tự, test giữ đồng bộ) + `credential_field_name` + `too_deep`. */
+/**
+ * = id của CREDENTIAL_DETECTORS (đúng thứ tự, test giữ đồng bộ) + `encoded_marker_flood` (chỉ bộ quét giải mã của
+ * packages/security sinh: quá nhiều dấu hiệu trong đoạn mã hoá ⇒ chặn cả chuỗi) + `credential_field_name` + `too_deep`.
+ */
 export const CREDENTIAL_PATTERN_IDS = [
   'jwt',
   'google_oauth_access_token',
@@ -477,6 +494,11 @@ export const CREDENTIAL_PATTERN_IDS = [
   'github_token',
   'slack_token',
   'gitlab_token',
+  'npm_token',
+  'huggingface_token',
+  'google_oauth_client_secret',
+  'bearer_token',
+  'url_userinfo',
   'aws_access_key_id',
   'telegram_bot_token',
   'pem_private_key',
@@ -485,6 +507,7 @@ export const CREDENTIAL_PATTERN_IDS = [
   'env_secret_assignment',
   'canary',
   'high_entropy_run',
+  'encoded_marker_flood',
   'credential_field_name',
   'too_deep',
 ] as const;

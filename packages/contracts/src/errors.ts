@@ -7,6 +7,12 @@ export const API_ERROR_CODES = [
   'auth.csrf',
   'auth.rate_limited',
   'auth.must_change_password',
+  /** Sai tên đăng nhập / mật khẩu (không nói phần nào sai). L-SEC đề xuất. */
+  'auth.invalid_credentials',
+  /** Tài khoản tạm khoá sau nhiều lần sai. */
+  'auth.locked',
+  /** Mật khẩu mới không đạt chính sách độ mạnh. */
+  'auth.weak_password',
   'recovery.blocked',
   'validation.failed',
   'not_found',
