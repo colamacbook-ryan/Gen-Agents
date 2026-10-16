@@ -200,7 +200,7 @@ describe.skipIf(!enabled)('Chromium thật', () => {
     expect(errors).toEqual([]);
   });
 
-  it('keyframes thật trong trang: tiền tố chb-k-, chỉ transform / opacity / stroke-dashoffset + biến góc tay', async () => {
+  it('keyframes thật trong trang: tiền tố chb-k-, chỉ transform / opacity / rotate / scale / stroke-dashoffset', async () => {
     const { page } = await open(false);
     const kf = await page.evaluate(() => {
       const C = (window as never as { Chibi: { injectCSS(): void; keyframeNames(): Record<string, string> } }).Chibi;
@@ -214,8 +214,7 @@ describe.skipIf(!enabled)('Chromium thật', () => {
     for (const [n, text] of Object.entries(kf)) {
       for (const m of text.matchAll(/([\w-]+)\s*:/g)) {
         const p = m[1] as string;
-        if (!['transform', 'opacity', 'stroke-dashoffset'].includes(p) && !/^--chb-(raL|raR|hR|kL|kR)$/.test(p))
-          bad.add(`${n}:${p}`);
+        if (!['transform', 'opacity', 'stroke-dashoffset', 'rotate', 'scale'].includes(p)) bad.add(`${n}:${p}`);
       }
     }
     expect([...bad]).toEqual([]);

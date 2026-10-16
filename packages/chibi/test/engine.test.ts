@@ -22,6 +22,8 @@ afterAll(() => {
 
 const CSS = buildCss();
 const KF = keyframes(CSS);
+/** keyframes có thật; họ keyframes của tay được sinh thành `-L` / `-R` (arm-anim.ts) */
+const kfBody = (n: string): string | undefined => KF[`chb-${n}`] ?? KF[`chb-${n}-L`] ?? KF[`chb-${n}-R`];
 const variantsOf = (s: string) => (s === 'idle' ? [...IDLE_VARIANTS] : [null]);
 const SIZES = [160, 64, 32] as const;
 
@@ -96,15 +98,14 @@ describe('khung xương: token / slot / keyframes', () => {
     for (const [s, def] of Object.entries(ST)) {
       for (const t of [...(def.m ?? []), ...Object.values(def.variants ?? {}).flatMap((v) => v.m)])
         expect(TOK, `${s}:${t}`).toHaveProperty(t);
-      for (const k of def.pose) expect(KF[`chb-${k}`], `${s} pose ${k}`).toBeTruthy();
+      for (const k of def.pose) expect(kfBody(k), `${s} pose ${k}`).toBeTruthy();
     }
     for (const tr of TRAITS) {
       for (const [s, o] of Object.entries(tr.over)) {
         for (const t of [...(o.m ?? []), ...(o.drop ?? [])]) expect(TOK, `${tr.id}/${s}:${t}`).toHaveProperty(t);
       }
     }
-    for (const [name, t] of Object.entries(TOK))
-      for (const k of t.kf) expect(KF[`chb-${k}`], `${name}: ${k}`).toBeTruthy();
+    for (const [name, t] of Object.entries(TOK)) for (const k of t.kf) expect(kfBody(k), `${name}: ${k}`).toBeTruthy();
   });
 
   it.each([...CODES])('%s: 16 trạng thái × (3 biến thể idle) × 3 cỡ dựng không lỗi, SVG tự chứa', (id) => {
@@ -120,7 +121,7 @@ describe('khung xương: token / slot / keyframes', () => {
         expect(JSON.parse(JSON.stringify(r))).toEqual(r);
         const slots = r.m.flatMap((t) => TOK[t].slots);
         expect(new Set(slots).size, `${id}/${s}: trùng slot`).toBe(slots.length);
-        for (const k of r.pose) expect(KF[`chb-${k}`], `${id}/${s} thiếu keyframes ${k}`).toBeTruthy();
+        for (const k of r.pose) expect(kfBody(k), `${id}/${s} thiếu keyframes ${k}`).toBeTruthy();
       }
     }
   });
@@ -128,7 +129,7 @@ describe('khung xương: token / slot / keyframes', () => {
   it.each([...CODES])(
     '%s (bảng B spike): mỗi trạng thái có emote + pose đổi + huy hiệu; ≥ 4 trạng thái có hành vi riêng theo bộ phận',
     (id) => {
-      const moved = (n: string) => /transform|--chb-ra|opacity/.test(KF[`chb-${n}`] ?? '');
+      const moved = (n: string) => /transform|rotate|scale|opacity/.test(kfBody(n) ?? '');
       let own = 0;
       for (const s of AVATAR_STATES) {
         for (const v of variantsOf(s)) {
@@ -302,16 +303,17 @@ describe('chuyển động: quy tắc cấu trúc của CSS', () => {
     expect(new Set(names)).toEqual(new Set(['chb-k-blink', 'chb-k-breathe']));
   });
 
-  it('keyframes chỉ animate transform / opacity / stroke-dashoffset + biến góc tay (--chb-ra…); không d / filter / width / height', () => {
-    const allowed = new Set(['transform', 'opacity', 'stroke-dashoffset']);
+  it('keyframes chỉ animate transform / opacity / rotate / scale / stroke-dashoffset; không animate biến tuỳ ý (không còn @property)', () => {
+    const allowed = new Set(['transform', 'opacity', 'stroke-dashoffset', 'rotate', 'scale']);
     const bad = new Set<string>();
     for (const [name, body] of Object.entries(KF)) {
       for (const m of body.matchAll(/([\w-]+)\s*:/g)) {
         const p = m[1] as string;
-        if (!allowed.has(p) && !/^--chb-(raL|raR|hR|kL|kR)$/.test(p)) bad.add(`${name}:${p}`);
+        if (!allowed.has(p)) bad.add(`${name}:${p}`);
       }
     }
     expect([...bad]).toEqual([]);
+    expect(CSS).not.toMatch(/@property/);
   });
 
   it('cách ly: mọi class / keyframes / biến CSS có tiền tố chb-', () => {

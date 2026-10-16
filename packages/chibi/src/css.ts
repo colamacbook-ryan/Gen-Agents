@@ -1,6 +1,7 @@
 // CSS của engine: nền, reduced-motion (pose tĩnh), chuyển động theo token. Class / keyframes / biến CSS đều có tiền tố chb- (nsCss).
 // Chỉ animate transform + opacity (+ stroke-dashoffset cho nét chữ ký tay, + biến góc tay). Mọi animation nằm trong
 // @media (prefers-reduced-motion: no-preference) ⇒ reduce = 0 animation bằng cấu trúc, không cần kiểm lại từng luật.
+import { armKeyframes, expandArm } from './arm-anim.ts';
 import { f } from './color.ts';
 import { EMOTES } from './emotes.ts';
 import { EYE_LAYERS, MOUTH_LAYERS } from './states.ts';
@@ -10,18 +11,14 @@ export const CSS_BASE = `
 .ink{ stroke-width:var(--sw,3.4) }
 .chb[data-sz="s"] .dt{ display:none }
 .chb[data-sz="s"] .fth{ stroke-width:calc(var(--sw) * .3) } .chb[data-sz="m"] .fth{ stroke-width:calc(var(--sw) * .6) }
-@property --raL{ syntax:"<angle>"; inherits:true; initial-value:0deg }
-@property --raR{ syntax:"<angle>"; inherits:true; initial-value:0deg }
-@property --hR { syntax:"<angle>"; inherits:true; initial-value:0deg }
-@property --kL { syntax:"<number>"; inherits:true; initial-value:1 }
-@property --kR { syntax:"<number>"; inherits:true; initial-value:1 }
-.arm-L{ transform:rotate(var(--raL)) scale(var(--kL)) } .arm-R{ transform:rotate(var(--raR)) scale(var(--kR)) }
-.held{ transform:rotate(calc(var(--hR) - var(--raR))) }
-.brush{ display:none; transform:rotate(calc(var(--raR) * -1)) }
+.chb{ --raL:0deg; --raR:0deg; --hR:0deg; --kL:1; --kR:1 }
+.arm-L{ rotate:var(--raL); scale:var(--kL) } .arm-R{ rotate:var(--raR); scale:var(--kR) }
+.held{ rotate:calc(-1 * var(--raR)) } .held-h{ rotate:var(--hR) }
+.brush{ display:none; rotate:calc(var(--raR) * -1) }
 .chb[data-s="rest"] .brush{ display:inline } .chb[data-s="rest"] .held{ opacity:0 }
 .bd{ transform-origin:100px 236px } .hd{ transform-origin:100px 108px } .capg{ transform-origin:100px 44px }
 .fan,.sword,.fan-arm,.sword-arm,.beard-arm,.prop{ transform-origin:0 0 }
-.cape{ transform-origin:100px 112px } .beard-sway,.beard-tangle{ transform-origin:100px 104px } .rib{ transform-origin:0 0 } .arm-L .ribw{ transform:rotate(calc(-1 * var(--raL))) } .arm-R .ribw{ transform:rotate(calc(-1 * var(--raR))) }
+.cape{ transform-origin:100px 112px } .beard-sway,.beard-tangle{ transform-origin:100px 104px } .rib{ transform-origin:0 0 } .arm-L .ribw{ rotate:calc(-1 * var(--raL)) } .arm-R .ribw{ rotate:calc(-1 * var(--raR)) }
 .tail{ transform-origin:50px 46px } .tailR{ transform-origin:150px 46px } .flag{ transform-origin:178px 14px }
 .shadow{ transform-origin:100px 237px; fill:color-mix(in srgb, var(--rc,#000) 55%, #000) }
 .hbg{ stroke:var(--rc,#2A1B22) } .baby{ transform-origin:100px 150px }
@@ -222,8 +219,7 @@ export const CSS_MOTION = `
 /* --- RUN --- */
 .chb[data-s="run"] .bd{ animation:k-bd-run .4s ease-in-out infinite }
 @keyframes k-bd-run{ 0%,100%{ transform:rotate(calc(var(--amp) * 8deg)) scale(1.05,.95) } 50%{ transform:rotate(calc(var(--amp) * 11deg)) translateY(calc(var(--amp) * -9px)) scale(.97,1.05) } }
-.chb[data-s="run"] .arm-L,.chb[data-s="run"] .arm-R{ animation:k-ar-run .4s ease-in-out infinite }
-@keyframes k-ar-run{ 0%,100%{ --raL:calc(var(--flail) * -1); --raR:var(--flail) } 50%{ --raL:var(--flail); --raR:calc(var(--flail) * -1) } }
+@arm .chb[data-s="run"] | k-ar-run | .4s ease-in-out infinite
 .chb[data-s="run"] .shoeL{ animation:k-shoe-run .4s ease-in-out infinite } .chb[data-s="run"] .shoeR{ animation:k-shoe-run .4s ease-in-out -.2s infinite }
 @keyframes k-shoe-run{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(calc(var(--amp) * -10px)) } }
 .chb[data-s="run"] .hd{ animation:k-hd-run .4s ease-in-out infinite }
@@ -236,24 +232,21 @@ export const CSS_MOTION = `
 .chb[data-m~="nodBeg"] .hd{ animation:k-hd-wait 2s ease-in-out infinite }
 @keyframes k-hd-wait{ 0%,12%,24%,36%,92%,100%{ transform:none } 6%{ transform:translateY(calc(var(--amp) * 9px)) rotate(calc(var(--amp) * -4deg)) } 18%{ transform:translateY(calc(var(--amp) * 9px)) rotate(calc(var(--amp) * 4deg)) }
   30%{ transform:translateY(calc(var(--amp) * 9px)) rotate(calc(var(--amp) * -4deg)) } 44%,78%{ transform:rotate(calc(var(--amp) * -15deg)) translateY(calc(var(--amp) * 5px)) scale(1.04) } }
-.chb[data-m~="palmsPump"] .arm-L,.chb[data-m~="palmsPump"] .arm-R{ animation:k-ar-wait .2s ease-in-out infinite alternate }
-@keyframes k-ar-wait{ from{ --raL:calc(var(--prayL) - 9deg); --raR:calc(var(--prayR) + 9deg); --hR:62deg } to{ --raL:calc(var(--prayL) + 7deg); --raR:calc(var(--prayR) - 7deg); --hR:62deg } }
+@arm .chb[data-m~="palmsPump"] | k-ar-wait | .2s ease-in-out infinite alternate
 
 /* --- REWARD (+₲): mặt tham tiền (mắt đồng xu xoay, chảy dãi, xoa tay hau háu, ôm túi tiền, nhún nhảy) --- */
 .chb[data-m~="hopGreed"] .bd{ animation:k-bd-reward .72s ease-in-out infinite }
 @keyframes k-bd-reward{ 0%,100%{ transform:scale(1.12,.86) } 38%{ transform:translateY(calc(var(--amp) * -24px)) scale(.9,1.14) } 62%{ transform:translateY(calc(var(--amp) * -6px)) scale(1.02,.99) } 78%{ transform:scale(1.1,.88) } }
 .chb[data-m~="hopGreed"] .shadow{ animation:k-sh-hop .72s ease-in-out infinite }
 @keyframes k-sh-hop{ 0%,100%{ transform:scale(1.08) } 38%{ transform:scale(.68); opacity:.15 } 62%{ transform:scale(.95) } }
-.chb[data-m~="rubHands"] .arm-L,.chb[data-m~="rubHands"] .arm-R{ animation:k-ar-reward .24s ease-in-out infinite alternate }
-@keyframes k-ar-reward{ from{ --raL:calc(var(--chestL) - 10deg); --raR:calc(var(--chestR) + 10deg) } to{ --raL:calc(var(--chestL) + 9deg); --raR:calc(var(--chestR) - 9deg) } }
+@arm .chb[data-m~="rubHands"] | k-ar-reward | .24s ease-in-out infinite alternate
 
 /* --- PENALTY (−₲): khóc thê thảm (hai dòng nước mắt phun ngang, nước mũi, miệng vuông gào, đập tay xuống đất, rung bần bật) --- */
 .chb[data-m~="quakeWail"] .bd{ animation:k-bd-penalty .09s ease-in-out infinite alternate }
 @keyframes k-bd-penalty{ from{ transform:translate(calc(var(--amp) * -2.4px),calc(var(--amp) * 6px)) rotate(calc(var(--amp) * -1.8deg)) scale(1.1,.9) } to{ transform:translate(calc(var(--amp) * 2.4px),calc(var(--amp) * 9px)) rotate(calc(var(--amp) * 1.8deg)) scale(1.12,.86) } }
 .chb[data-m~="headWail"] .hd{ animation:k-hd-penalty .7s ease-in-out infinite alternate }
 @keyframes k-hd-penalty{ from{ transform:rotate(calc(var(--amp) * -13deg)) translateY(calc(var(--amp) * -3px)) scale(1.04,1.1) } to{ transform:rotate(calc(var(--amp) * 13deg)) translateY(calc(var(--amp) * 3px)) scale(1.05,.96) } }
-.chb[data-m~="poundGround"] .arm-L,.chb[data-m~="poundGround"] .arm-R{ animation:k-ar-penalty .3s ease-in-out infinite alternate }
-@keyframes k-ar-penalty{ from{ --raL:calc(var(--outL) * 1.6); --raR:var(--limpR) } to{ --raL:var(--limpL); --raR:calc(var(--outR) * 1.6) } }
+@arm .chb[data-m~="poundGround"] | k-ar-penalty | .3s ease-in-out infinite alternate
 
 /* --- RANK #1: cười đê tiện (mắt híp nửa vầng trăng, che miệng hehehe, rung vai, liếc ngang, hất cằm) --- */
 .chb[data-m~="shoulderShake"] .bd{ animation:k-bd-rank1 .15s ease-in-out infinite alternate }
@@ -261,8 +254,7 @@ export const CSS_MOTION = `
 .chb[data-m~="glanceSmug"] .hd{ animation:k-hd-rank1 var(--T) ease-in-out infinite }
 @keyframes k-hd-rank1{ 0%,8%,92%,100%{ transform:none } 16%,34%{ transform:rotate(calc(var(--amp) * -9deg)) translate(calc(var(--amp) * -4px),calc(var(--amp) * -3px)) } 42%,56%{ transform:rotate(calc(var(--amp) * 9deg)) translate(calc(var(--amp) * 4px),calc(var(--amp) * -4px)) }
   64%,80%{ transform:rotate(calc(var(--amp) * -9deg)) translate(calc(var(--amp) * -4px),calc(var(--amp) * -3px)) } }
-.chb[data-m~="armsSmug"] .arm-R{ animation:k-ar-rank1 var(--T) ease-in-out infinite }
-@keyframes k-ar-rank1{ 0%,12%,100%{ --raR:0deg } 22%,90%{ --raR:calc(var(--outR) * .55) } }
+@arm .chb[data-m~="armsSmug"] | k-ar-rank1 | var(--T) ease-in-out infinite
 .chb[data-s="rank1"] .crown{ animation:k-crown-drop var(--T) cubic-bezier(.5,0,1,.6) infinite; transform-box:fill-box; transform-origin:50% 100% }
 @keyframes k-crown-drop{ 0%,7%{ transform:translateY(-92px) rotate(-14deg); opacity:0 } 8%{ transform:translateY(-92px) rotate(-14deg); opacity:1 } 24%{ transform:translateY(0) rotate(0) }
   27%{ transform:translateY(-13px) rotate(3deg) } 30%{ transform:translateY(0) rotate(0) } 32%{ transform:translateY(-4px) } 34%,94%{ transform:translateY(0) rotate(0); opacity:1 } 100%{ transform:translateY(-10px); opacity:0 } }
@@ -274,16 +266,14 @@ export const CSS_MOTION = `
   60%{ transform:translateX(calc(var(--amp) * 16px)) scale(1.34,.54) } 70%{ transform:translateX(calc(var(--amp) * 4px)) scale(1.14,.68) } 80%{ transform:translateX(calc(var(--amp) * -6px)) scale(1.3,.56) } 90%{ transform:translateX(calc(var(--amp) * -16px)) scale(1.14,.68) } }
 .chb[data-m~="lookUpBeg"] .hd{ animation:k-hd-quota 1.4s ease-in-out infinite alternate }
 @keyframes k-hd-quota{ from{ transform:scale(.93,1.36) rotate(calc(var(--amp) * 10deg)) } to{ transform:scale(.93,1.36) rotate(calc(var(--amp) * -2deg)) } }
-.chb[data-m~="reachGrab"] .arm-L,.chb[data-m~="reachGrab"] .arm-R{ animation:k-ar-quota 1.2s ease-in-out infinite }
-@keyframes k-ar-quota{ 0%{ --raL:calc(var(--limpL) - 5deg); --raR:calc(var(--outR) * 1.35) } 25%{ --raR:calc(var(--outR) * 1.95) } 33%{ --raL:calc(var(--limpL) + 7deg) } 50%{ --raR:calc(var(--outR) * 1.35) } 66%{ --raL:calc(var(--limpL) - 5deg) } 75%{ --raR:calc(var(--outR) * 1.95) } 100%{ --raL:calc(var(--limpL) - 5deg); --raR:calc(var(--outR) * 1.35) } }
+@arm .chb[data-m~="reachGrab"] | k-ar-quota | 1.2s ease-in-out infinite
 
 /* --- FAILOVER: hoảng loạn chạy vòng tròn, quơ tay, chân chạy --- */
 .chb[data-m~="circleRun"] .bd{ animation:k-bd-failover .9s linear infinite }
 .chb[data-m~="circleRun"] .shadow{ animation:k-sh-circle .9s linear infinite }
 @keyframes k-bd-failover{ 0%{ transform:translate(calc(var(--amp) * 0px),calc(var(--amp) * -0px)) rotate(calc(var(--amp) * 11deg)) scale(1) } 4.17%{ transform:translate(calc(var(--amp) * 10.35px),calc(var(--amp) * -4.81px)) rotate(calc(var(--amp) * 10.63deg)) scale(1) } 8.33%{ transform:translate(calc(var(--amp) * 20px),calc(var(--amp) * -1.21px)) rotate(calc(var(--amp) * 9.53deg)) scale(0.99) } 12.5%{ transform:translate(calc(var(--amp) * 28.28px),calc(var(--amp) * -7.14px)) rotate(calc(var(--amp) * 7.78deg)) scale(0.98) } 16.67%{ transform:translate(calc(var(--amp) * 34.64px),calc(var(--amp) * -4.5px)) rotate(calc(var(--amp) * 5.5deg)) scale(0.97) } 20.83%{ transform:translate(calc(var(--amp) * 38.64px),calc(var(--amp) * -11.17px)) rotate(calc(var(--amp) * 2.85deg)) scale(0.95) } 25%{ transform:translate(calc(var(--amp) * 40px),calc(var(--amp) * -9px)) rotate(calc(var(--amp) * 0deg)) scale(0.94) } 29.17%{ transform:translate(calc(var(--amp) * 38.64px),calc(var(--amp) * -15.83px)) rotate(calc(var(--amp) * -2.85deg)) scale(0.92) } 33.33%{ transform:translate(calc(var(--amp) * 34.64px),calc(var(--amp) * -13.5px)) rotate(calc(var(--amp) * -5.5deg)) scale(0.9) } 37.5%{ transform:translate(calc(var(--amp) * 28.28px),calc(var(--amp) * -19.86px)) rotate(calc(var(--amp) * -7.78deg)) scale(0.89) } 41.67%{ transform:translate(calc(var(--amp) * 20px),calc(var(--amp) * -16.79px)) rotate(calc(var(--amp) * -9.53deg)) scale(0.88) } 45.83%{ transform:translate(calc(var(--amp) * 10.35px),calc(var(--amp) * -22.19px)) rotate(calc(var(--amp) * -10.63deg)) scale(0.87) } 50%{ transform:translate(calc(var(--amp) * 0px),calc(var(--amp) * -18px)) rotate(calc(var(--amp) * -11deg)) scale(0.87) } 54.17%{ transform:translate(calc(var(--amp) * -10.35px),calc(var(--amp) * -22.19px)) rotate(calc(var(--amp) * -10.63deg)) scale(0.87) } 58.33%{ transform:translate(calc(var(--amp) * -20px),calc(var(--amp) * -16.79px)) rotate(calc(var(--amp) * -9.53deg)) scale(0.88) } 62.5%{ transform:translate(calc(var(--amp) * -28.28px),calc(var(--amp) * -19.86px)) rotate(calc(var(--amp) * -7.78deg)) scale(0.89) } 66.67%{ transform:translate(calc(var(--amp) * -34.64px),calc(var(--amp) * -13.5px)) rotate(calc(var(--amp) * -5.5deg)) scale(0.9) } 70.83%{ transform:translate(calc(var(--amp) * -38.64px),calc(var(--amp) * -15.83px)) rotate(calc(var(--amp) * -2.85deg)) scale(0.92) } 75%{ transform:translate(calc(var(--amp) * -40px),calc(var(--amp) * -9px)) rotate(calc(var(--amp) * -0deg)) scale(0.93) } 79.17%{ transform:translate(calc(var(--amp) * -38.64px),calc(var(--amp) * -11.17px)) rotate(calc(var(--amp) * 2.85deg)) scale(0.95) } 83.33%{ transform:translate(calc(var(--amp) * -34.64px),calc(var(--amp) * -4.5px)) rotate(calc(var(--amp) * 5.5deg)) scale(0.97) } 87.5%{ transform:translate(calc(var(--amp) * -28.28px),calc(var(--amp) * -7.14px)) rotate(calc(var(--amp) * 7.78deg)) scale(0.98) } 91.67%{ transform:translate(calc(var(--amp) * -20px),calc(var(--amp) * -1.21px)) rotate(calc(var(--amp) * 9.53deg)) scale(0.99) } 95.83%{ transform:translate(calc(var(--amp) * -10.35px),calc(var(--amp) * -4.81px)) rotate(calc(var(--amp) * 10.63deg)) scale(1) } 100%{ transform:translate(calc(var(--amp) * -0px),calc(var(--amp) * -0px)) rotate(calc(var(--amp) * 11deg)) scale(1) } }
 @keyframes k-sh-circle{ 0%{ transform:translateX(calc(var(--amp) * 0px)) scale(1.02,1); opacity:0.3 } 4.17%{ transform:translateX(calc(var(--amp) * 10.35px)) scale(1.02,1); opacity:0.3 } 8.33%{ transform:translateX(calc(var(--amp) * 20px)) scale(1.01,1); opacity:0.29 } 12.5%{ transform:translateX(calc(var(--amp) * 28.28px)) scale(1,1); opacity:0.29 } 16.67%{ transform:translateX(calc(var(--amp) * 34.64px)) scale(0.99,1); opacity:0.28 } 20.83%{ transform:translateX(calc(var(--amp) * 38.64px)) scale(0.97,1); opacity:0.26 } 25%{ transform:translateX(calc(var(--amp) * 40px)) scale(0.95,1); opacity:0.25 } 29.17%{ transform:translateX(calc(var(--amp) * 38.64px)) scale(0.94,1); opacity:0.24 } 33.33%{ transform:translateX(calc(var(--amp) * 34.64px)) scale(0.92,1); opacity:0.22 } 37.5%{ transform:translateX(calc(var(--amp) * 28.28px)) scale(0.91,1); opacity:0.21 } 41.67%{ transform:translateX(calc(var(--amp) * 20px)) scale(0.9,1); opacity:0.21 } 45.83%{ transform:translateX(calc(var(--amp) * 10.35px)) scale(0.89,1); opacity:0.2 } 50%{ transform:translateX(calc(var(--amp) * 0px)) scale(0.89,1); opacity:0.2 } 54.17%{ transform:translateX(calc(var(--amp) * -10.35px)) scale(0.89,1); opacity:0.2 } 58.33%{ transform:translateX(calc(var(--amp) * -20px)) scale(0.9,1); opacity:0.21 } 62.5%{ transform:translateX(calc(var(--amp) * -28.28px)) scale(0.91,1); opacity:0.21 } 66.67%{ transform:translateX(calc(var(--amp) * -34.64px)) scale(0.92,1); opacity:0.22 } 70.83%{ transform:translateX(calc(var(--amp) * -38.64px)) scale(0.94,1); opacity:0.24 } 75%{ transform:translateX(calc(var(--amp) * -40px)) scale(0.95,1); opacity:0.25 } 79.17%{ transform:translateX(calc(var(--amp) * -38.64px)) scale(0.97,1); opacity:0.26 } 83.33%{ transform:translateX(calc(var(--amp) * -34.64px)) scale(0.99,1); opacity:0.28 } 87.5%{ transform:translateX(calc(var(--amp) * -28.28px)) scale(1,1); opacity:0.29 } 91.67%{ transform:translateX(calc(var(--amp) * -20px)) scale(1.01,1); opacity:0.29 } 95.83%{ transform:translateX(calc(var(--amp) * -10.35px)) scale(1.02,1); opacity:0.3 } 100%{ transform:translateX(calc(var(--amp) * -0px)) scale(1.02,1); opacity:0.3 } }
-.chb[data-m~="panicArms"] .arm-L,.chb[data-m~="panicArms"] .arm-R{ animation:k-ar-failover .22s ease-in-out infinite alternate }
-@keyframes k-ar-failover{ from{ --raL:calc(var(--outL) * 1.7); --raR:calc(var(--outR) * .6) } to{ --raL:calc(var(--outL) * .6); --raR:calc(var(--outR) * 1.7) } }
+@arm .chb[data-m~="panicArms"] | k-ar-failover | .22s ease-in-out infinite alternate
 .chb[data-m~="headPanic"] .hd{ animation:k-hd-failover .3s ease-in-out infinite alternate }
 @keyframes k-hd-failover{ from{ transform:rotate(calc(var(--amp) * -8deg)) } to{ transform:rotate(calc(var(--amp) * 8deg)) translateY(calc(var(--amp) * -2px)) } }
 .chb[data-m~="shoesRun"] .shoeL{ animation:k-shoe-run .3s ease-in-out infinite } .chb[data-m~="shoesRun"] .shoeR{ animation:k-shoe-run .3s ease-in-out -.15s infinite }
@@ -291,15 +281,12 @@ export const CSS_MOTION = `
 /* --- ERROR: nghiêm / tức giận khoa trương (mặt đỏ bừng phồng má, khói phụt đầu, dấu giận manga, dậm chân, nắm đấm run, râu tóc dựng) --- */
 .chb[data-m~="furyHead"] .hd{ animation:k-hd-error .11s ease-in-out infinite alternate }
 @keyframes k-hd-error{ from{ transform:rotate(calc(var(--amp) * -5deg)) scale(1.06,1.03) } to{ transform:rotate(calc(var(--amp) * 5deg)) scale(1.08,1.06) } }
-.chb[data-m~="fistsShake"] .arm-L,.chb[data-m~="fistsShake"] .arm-R{ animation:k-ar-error .14s ease-in-out infinite alternate }
-@keyframes k-ar-error{ from{ --raL:calc(var(--outL) * .5); --raR:calc(var(--outR) * .9) } to{ --raL:calc(var(--outL) * .95); --raR:calc(var(--outR) * .45) } }
+@arm .chb[data-m~="fistsShake"] | k-ar-error | .14s ease-in-out infinite alternate
 .chb[data-s="error"] .beard-tangle{ animation:k-wob .12s ease-in-out infinite alternate }
-.chb[data-m~="coverMouthF"] .arm-L{ animation:k-cover-lf var(--T) ease-in-out infinite }
-@keyframes k-cover-lf{ 0%,46%{ --raL:0deg } 50%{ --raL:calc(var(--coverLF) * -.12) } 57%{ --raL:calc(var(--coverLF) * 1.06) } 61%,79%{ --raL:var(--coverLF) } 86%,100%{ --raL:0deg } }
+@arm .chb[data-m~="coverMouthF"] | k-cover-lf | var(--T) ease-in-out infinite
 
 /* --- REST: buồn kiểu hài --- */
-.chb[data-s="rest"] .arm-L,.chb[data-s="rest"] .arm-R{ animation:k-ar-rest .5s ease-in-out infinite alternate }
-@keyframes k-ar-rest{ from{ --raR:calc(var(--writeR) - 8deg); --raL:var(--limpL) } to{ --raR:calc(var(--writeR) + 8deg); --raL:var(--limpL) } }
+@arm .chb[data-s="rest"] | k-ar-rest | .5s ease-in-out infinite alternate
 .chb[data-s="rest"] .bd{ animation:k-bd-rest var(--T) ease-in-out infinite }
 .chb[data-s="rest"] .hd{ animation:k-hd-rest var(--T) cubic-bezier(.3,1.4,.5,1) infinite }
 
@@ -310,28 +297,24 @@ export const CSS_MOTION = `
 @keyframes k-hd-sleep{ 0%{ transform:none } 50%{ transform:rotate(calc(var(--amp) * 13deg)) translateY(calc(var(--amp) * 3px)) } 60%{ transform:rotate(calc(var(--amp) * 15deg)) translateY(calc(var(--amp) * 4px)) }
   70%{ transform:rotate(calc(var(--amp) * 17deg)) translateY(calc(var(--amp) * 5px)) } 75%{ transform:rotate(calc(var(--amp) * -4deg)) translateY(calc(var(--amp) * -3px)) }
   84%{ transform:rotate(calc(var(--amp) * 3deg)) } 100%{ transform:none } }
-.chb[data-s="sleep"] .arm-L,.chb[data-s="sleep"] .arm-R{ animation:k-ar-sleep var(--T) ease-in-out infinite }
-@keyframes k-ar-sleep{ 0%,100%{ --raL:var(--limpL); --raR:var(--limpR) } }
+@arm .chb[data-s="sleep"] | k-ar-sleep | var(--T) ease-in-out infinite
 
 /* =============== TOKEN CHUYỂN ĐỘNG (đặt sau cùng để thắng mặc định theo trạng thái) =============== */
 /* coverFaceR: tay phải đưa quạt che nửa mặt (Gia Cát) */
-.chb[data-m~="coverFaceR"] .arm-R{ animation:k-cover-r var(--T) ease-in-out infinite }
-@keyframes k-cover-r{ 0%,52%{ --raR:0deg; --hR:0deg } 56%{ --raR:14deg; --hR:0deg } 64%{ --raR:calc(var(--coverR) * 1.06); --hR:calc(var(--coverH) * 1.12) }
-  68%,87%{ --raR:var(--coverR); --hR:var(--coverH) } 94%,100%{ --raR:0deg; --hR:0deg } }
+@arm .chb[data-m~="coverFaceR"] | k-cover-r | var(--T) ease-in-out infinite
 .chb[data-m~="coverFaceR"] .prop{ animation:k-fan-cover var(--T) ease-in-out infinite }
 @keyframes k-fan-cover{ 0%{ transform:rotate(-3deg) } 15%{ transform:rotate(4deg) } 30%{ transform:rotate(-3deg) } 45%{ transform:rotate(4deg) } 58%{ transform:rotate(-2deg) }
   66%{ transform:rotate(-12deg) } 69%{ transform:rotate(12deg) } 72%{ transform:rotate(-12deg) } 75%{ transform:rotate(12deg) } 78%{ transform:rotate(-12deg) }
   81%{ transform:rotate(12deg) } 84%{ transform:rotate(-12deg) } 87%{ transform:rotate(5deg) } 94%,100%{ transform:rotate(-3deg) } }
 /* coverMouthL: tay áo trái che miệng cười */
-.chb[data-m~="coverMouthL"] .arm-L{ animation:k-cover-l var(--T) ease-in-out infinite }
-@keyframes k-cover-l{ 0%,46%{ --raL:0deg } 50%{ --raL:calc(var(--coverL) * -.12) } 57%{ --raL:calc(var(--coverL) * 1.06) } 61%,79%{ --raL:var(--coverL) } 86%,100%{ --raL:0deg } }
+@arm .chb[data-m~="coverMouthL"] | k-cover-l | var(--T) ease-in-out infinite
 .chb[data-m~="chestPuff"] .bd{ animation:k-chestpuff var(--T) ease-in-out infinite }
 @keyframes k-chestpuff{ 0%,34%{ transform:none } 41%{ transform:scale(1.045,1.08) } 46%,84%{ transform:scale(1.025,1.045) } 92%,100%{ transform:none } }
 .chb[data-m~="beardStroke"] .beard-arm{ animation:k-stroke var(--T) ease-in-out infinite }
 @keyframes k-stroke{ 0%,40%{ transform:none } 44%,60%,76%{ transform:translate(0,-3px) rotate(3deg) } 52%,68%,84%{ transform:translate(1px,13px) rotate(-6deg) } 92%,100%{ transform:none } }
 .chb[data-m~="beardStroke"] .beard-sway{ animation:k-sway var(--T) ease-in-out infinite }
 @keyframes k-sway{ 0%,40%{ transform:none } 52%,68%,84%{ transform:rotate(1.6deg) skewX(-1deg) } 44%,60%,76%{ transform:rotate(-1deg) } 92%,100%{ transform:none } }
-.chb[data-m~="beardStrokeLoop"] .arm-R{ animation:none }
+@armnone .chb[data-m~="beardStrokeLoop"] | R
 .chb[data-m~="beardStrokeLoop"] .beard-arm{ animation:k-stroke-loop 1.3s ease-in-out infinite }
 .chb[data-m~="beardStrokeLoop"] .beard-sway{ animation:k-sway-loop 1.3s ease-in-out infinite }
 @keyframes k-stroke-loop{ 0%,100%{ transform:translate(0,-3px) rotate(3deg) } 50%{ transform:translate(1px,13px) rotate(-6deg) } }
@@ -358,9 +341,7 @@ export const CSS_MOTION = `
 .chb[data-m~="startle"] .hd{ animation:k-hd-startle var(--T) ease-in-out infinite }
 @keyframes k-hd-startle{ 0%{ transform:none } 30%{ transform:rotate(calc(var(--amp) * 14deg)) translateY(calc(var(--amp) * 4px)) } 36%{ transform:rotate(calc(var(--amp) * 16deg)) translateY(calc(var(--amp) * 5px)) }
   40%{ transform:rotate(calc(var(--amp) * -2deg)) } 48%,78%{ transform:none } 90%{ transform:rotate(calc(var(--amp) * 14deg)) translateY(calc(var(--amp) * 4px)) } 100%{ transform:none } }
-.chb[data-m~="startle"] .arm-L,.chb[data-m~="startle"] .arm-R{ animation:k-ar-startle var(--T) ease-in-out infinite }
-@keyframes k-ar-startle{ 0%,46%{ --raL:var(--limpL); --raR:var(--limpR); --hR:0deg } 50%{ --raL:calc(var(--outL) * 1.3); --raR:calc(var(--outR) * 1.5); --hR:-20deg } 54%{ --hR:-80deg } 58%{ --hR:90deg } 62%{ --hR:-80deg } 66%{ --hR:90deg }
-  70%{ --hR:-30deg; --raR:calc(var(--outR) * 1.5) } 76%,100%{ --raL:var(--limpL); --raR:var(--limpR); --hR:0deg } }
+@arm .chb[data-m~="startle"] | k-ar-startle | var(--T) ease-in-out infinite
 .chb[data-m~="startle"] .gleam{ animation:k-gleam-swing var(--T) linear infinite }
 @keyframes k-gleam-swing{ 0%,52%{ opacity:0 } 54%,62%{ opacity:.95 } 56%,60%{ opacity:.2 } 58%,66%{ opacity:.95 } 70%,100%{ opacity:0 } }
 /* thunder: nghe sấm giật mình, cúi nhặt rồi chữa cháy (Lưu Bị) */
@@ -369,11 +350,8 @@ export const CSS_MOTION = `
   54%,66%{ transform:scale(1.14,.68) } 72%{ transform:scale(.94,1.08) } 77%,100%{ transform:none } }
 .chb[data-m~="thunder"] .hd{ animation:k-hd-thunder var(--T) ease-in-out infinite }
 @keyframes k-hd-thunder{ 0%,37%{ transform:none } 41%{ transform:rotate(calc(var(--amp) * -10deg)) } 47%,50%{ transform:none } 54%,66%{ transform:rotate(calc(var(--amp) * 16deg)) translateY(calc(var(--amp) * 6px)) } 74%,100%{ transform:none } }
-.chb[data-m~="thunder"] .arm-R{ animation:k-ar-thunder var(--T) ease-in-out infinite }
-@keyframes k-ar-thunder{ 0%{ --raR:0deg; --kR:1 } 8%{ --raR:var(--eatR); --kR:var(--eatK) } 14%{ --raR:0deg; --kR:1 } 22%{ --raR:var(--eatR); --kR:var(--eatK) } 28%,36%{ --raR:0deg; --kR:1 } 39%{ --raR:calc(var(--outR) * 1.6); --kR:1 } 44%{ --raR:calc(var(--outR) * 1.1) }
-  52%,66%{ --raR:var(--reachDownR) } 74%,100%{ --raR:0deg; --kR:1 } }
-.chb[data-m~="wipeEyes"] .arm-L{ animation:k-wipe .5s ease-in-out infinite alternate }
-@keyframes k-wipe{ from{ --raL:calc(var(--wipeL) - 6deg); --kL:var(--wipeK) } to{ --raL:calc(var(--wipeL) + 6deg); --kL:var(--wipeK) } }
+@arm .chb[data-m~="thunder"] | k-ar-thunder | var(--T) ease-in-out infinite
+@arm .chb[data-m~="wipeEyes"] | k-wipe | .5s ease-in-out infinite alternate
 .chb[data-m~="hatShake"] .capg{ animation:k-cap-shake var(--T) ease-in-out infinite }
 .chb[data-m~="hatShakeLoop"] .capg{ animation:k-cap-loop .18s ease-in-out infinite alternate }
 @keyframes k-cap-loop{ from{ transform:translateY(calc(var(--amp) * -6px)) rotate(-8deg) } to{ transform:translateY(0) rotate(8deg) } }
@@ -382,8 +360,7 @@ export const CSS_MOTION = `
   72%{ transform:scale(1.02,1.02) } 80%,100%{ transform:none } }
 .chb[data-m~="shoutRecoil"] .hd{ animation:k-hd-shout var(--T) ease-in-out infinite }
 @keyframes k-hd-shout{ 0%,34%{ transform:none } 44%{ transform:rotate(calc(var(--amp) * 6deg)) translateY(calc(var(--amp) * 3px)) } 47%,66%{ transform:rotate(calc(var(--amp) * -9deg)) translateY(calc(var(--amp) * -2px)) } 76%,100%{ transform:none } }
-.chb[data-m~="beatChest"] .arm-L,.chb[data-m~="beatChest"] .arm-R{ animation:k-beat .36s ease-in-out infinite alternate }
-@keyframes k-beat{ from{ --raL:calc(var(--chestL) - 8deg); --raR:calc(var(--chestR) + 14deg); --kL:1.05; --kR:1 } to{ --raL:calc(var(--chestL) + 12deg); --raR:calc(var(--chestR) - 6deg); --kL:1; --kR:1.05 } }
+@arm .chb[data-m~="beatChest"] | k-beat | .36s ease-in-out infinite alternate
 .chb[data-m~="babyBounce"] .baby{ animation:k-baby .7s ease-in-out infinite alternate }
 @keyframes k-baby{ from{ transform:translateY(0) rotate(-1.5deg) } to{ transform:translateY(calc(var(--amp) * -4px)) rotate(1.5deg) scale(1.02) } }
 .chb[data-m~="twirl"] .bd{ animation:k-bd-twirl var(--T) ease-in-out infinite }
@@ -396,30 +373,23 @@ export const CSS_MOTION = `
 @keyframes k-bd-swoon{ 0%,10%{ transform:none } 18%{ transform:rotate(calc(var(--amp) * -10deg)) translateX(calc(var(--amp) * -4px)) } 24%,50%{ transform:rotate(calc(var(--amp) * -16deg)) translateX(calc(var(--amp) * -6px)) scale(1.02,.98) } 60%{ transform:rotate(calc(var(--amp) * -6deg)) } 70%{ transform:rotate(calc(var(--amp) * 2deg)) } 78%,100%{ transform:none } }
 .chb[data-m~="swoon"] .hd{ animation:k-hd-swoon var(--T) ease-in-out infinite }
 @keyframes k-hd-swoon{ 0%,12%{ transform:none } 20%,52%{ transform:rotate(calc(var(--amp) * -20deg)) translateY(calc(var(--amp) * 2px)) } 62%{ transform:rotate(calc(var(--amp) * -8deg)) } 72%,100%{ transform:none } }
-.chb[data-m~="swoon"] .arm-R{ animation:k-ar-swoon var(--T) ease-in-out infinite }
-@keyframes k-ar-swoon{ 0%{ --raR:0deg } 12%{ --raR:calc(var(--foreheadR) * 1.1) } 20%,56%{ --raR:var(--foreheadR) } 68%,100%{ --raR:0deg } }
-.chb[data-m~="propSwing"] .arm-R{ animation:k-ar-swing var(--T) ease-in-out infinite }
-@keyframes k-ar-swing{ 0%,34%{ --raR:0deg; --hR:0deg } 40%{ --raR:calc(var(--outR) * 1.2); --hR:-60deg } 48%{ --hR:75deg } 56%{ --hR:-60deg } 64%{ --hR:75deg } 72%{ --hR:20deg; --raR:var(--outR) } 82%,100%{ --raR:0deg; --hR:0deg } }
+@arm .chb[data-m~="swoon"] | k-ar-swoon | var(--T) ease-in-out infinite
+@arm .chb[data-m~="propSwing"] | k-ar-swing | var(--T) ease-in-out infinite
 .chb[data-m~="stomp"] .bd{ animation:k-bd-stomp .5s ease-in-out infinite }
 @keyframes k-bd-stomp{ 0%,100%{ transform:translateY(0) scale(1.04,.96) } 50%{ transform:translateY(calc(var(--amp) * -6px)) scale(.98,1.03) } }
 .chb[data-m~="stomp"] .shoeL{ animation:k-stomp-l .5s ease-in-out infinite } .chb[data-m~="stomp"] .shoeR{ animation:k-stomp-l .5s ease-in-out -.25s infinite }
 @keyframes k-stomp-l{ 0%,100%{ transform:translateY(0) } 25%{ transform:translateY(calc(var(--amp) * -13px)) } 50%{ transform:translateY(0) } }
-.chb[data-m~="takePulse"] .arm-L{ animation:k-ar-pulse var(--T) ease-in-out infinite }
-@keyframes k-ar-pulse{ 0%,24%{ --raL:0deg; --kL:1 } 30%{ --raL:calc(var(--reachL) * 1.08); --kL:1.04 } 34%,74%{ --raL:var(--reachL); --kL:1 } 38%{ --raL:calc(var(--reachL) + 2deg) } 42%{ --raL:calc(var(--reachL) - 2deg) } 46%{ --raL:calc(var(--reachL) + 2deg) }
-  50%{ --raL:calc(var(--reachL) - 2deg) } 54%{ --raL:calc(var(--reachL) + 2deg) } 58%{ --raL:calc(var(--reachL) - 2deg) } 62%{ --raL:calc(var(--reachL) + 2deg) } 66%{ --raL:calc(var(--reachL) - 2deg) } 82%{ --raL:0deg; --kL:1 } 100%{ --raL:0deg; --kL:1 } }
+@arm .chb[data-m~="takePulse"] | k-ar-pulse | var(--T) ease-in-out infinite
 .chb[data-m~="takePulse"] .hd{ animation:k-hd-pulse var(--T) ease-in-out infinite }
 @keyframes k-hd-pulse{ 0%,24%{ transform:none } 30%,74%{ transform:rotate(calc(var(--amp) * -7deg)) translateX(calc(var(--amp) * -2px)) } 82%,100%{ transform:none } }
 .chb[data-m~="cranePose"] .bd{ animation:k-bd-crane var(--T) ease-in-out infinite }
 @keyframes k-bd-crane{ 0%{ transform:none } 14%{ transform:rotate(calc(var(--amp) * -4deg)) } 22%{ transform:rotate(calc(var(--amp) * -8deg)) translateY(calc(var(--amp) * -3px)) } 26%,74%{ transform:rotate(calc(var(--amp) * -6deg)) translateY(calc(var(--amp) * -3px)) } 82%{ transform:rotate(calc(var(--amp) * 2deg)) } 90%,100%{ transform:none } }
 .chb[data-m~="cranePose"] .shoeR{ animation:k-shoe-crane var(--T) ease-in-out infinite }
 @keyframes k-shoe-crane{ 0%,14%{ transform:none } 22%,76%{ transform:translate(calc(var(--amp) * 6px),calc(var(--amp) * -26px)) rotate(-24deg) } 84%,100%{ transform:none } }
-.chb[data-m~="cranePose"] .arm-L,.chb[data-m~="cranePose"] .arm-R{ animation:k-ar-crane var(--T) ease-in-out infinite }
-@keyframes k-ar-crane{ 0%,12%{ --raL:0deg; --raR:0deg; --kL:1; --kR:1 } 24%{ --raL:calc(var(--outL) * 2.3); --raR:calc(var(--outR) * 2.3); --kL:1.2; --kR:1.2 } 32%{ --raL:calc(var(--outL) * 1.6); --raR:calc(var(--outR) * 1.6) } 40%{ --raL:calc(var(--outL) * 2.3); --raR:calc(var(--outR) * 2.3) }
-  48%{ --raL:calc(var(--outL) * 1.6); --raR:calc(var(--outR) * 1.6) } 56%{ --raL:calc(var(--outL) * 2.3); --raR:calc(var(--outR) * 2.3) } 64%{ --raL:calc(var(--outL) * 1.6); --raR:calc(var(--outR) * 1.6) } 72%{ --raL:calc(var(--outL) * 2.3); --raR:calc(var(--outR) * 2.3) } 86%,100%{ --raL:0deg; --raR:0deg; --kL:1; --kR:1 } }
+@arm .chb[data-m~="cranePose"] | k-ar-crane | var(--T) ease-in-out infinite
 .chb[data-m~="shiver"] .bd{ animation:k-shiver .09s ease-in-out infinite alternate }
 @keyframes k-shiver{ from{ transform:translateX(calc(var(--amp) * -1.6px)) rotate(calc(var(--amp) * -.8deg)) } to{ transform:translateX(calc(var(--amp) * 1.6px)) rotate(calc(var(--amp) * .8deg)) } }
-.chb[data-m~="saluteWrong"] .arm-R{ animation:k-ar-salute var(--T) ease-in-out infinite }
-@keyframes k-ar-salute{ 0%,32%{ --raR:0deg; --kR:1 } 40%{ --raR:calc(var(--foreheadR) * 1.1); --kR:1.4 } 46%,62%{ --raR:var(--foreheadR); --kR:1.3 } 76%{ --raR:calc(var(--foreheadR) * .5); --kR:1.1 } 86%,100%{ --raR:0deg; --kR:1 } }
+@arm .chb[data-m~="saluteWrong"] | k-ar-salute | var(--T) ease-in-out infinite
 .chb[data-m~="saluteWrong"] .capg{ animation:k-cap-salute var(--T) ease-in-out infinite }
 @keyframes k-cap-salute{ 0%,48%{ transform:none } 52%{ transform:translateY(calc(var(--amp) * 10px)) rotate(7deg) } 56%{ transform:translateY(calc(var(--amp) * 15px)) rotate(10deg) } 60%,78%{ transform:translateY(calc(var(--amp) * 13px)) rotate(8deg) } 86%{ transform:translateY(calc(var(--amp) * 2px)) rotate(-3deg) } 92%,100%{ transform:none } }
 .chb[data-m~="saluteWrong"] .hd{ animation:k-hd-salute var(--T) ease-in-out infinite }
@@ -430,8 +400,7 @@ export const CSS_MOTION = `
 @keyframes k-bd-commit{ from{ transform:translateY(0) scale(1.03,.98) } to{ transform:translateY(calc(var(--amp) * -6px)) scale(.99,1.05) } }
 .chb[data-m~="resolveNod"] .hd{ animation:k-hd-commit .6s ease-in-out infinite alternate }
 @keyframes k-hd-commit{ from{ transform:translateY(calc(var(--amp) * 3px)) rotate(calc(var(--amp) * 2deg)) } to{ transform:translateY(calc(var(--amp) * -1px)) rotate(calc(var(--amp) * -3deg)) } }
-.chb[data-m~="resolveFist"] .arm-L,.chb[data-m~="resolveFist"] .arm-R{ animation:k-ar-commit .6s ease-in-out infinite }
-@keyframes k-ar-commit{ 0%,100%{ --raR:calc(var(--cheerR) * .88); --raL:calc(var(--chestL) - 8deg) } 25%{ --raL:calc(var(--chestL) + 10deg) } 50%{ --raR:calc(var(--cheerR) * 1.1); --raL:calc(var(--chestL) - 8deg) } 75%{ --raL:calc(var(--chestL) + 10deg) } }
+@arm .chb[data-m~="resolveFist"] | k-ar-commit | .6s ease-in-out infinite
 /* think: suy tư ông cụ non */
 .chb[data-m~="paceSlow"] .bd{ animation:k-bd-think 3.2s ease-in-out infinite alternate }
 @keyframes k-bd-think{ from{ transform:translateX(calc(var(--amp) * -18px)) rotate(calc(var(--amp) * -2.5deg)) scale(1.02,.97) } to{ transform:translateX(calc(var(--amp) * 18px)) rotate(calc(var(--amp) * 2.5deg)) scale(1.02,.97) } }
@@ -439,54 +408,45 @@ export const CSS_MOTION = `
 @keyframes k-shoe-step{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(calc(var(--amp) * -5px)) } }
 .chb[data-m~="hunchThink"] .hd{ animation:k-hd-think 3.2s ease-in-out infinite alternate }
 @keyframes k-hd-think{ from{ transform:rotate(calc(var(--amp) * 7deg)) translateY(calc(var(--amp) * 3px)) } to{ transform:rotate(calc(var(--amp) * -3deg)) translateY(calc(var(--amp) * 1px)) } }
-.chb[data-m~="chinStroke"] .arm-R{ animation:k-ar-chin 1.1s ease-in-out infinite alternate }
-@keyframes k-ar-chin{ from{ --raR:calc(var(--chinR) - 4deg) } to{ --raR:calc(var(--chinR) + 5deg) } }
+@arm .chb[data-m~="chinStroke"] | k-ar-chin | 1.1s ease-in-out infinite alternate
 .chb[data-m~="armBackL"]{ --raL:calc(var(--limpL) + 14deg); --kL:.78 }
 /* unsure: nói không chắc */
 .chb[data-m~="shyShift"] .bd{ animation:k-bd-shy 1.8s ease-in-out infinite alternate }
 @keyframes k-bd-shy{ from{ transform:rotate(calc(var(--amp) * -2.5deg)) translateX(calc(var(--amp) * -3px)) } to{ transform:rotate(calc(var(--amp) * 2.5deg)) translateX(calc(var(--amp) * 3px)) scale(1.01,.99) } }
 .chb[data-m~="unsureHead"] .hd{ animation:k-hd-shy 1.2s ease-in-out infinite alternate }
 @keyframes k-hd-shy{ from{ transform:rotate(calc(var(--amp) * -8deg)) } to{ transform:rotate(calc(var(--amp) * 7deg)) translateX(calc(var(--amp) * 3px)) } }
-.chb[data-m~="unsureArms"] .arm-L,.chb[data-m~="unsureArms"] .arm-R{ animation:k-ar-unsure var(--T) ease-in-out infinite }
-@keyframes k-ar-unsure{ 0%,6%{ --raL:0deg; --raR:0deg } 12%{ --raR:var(--scratchR); --raL:calc(var(--chestL) * .8) } 16%,28%,40%{ --raR:calc(var(--scratchR) + 7deg) } 20%,32%,36%{ --raR:calc(var(--scratchR) - 7deg) } 24%{ --raR:calc(var(--scratchR) + 7deg) }
-  48%{ --raL:var(--chestL); --raR:var(--chestR) } 54%,66%,78%{ --raL:calc(var(--chestL) + 6deg); --raR:calc(var(--chestR) - 6deg) } 60%,72%{ --raL:calc(var(--chestL) - 6deg); --raR:calc(var(--chestR) + 6deg) } 90%{ --raL:calc(var(--chestL) * .6); --raR:calc(var(--chestR) * .6) } 100%{ --raL:0deg; --raR:0deg } }
+@arm .chb[data-m~="unsureArms"] | k-ar-unsure | var(--T) ease-in-out infinite
 /* idle: nap / drunk / game */
 .chb[data-m~="napSlump"] .bd{ animation:k-bd-nap var(--T) ease-in-out infinite }
 @keyframes k-bd-nap{ 0%,100%{ transform:translateY(calc(var(--amp) * 6px)) scale(1.05,.93) } 50%{ transform:translateY(calc(var(--amp) * 8px)) scale(1.03,.96) } 58%{ transform:translateY(calc(var(--amp) * -4px)) scale(.97,1.06) } 70%{ transform:translateY(calc(var(--amp) * 6px)) scale(1.05,.93) } }
 .chb[data-m~="napNod"] .hd{ animation:k-hd-nap var(--T) ease-in-out infinite }
 @keyframes k-hd-nap{ 0%,100%{ transform:rotate(calc(var(--amp) * 3deg)) } 30%{ transform:rotate(calc(var(--amp) * 14deg)) translateY(calc(var(--amp) * 4px)) } 50%{ transform:rotate(calc(var(--amp) * 20deg)) translateY(calc(var(--amp) * 6px)) } 56%{ transform:rotate(calc(var(--amp) * -8deg)) translateY(calc(var(--amp) * -4px)) } 62%{ transform:rotate(calc(var(--amp) * -2deg)) } 70%{ transform:rotate(calc(var(--amp) * 6deg)) } }
-.chb[data-m~="limpArms"] .arm-L,.chb[data-m~="limpArms"] .arm-R{ animation:k-ar-sleep var(--T) ease-in-out infinite }
+@arm .chb[data-m~="limpArms"] | k-ar-sleep | var(--T) ease-in-out infinite
 .chb[data-m~="stumble"] .bd{ animation:k-bd-drunk 2.2s ease-in-out infinite }
 @keyframes k-bd-drunk{ 0%,100%{ transform:rotate(calc(var(--amp) * -8deg)) translateX(calc(var(--amp) * -10px)) } 25%{ transform:rotate(calc(var(--amp) * 2deg)) scale(1.02,.98) } 50%{ transform:rotate(calc(var(--amp) * 8deg)) translateX(calc(var(--amp) * 10px)) } 75%{ transform:rotate(calc(var(--amp) * -1deg)) scale(1.02,.98) } }
 .chb[data-m~="wobbleHead"] .hd{ animation:k-hd-drunk 1.1s ease-in-out infinite alternate }
 @keyframes k-hd-drunk{ from{ transform:rotate(calc(var(--amp) * -12deg)) } to{ transform:rotate(calc(var(--amp) * 10deg)) translateY(calc(var(--amp) * 2px)) } }
-.chb[data-m~="gourdArm"] .arm-L,.chb[data-m~="gourdArm"] .arm-R{ animation:k-ar-drink var(--T) ease-in-out infinite }
-@keyframes k-ar-drink{ 0%{ --raR:var(--limpR); --raL:calc(var(--limpL) - 6deg) } 12%{ --raR:var(--limpR) } 25%{ --raL:calc(var(--limpL) + 10deg) } 30%,56%{ --raR:var(--eatR) } 50%{ --raL:calc(var(--limpL) - 6deg) } 70%,100%{ --raR:var(--limpR) } 75%{ --raL:calc(var(--limpL) + 10deg) } 100%{ --raL:calc(var(--limpL) - 6deg) } }
+@arm .chb[data-m~="gourdArm"] | k-ar-drink | var(--T) ease-in-out infinite
 .chb[data-m~="gameHunch"] .bd{ animation:k-bd-game 1.3s ease-in-out infinite }
 @keyframes k-bd-game{ 0%,100%{ transform:translateY(calc(var(--amp) * 4px)) rotate(calc(var(--amp) * 1deg)) scale(1.05,.94) } 20%{ transform:translateY(calc(var(--amp) * 5px)) rotate(calc(var(--amp) * -2deg)) scale(1.06,.93) } 45%{ transform:translateY(calc(var(--amp) * 3px)) rotate(calc(var(--amp) * 2deg)) scale(1.05,.95) } 70%{ transform:translateY(calc(var(--amp) * 5px)) rotate(calc(var(--amp) * -1deg)) scale(1.06,.93) } }
 .chb[data-m~="gameHead"] .hd{ animation:k-hd-game .9s ease-in-out infinite }
 @keyframes k-hd-game{ 0%,100%{ transform:rotate(calc(var(--amp) * 8deg)) translateY(calc(var(--amp) * 3px)) } 25%{ transform:rotate(calc(var(--amp) * 12deg)) translateY(calc(var(--amp) * 5px)) } 50%{ transform:rotate(calc(var(--amp) * 5deg)) translateY(calc(var(--amp) * 2px)) } 75%{ transform:rotate(calc(var(--amp) * 10deg)) translateY(calc(var(--amp) * 4px)) } }
-.chb[data-m~="thumbMash"] .arm-L,.chb[data-m~="thumbMash"] .arm-R{ animation:k-ar-game .16s ease-in-out infinite alternate }
-@keyframes k-ar-game{ from{ --raL:calc(var(--chestL) - 4deg); --raR:calc(var(--chestR) + 3deg) } to{ --raL:calc(var(--chestL) + 4deg); --raR:calc(var(--chestR) - 3deg) } }
+@arm .chb[data-m~="thumbMash"] | k-ar-game | .16s ease-in-out infinite alternate
 /* discover: kinh ngạc phát hiện tân đại lục (khựng, bật ngửa, lắng) */
 .chb[data-m~="discoverBody"] .bd{ animation:k-bd-discover var(--T) ease-out infinite }
 @keyframes k-bd-discover{ 0%,9%{ transform:none } 13%{ transform:scale(.96,1.03) } 17.5%{ transform:scale(1,1) } 19%{ transform:scale(1.05,.92) } 21%{ transform:translateY(calc(var(--amp) * -26px)) scale(.86,1.24) rotate(calc(var(--amp) * -6deg)) } 27%{ transform:translateY(calc(var(--amp) * -8px)) rotate(calc(var(--amp) * -10deg)) scale(1.1,.9) }
   32%,40%,48%,56%{ transform:rotate(calc(var(--amp) * -9deg)) scale(1.04,1.02) } 36%,44%,52%{ transform:rotate(calc(var(--amp) * -11.5deg)) scale(1.04,1.02) } 62%{ transform:rotate(calc(var(--amp) * -3deg)) } 68%{ transform:rotate(calc(var(--amp) * 1deg)) scale(1.03,.98) } 75%,100%{ transform:none } }
 .chb[data-m~="discoverHead"] .hd{ animation:k-hd-discover var(--T) ease-out infinite }
 @keyframes k-hd-discover{ 0%,17%{ transform:none } 21%{ transform:rotate(calc(var(--amp) * -16deg)) translateY(calc(var(--amp) * -4px)) scale(1.04,1.1) } 30%,58%{ transform:rotate(calc(var(--amp) * -10deg)) scale(1.03,1.06) } 68%{ transform:rotate(calc(var(--amp) * -3deg)) } 74%{ transform:rotate(calc(var(--amp) * 4deg)) } 82%,100%{ transform:none } }
-.chb[data-m~="discoverArms"] .arm-L,.chb[data-m~="discoverArms"] .arm-R{ animation:k-ar-discover var(--T) ease-in-out infinite }
-@keyframes k-ar-discover{ 0%,14%{ --raL:0deg; --raR:0deg; --kL:1 } 16%{ --raL:calc(var(--chestL) * .6); --raR:calc(var(--chestR) * .6) } 21%{ --raL:calc(var(--pointL) * 1.1); --raR:calc(var(--aimR) * 1.1); --kL:1.25 } 28%,34%,40%,46%,52%,60%{ --raL:var(--pointL); --raR:var(--aimR); --kL:1.2 }
-  31%,43%,55%{ --raR:calc(var(--aimR) + 4deg) } 37%,49%{ --raR:calc(var(--aimR) - 4deg) } 70%,100%{ --raL:0deg; --raR:0deg; --kL:1 } }
+@arm .chb[data-m~="discoverArms"] | k-ar-discover | var(--T) ease-in-out infinite
 .chb[data-m~="capFly"] .capg{ animation:k-cap-fly var(--T) ease-out infinite }
 @keyframes k-cap-fly{ 0%,17%{ transform:none } 20%{ transform:translateY(calc(var(--amp) * -30px)) rotate(40deg) } 25%{ transform:translateY(calc(var(--amp) * -92px)) rotate(180deg) } 32%,46%{ transform:translateY(calc(var(--amp) * -100px)) rotate(300deg) } 58%{ transform:translateY(calc(var(--amp) * -50px)) rotate(500deg) } 66%{ transform:translateY(calc(var(--amp) * 4px)) rotate(720deg) } 70%{ transform:translateY(calc(var(--amp) * -8px)) rotate(720deg) } 74%,100%{ transform:rotate(720deg) } }
-.chb[data-m~="pointScold"] .arm-L{ animation:k-ar-point var(--T) ease-in-out infinite }
-@keyframes k-ar-point{ 0%,22%{ --raL:0deg; --kL:1 } 28%{ --raL:calc(var(--pointL) * 1.08); --kL:1.22 } 34%,70%{ --raL:var(--pointL); --kL:1.2 } 38%{ --raL:calc(var(--pointL) + 5deg) } 46%{ --raL:calc(var(--pointL) - 4deg) } 54%{ --raL:calc(var(--pointL) + 5deg) } 62%{ --raL:calc(var(--pointL) - 4deg) } 78%,100%{ --raL:0deg; --kL:1 } }
+@arm .chb[data-m~="pointScold"] | k-ar-point | var(--T) ease-in-out infinite
 .chb[data-m~="chinUp"] .hd{ animation:k-hd-chin var(--T) ease-in-out infinite }
 @keyframes k-hd-chin{ 0%,20%,82%,100%{ transform:none } 28%,70%{ transform:rotate(calc(var(--amp) * -5deg)) translateY(calc(var(--amp) * -3px)) scale(1,1.03) } }
 .chb[data-m~="helmSlip"] .capg{ animation:k-cap-slip var(--T) ease-in-out infinite }
 @keyframes k-cap-slip{ 0%,26%{ transform:none } 36%{ transform:translate(calc(var(--amp) * 10px),calc(var(--amp) * 2px)) rotate(4deg) } 44%,52%{ transform:translate(calc(var(--amp) * 20px),calc(var(--amp) * 6px)) rotate(12deg) } 60%{ transform:translate(calc(var(--amp) * 3px),0) rotate(-3deg) } 66%{ transform:rotate(2deg) } 72%,100%{ transform:none } }
-.chb[data-m~="helmSlip"] .arm-R{ animation:k-ar-slip var(--T) ease-in-out infinite }
-@keyframes k-ar-slip{ 0%,38%{ --raR:0deg; --kR:1 } 46%{ --raR:calc(var(--foreheadR) * 1.1); --kR:1.4 } 52%,58%{ --raR:var(--foreheadR); --kR:1.3 } 64%{ --raR:calc(var(--foreheadR) - 8deg) } 74%,100%{ --raR:0deg; --kR:1 } }
+@arm .chb[data-m~="helmSlip"] | k-ar-slip | var(--T) ease-in-out infinite
 .chb[data-m~="capToss"] .capg{ animation:k-cap-toss var(--T) cubic-bezier(.3,.7,.5,1) infinite }
 @keyframes k-cap-toss{ 0%,30%{ transform:none } 40%{ transform:translateY(calc(var(--amp) * -70px)) rotate(-24deg) } 48%{ transform:translateY(calc(var(--amp) * -92px)) rotate(10deg) } 58%{ transform:translateY(calc(var(--amp) * 2px)) rotate(0) } 62%{ transform:translateY(calc(var(--amp) * -9px)) } 66%,100%{ transform:none } }
 .chb[data-m~="flipFall"] .bd{ transform-origin:100px 125px; animation:k-bd-flip var(--T) ease-in-out infinite }
@@ -705,7 +665,7 @@ function faceRules(): string {
 /** toàn bộ stylesheet đã gắn tiền tố, không chú thích (chèn đúng một lần vào <style id="chb-css">) */
 export function buildCss(): string {
   const css = nsCss(
-    `${CSS_BASE}${faceRules()}${CSS_REDUCE}@media (prefers-reduced-motion: no-preference){${genKeyframes()}}${stepify(CSS_MOTION)}`,
+    `${CSS_BASE}${faceRules()}${CSS_REDUCE}@media (prefers-reduced-motion: no-preference){${genKeyframes()}\n${armKeyframes()}}${stepify(expandArm(CSS_MOTION))}`,
   );
   return css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{2,}/g, '\n');
 }

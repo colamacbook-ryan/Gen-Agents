@@ -245,38 +245,41 @@ function phaseAt(list: Phase[], prog: number): number {
 
 // ---------------------------------------------------------------- chuyển tiếp mượt khi đổi trạng thái
 const TPARTS = ['bd', 'hd', 'capg', 'shoeL', 'shoeR'] as const;
-const VARS = ['raL', 'raR', 'hR', 'kL', 'kR'] as const;
+/** phần tử quay theo góc tay: tay (rotate + scale), đạo cụ cầm tay (quay ngược + góc riêng), cọ, tay áo nước */
+const ARM_PARTS = '.chb-arm-L,.chb-arm-R,.chb-held,.chb-held-h,.chb-brush,.chb-ribw';
 const mat = (el: Element): DOMMatrix => {
   const tr = getComputedStyle(el).transform;
   return new DOMMatrix(tr === 'none' ? undefined : tr);
 };
+interface ArmPose {
+  rot: number;
+  scale: number;
+}
+const armPose = (el: Element): ArmPose => {
+  const cs = getComputedStyle(el);
+  return { rot: Number.parseFloat(cs.rotate) || 0, scale: Number.parseFloat(cs.scale) || 1 };
+};
 
 interface Snapshot {
   t: Record<string, DOMMatrix>;
-  v: Record<string, number>;
+  arms: Map<Element, ArmPose>;
   lite: boolean;
 }
 function snapshot(node: Svg): Snapshot {
   const lite = isLite(node);
-  const out: Snapshot = { t: {}, v: {}, lite };
+  const out: Snapshot = { t: {}, arms: new Map(), lite };
   for (const k of lite ? (['bd', 'hd'] as const) : TPARTS) {
     const el = node.querySelector(`.chb-${k}`);
     if (el) out.t[k] = mat(el);
   }
-  if (!lite) {
-    for (const sd of ['L', 'R']) {
-      const el = node.querySelector(`.chb-arm-${sd}`);
-      if (!el) continue;
-      const cs = getComputedStyle(el);
-      for (const v of VARS) if (v.endsWith(sd) || v === 'hR') out.v[v] = Number.parseFloat(cs.getPropertyValue(V(v)));
-    }
-  }
+  if (!lite) for (const el of node.querySelectorAll(ARM_PARTS)) out.arms.set(el, armPose(el));
   return out;
 }
 
 /** cộng một "độ lệch" (pose cũ − pose mới tại t=0) rồi tắt dần trong ~260 ms, ease có vượt đà */
 function glide(node: Svg, before: Snapshot, ms: number): void {
   const ease = 'cubic-bezier(.25,.9,.35,1.3)';
+  const opts: KeyframeAnimationOptions = { duration: ms, easing: ease, composite: 'add' };
   for (const k of before.lite ? (['bd', 'hd'] as const) : TPARTS) {
     const el = node.querySelector(`.chb-${k}`);
     const b = before.t[k];
@@ -285,22 +288,15 @@ function glide(node: Svg, before: Snapshot, ms: number): void {
     const dx = Math.abs(E.e) + Math.abs(E.f) + Math.abs(E.a - 1) + Math.abs(E.b) + Math.abs(E.c) + Math.abs(E.d - 1);
     // ma trận không khả nghịch (scale 0) cho NaN: bỏ qua, không dựng chuyển tiếp
     if (!Number.isFinite(dx) || dx < 0.004) continue;
-    el.animate([{ transform: E.toString() }, { transform: 'none' }], { duration: ms, easing: ease, composite: 'add' });
+    el.animate([{ transform: E.toString() }, { transform: 'none' }], opts);
   }
-  if (before.lite) return;
-  for (const sd of ['L', 'R']) {
-    const el = node.querySelector(`.chb-arm-${sd}`);
-    if (!el) continue;
-    const cs = getComputedStyle(el);
-    for (const v of VARS) {
-      if (!(v.endsWith(sd) || v === 'hR')) continue;
-      const was = before.v[v];
-      if (was == null) continue;
-      const d = was - Number.parseFloat(cs.getPropertyValue(V(v)));
-      if (!Number.isFinite(d) || Math.abs(d) < 0.05) continue;
-      const unit = v.startsWith('k') ? '' : 'deg';
-      el.animate([{ [V(v)]: `${d}${unit}` }, { [V(v)]: `0${unit}` }], { duration: ms, easing: ease, composite: 'add' });
-    }
+  for (const [el, was] of before.arms) {
+    const now = armPose(el);
+    const dr = was.rot - now.rot;
+    // rotate cộng góc; scale NHÂN (composite add của scale là phép nhân) nên lệch = tỉ số
+    if (Number.isFinite(dr) && Math.abs(dr) >= 0.05) el.animate([{ rotate: `${dr}deg` }, { rotate: '0deg' }], opts);
+    const ds = was.scale / now.scale;
+    if (Number.isFinite(ds) && Math.abs(ds - 1) >= 0.0005) el.animate([{ scale: `${ds}` }, { scale: '1' }], opts);
   }
 }
 
