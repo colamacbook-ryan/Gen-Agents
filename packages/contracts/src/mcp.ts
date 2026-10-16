@@ -152,7 +152,11 @@ export const ToolArgs = {
     /** Role tự khai chưa chắc (nguồn chat_messages.certainty / avatar 'unsure', G-13). */
     certainty: z.enum(CERTAINTY_LEVELS).nullable(),
   }),
-  send_telegram: z.strictObject({ chatRef: z.string().min(1), text: z.string().min(1).max(4096) }),
+  /**
+   * chatRef = display_id của một hàng telegram_allowlist (AL-…) — gateway tự tra chat_id từ allowlist, KHÔNG BAO GIỜ nhận
+   * chat_id / username từ Role (review tay M0, LOW: không định tuyến bằng chuỗi tự do).
+   */
+  send_telegram: z.strictObject({ chatRef: z.string().regex(/^AL-\d{4,8}$/), text: z.string().min(1).max(4096) }),
   propose_change: z.strictObject({ title: z.string().min(1).max(200), items: z.array(z.json()).min(1) }),
   highlight: z.strictObject({ anchor: Anchor, label: z.string().max(120).nullable() }),
   navigate: z.strictObject({ anchor: Anchor }),
@@ -467,45 +471,47 @@ const SPECIAL_SCHEME_ANYWHERE_RE = /(?:https?|wss?|ftp|file):/gi;
  *   3. ứng viên B — mọi `://` (scheme bất kỳ): authority tới ký tự đầu tiên trong `/ ? #` hoặc khoảng trắng;
  *   4. authority có `@` và đoạn trước `@` CUỐI chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng).
  * Báo nhầm tăng nhẹ được chấp nhận (dòng chứa `user:pass@` sau một scheme). Khoảng trắng kết thúc authority (quét văn bản).
- * Tuyến tính: bảng vị trí dừng (hai tập) / ':' đầu tiên từ i / '@' cuối trước p tính một lần ⇒ mỗi ứng viên O(1), kể cả khi
- * các authority chồng nhau (`https:https:…`, `://a:` lặp).
+ * Tuyến tính: authority của ứng viên B không chồng nhau; ứng viên A nằm trong authority đã quét (không khớp) của ứng viên A
+ * trước thì nhảy qua (không thể khớp) ⇒ mỗi ký tự được quét tối đa một lần cho A và một lần cho B (`https:https:…`, `://a:`).
  */
 function hasUrlUserinfo(raw: string): boolean {
   if (!raw.includes('@') || !raw.includes(':')) return false;
   const s = /[\t\n\r]/.test(raw) ? raw.replace(/[\t\n\r]/g, '') : raw;
   const n = s.length;
-  const stopB = new Int32Array(n + 1); // / ? # khoảng trắng
-  const stopA = new Int32Array(n + 1); // + '\\'
-  const colonFrom = new Int32Array(n + 1);
-  const atBefore = new Int32Array(n + 1);
-  stopB[n] = n;
-  stopA[n] = n;
-  colonFrom[n] = -1;
-  for (let i = n - 1; i >= 0; i--) {
-    const c = s.charCodeAt(i);
-    const stop = c === 47 || c === 63 || c === 35 || isJsSpace(c);
-    stopB[i] = stop ? i : (stopB[i + 1] as number);
-    stopA[i] = stop || c === 92 ? i : (stopA[i + 1] as number);
-    colonFrom[i] = c === 58 ? i : (colonFrom[i + 1] as number);
-  }
-  atBefore[0] = -1;
-  for (let p = 1; p <= n; p++) atBefore[p] = s.charCodeAt(p - 1) === 64 ? p - 1 : (atBefore[p - 1] as number);
-  const hasPassword = (start: number, end: number): boolean => {
-    const lastAt = atBefore[end] as number;
-    const firstColon = colonFrom[start] as number;
-    return lastAt >= start && firstColon >= start && firstColon < lastAt;
+  /** Quét authority [start, …) tới ký tự dừng; trả [khớp?, vị trí dừng]. `backslash` = '\\' cũng dừng (ứng viên A). */
+  const scan = (start: number, backslash: boolean): [boolean, number] => {
+    let firstColon = -1;
+    let lastAt = -1;
+    let i = start;
+    for (; i < n; i++) {
+      const c = s.charCodeAt(i);
+      if (c === 47 || c === 63 || c === 35 || (backslash && c === 92)) break;
+      if ((c <= 32 || c >= 127) && isJsSpace(c)) break;
+      if (c === 58) {
+        if (firstColon < 0) firstColon = i;
+      } else if (c === 64) lastAt = i;
+    }
+    return [firstColon >= 0 && firstColon < lastAt, i];
   };
-
+  // A: ứng viên nằm TRONG authority đã quét không khớp của ứng viên A trước (cùng tập dừng) cũng không thể khớp — ':' đầu
+  // tiên của nó không sớm hơn, '@' cuối không muộn hơn ⇒ nhảy qua; ứng viên có gạch ngay sau ':' bắt đầu SAU vị trí dừng.
   const re = SPECIAL_SCHEME_ANYWHERE_RE;
   re.lastIndex = 0;
+  let doneA = 0;
   for (let m = re.exec(s); m !== null; m = re.exec(s)) {
     let i = m.index + m[0].length;
     while (i < n && (s.charCodeAt(i) === 47 || s.charCodeAt(i) === 92)) i++;
-    if (hasPassword(i, stopA[i] as number)) return true;
-    re.lastIndex = m.index + 1; // ứng viên chồng nhau (vd `https:` trong `xhttps:`) vẫn được xét
+    re.lastIndex = m.index + 1;
+    if (i < doneA) continue;
+    const [hit, end] = scan(i, true);
+    if (hit) return true;
+    doneA = end;
   }
+  // B: authority của các `://` không chồng nhau (authority dừng ở '/', mà `://` kế tiếp chứa '/')
   for (let at = s.indexOf('://'); at >= 0; at = s.indexOf('://', at + 1)) {
-    if (hasPassword(at + 3, stopB[at + 3] as number)) return true;
+    const [hit, end] = scan(at + 3, false);
+    if (hit) return true;
+    if (end > at + 3) at = end - 3;
   }
   return false;
 }
