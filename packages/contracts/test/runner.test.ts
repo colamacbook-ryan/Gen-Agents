@@ -36,6 +36,7 @@ import {
   parseRunnerStdout,
   promptDir,
   RUNNER_CLI_LINE_MAX_CHARS,
+  RUNNER_ERROR_CODES,
   RUNNER_OPS,
   RUNNER_STDOUT_LINE_MAX_CHARS,
   RunnerReport,
@@ -44,6 +45,7 @@ import {
   runnerStdoutLine,
   TermTicketClaims,
   TURN_EXEC,
+  TURN_TICKET,
   TurnBundle,
   type TurnPlanInput,
   TurnStreamEvent,
@@ -730,6 +732,25 @@ describe('stdout của ga-runner: bọc mọi dòng, đúng một report ở cu�
       code: 'runner_protocol_error',
       reason: 'thiếu report',
     });
+  });
+
+  it('report error {code, message} (enum đóng) là report hợp lệ ở dòng cuối; code lạ / thiếu report ⇒ lỗi giao thức', () => {
+    const err = runnerReportLine({ $ga: 'report', command: 'error', code: 'bad_bundle', message: 'bundle sai schema' });
+    expect(parseRunnerStdout([L('a'), err])).toMatchObject({
+      ok: true,
+      report: { command: 'error', code: 'bad_bundle' },
+    });
+    expect(() =>
+      runnerReportLine({ $ga: 'report', command: 'error', code: 'oops', message: 'x' } as unknown as RunnerReport),
+    ).toThrow();
+    expect(parseRunnerStdout([L('a'), '{"$ga":"report","command":"error","code":"oops","message":"x"}'])).toMatchObject(
+      {
+        ok: false,
+        code: 'runner_protocol_error',
+      },
+    );
+    expect(RUNNER_ERROR_CODES).toContain('internal');
+    expect(TURN_TICKET.mcpPath).toBe('/mcp');
   });
 
   it('thiếu report / hai report / report giữa luồng ⇒ runner_protocol_error', () => {
