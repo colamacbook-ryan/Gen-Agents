@@ -8,7 +8,7 @@
 name: ga-rt
 services:
   socket-proxy:
-    image: ghcr.io/tecnativa/docker-socket-proxy:latest
+    image: ghcr.io/tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     environment:
       CONTAINERS: '1'
       EXEC: '1'
@@ -24,7 +24,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [hostlink]
   egress:
-    image: node:22-bookworm-slim
+    image: node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
     command: ['node', '/app/apps/egress/src/bin.ts']
     working_dir: /app/apps/egress
     environment:
@@ -39,7 +39,7 @@ services:
       roles: { aliases: [ga-egress] }
       outside: {}
   stub-app:
-    image: node:22-bookworm-slim
+    image: node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
     command: ['node', '/stubs/stub-app.ts']
     environment:
       STUB_HOSTLINK_NET: hostlink
@@ -49,7 +49,7 @@ services:
       roles: { aliases: [ga-app] }
       hostlink: {}
   fake-source:
-    image: node:22-bookworm-slim
+    image: node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
     command: ['node', '/stubs/engine-source-main.ts']
     volumes:
       - ./stubs:/stubs:ro
