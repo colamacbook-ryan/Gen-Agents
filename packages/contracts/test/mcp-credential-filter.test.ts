@@ -26,6 +26,13 @@ import {
 } from '../src/index.ts';
 
 const CANARY = 'GA-CANARY-3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11';
+/**
+ * Giá trị GIẢ dựng lúc chạy (luật lane: không để chuỗi giống credential nằm nguyên văn trong mã nguồn — gitleaks quét lịch
+ * sử). `fake(n, bảng)` lặp bảng ký tự cho đủ n; `kv(tên, dấu, giá trị)` ghép phép gán.
+ */
+const fake = (n: number, alphabet = '0123456789abcdef') =>
+  Array.from({ length: n }, (_, i) => alphabet[(i * 7 + 3) % alphabet.length]).join('');
+const kv = (name: readonly string[], sep: string, value: string) => `${name.join('_')}${sep}${value}`;
 const FAKE_JWT = `eyJhbGciOiJIUzI1NiJ9.${'eyJzdWIiOiJ4In0'}.${'c2lnbmF0dXJlLXRlc3Q'}`;
 const FAKE_ACCESS = `ya29.${'A0ARrdaM-test-only-0123456789'}`;
 const ANCHOR = 'grid:skills/row:SK-0004/col:C';
@@ -202,7 +209,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       { a: [{ b: FAKE_ACCESS }] },
       { refresh_token: 'x' },
       BLOCKED_TOKENS.highEntropy,
-      'INFO got {"refresh_token":"1//0abcdefghij"}',
+      `INFO got {${kv(['"refresh', 'token"'], ':', `"1//0${fake(10, 'abcdefghij')}"`)}}`,
     ]) {
       const r = screenToolPayload('propose_edit', { anchor: ANCHOR, newValue });
       expect(r.status, JSON.stringify(newValue)).toBe('denied');
@@ -214,24 +221,50 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     expect(r).toMatchObject({ status: 'denied', code: 'credential_like_payload', patternId: 'canary' });
   });
   it('credential_assignment: JSON nhúng giữa dòng, key=value, nháy đơn ⇒ chặn; chỉ nhắc tên / giá trị ngắn ⇒ không', () => {
+    const embedded = kv(['access', 'token'], '=', fake(20));
     for (const s of [
-      'INFO got {"refresh_token":"abc.def-123456"} từ CLI',
-      'DEBUG resp={"access_token": "ya-not-google-1234567890"}',
-      'access_token=0123456789abcdef0123',
-      "client_secret: 'Zm9vYmFyYmF6cXV4'",
-      'cfg ID_TOKEN = "aaaa.bbbb.cccc"',
-      "{'api_key':'k_12345678'}",
-      'x-api-key: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b',
+      `INFO got {${kv(['"refresh', 'token"'], ':', `"${fake(6, 'abc.def-')}${fake(6, '0123456789')}"`)}} từ CLI`,
+      `DEBUG resp={${kv(['"access', 'token"'], ': ', `"${fake(24, 'abcdefgh-0123456789')}"`)}}`,
+      embedded,
+      kv(['client', 'secret'], ': ', `'${fake(16, 'ZmFvYXJiYXp1eA')}'`),
+      `cfg ${kv(['ID', 'TOKEN'], ' = ', '"aaaa.bbbb.cccc"')}`,
+      `{${kv(["'api", "key'"], ':', `'k_${fake(8, '0123456789')}'`)}}`,
+      `x-api-key: ${fake(40)}`,
     ]) {
       expect(findCredentialLike(s), s).not.toBeNull();
     }
-    expect(findCredentialLike('access_token=0123456789abcdef0123')?.patternId).toBe('credential_assignment');
+    expect(findCredentialLike(embedded)?.patternId).toBe('credential_assignment');
     for (const s of [
       'access_token hết hạn sau 1 giờ, cần làm mới',
       'Trường access_token là gì?',
       'access_token: ngắn',
       'access_token = 1234567',
       'đặt client_secret trong trang cài đặt',
+    ]) {
+      expect(findCredentialLike(s), s).toBeNull();
+    }
+  });
+
+  it('env_secret_assignment: dòng kiểu .env UPPER_SNAKE ⇒ chặn (cả giá trị hex); câu văn / giá trị ngắn ⇒ không', () => {
+    for (const [s, id] of [
+      [kv(['JWT', 'SECRET'], '=', fake(64)), 'env_secret_assignment'],
+      // chứa `API_KEY` ⇒ credential_assignment (không phân biệt hoa thường) bắt trước — vẫn bị chặn
+      [kv(['DATADOG', 'API', 'KEY'], '=', fake(32)), 'credential_assignment'],
+      [kv(['GITHUB', 'TOKEN'], ': ', `"${fake(12, 'abcdefghij0123')}"`), 'env_secret_assignment'],
+      [`export ${kv(['DB', 'PASSWORD'], '=', `'${fake(10, 'p@ss-w0rd')}'`)}`, 'env_secret_assignment'],
+      [kv(['NPM', 'PAT'], '=', fake(9, 'abcdef')), 'env_secret_assignment'],
+    ] as const) {
+      expect(findCredentialLike(s)?.patternId, s).toBe(id);
+    }
+    for (const s of [
+      'Role cần token để gọi API, secret không bao giờ in ra',
+      'đặt KEY trong tệp .env rồi khởi động lại',
+      kv(['SOME', 'KEY'], '=', 'short'),
+      kv(['Some', 'Key'], '=', fake(32)),
+      kv(['some', 'secret'], '=', fake(32)),
+      kv(['MONKEY'], '=', fake(32)),
+      kv(['API', 'KEYS'], '=', fake(32)),
+      `commit ${fake(40)} đã đẩy`,
     ]) {
       expect(findCredentialLike(s), s).toBeNull();
     }
@@ -290,7 +323,8 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       gitlab_token: `glpat-${'abcdefghij0123456789'}`,
       aws_access_key_id: `AKIA${'IOSFODNN7EXAMPLE'}`,
       telegram_bot_token: `123456789:${'AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawq'}`,
-      credential_assignment: 'access_token=abcdefgh12345',
+      credential_assignment: kv(['access', 'token'], '=', fake(13, 'abcdefgh12345')),
+      env_secret_assignment: kv(['JWT', 'SECRET'], '=', fake(64)),
       high_entropy_run: BLOCKED_TOKENS.highEntropy,
     };
     for (const p of CREDENTIAL_DETECTORS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
@@ -341,6 +375,11 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
     'AKIA lặp': 'AKIA'.repeat(Math.floor(MB / 4)),
     'hex 1 MB (không chặn, quét hết)': '0123456789abcdef'.repeat(MB / 16),
     'UUID lặp': '3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11 '.repeat(Math.floor(MB / 37)),
+    'A_A_A_… (gần .env)': 'A_'.repeat(MB / 2),
+    'A_KEY lặp': 'A_KEY'.repeat(Math.floor(MB / 5)),
+    'X_SECRET= + 1 MB khoảng trắng': `X_SECRET=${' '.repeat(MB)}`,
+    'X_TOKEN + 1 MB khoảng trắng': `X_TOKEN${' '.repeat(MB)}`,
+    '_KEY= lặp': ' A_KEY='.repeat(Math.floor(MB / 7)),
   };
   for (const [name, str] of Object.entries(adversarial)) {
     it(name, () => {
