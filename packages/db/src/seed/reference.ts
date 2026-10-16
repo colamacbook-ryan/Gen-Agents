@@ -16,6 +16,7 @@ import {
   seedReferenceDigestInput,
 } from '@ga/contracts';
 import type { AppConnection, WriteContext } from '../connection.ts';
+import { stampInsert } from '../stamp.ts';
 
 export class SeedReferenceError extends Error {
   constructor(message: string) {
@@ -101,8 +102,10 @@ function seedTables(
         );
       }
       for (const raw of t.rows) {
-        const row = resolveRow(raw, resolve);
-        if (columns.has('created_by')) row.created_by = w.actorId;
+        const resolved = resolveRow(raw, resolve);
+        const row: Record<string, SeedScalar> = columns.has('created_by')
+          ? stampInsert(w, resolved as Record<string, SeedScalar> & { created_by?: never })
+          : resolved;
         const cols = Object.keys(row);
         const unknown = cols.filter((c) => !columns.has(c));
         if (unknown.length > 0) throw new SeedReferenceError(`${t.table}: cột không tồn tại ${unknown.join(', ')}`);

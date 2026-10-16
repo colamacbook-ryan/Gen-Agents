@@ -431,6 +431,42 @@ export const RULES = [
     },
   },
   {
+    id: 'db-actor-columns-from-context',
+    why: 'created_by / updated_by / deleted_by lấy từ actor của giao dịch qua stampInsert / stampUpdate / stampSoftDelete của @ga/db, không viết tay / nhận từ tham số (CNS-176, STD-11 1.13)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      /^(apps|packages)\//.test(rel) &&
+      !isTest(rel) &&
+      !/^(apps\/web|packages\/ui|packages\/chibi|packages\/contracts)\//.test(rel) &&
+      !/^packages\/db\/(src\/(generated|runner|seed)\/|scripts\/)/.test(rel) &&
+      rel !== 'packages/db/src/stamp.ts' &&
+      rel !== 'packages/db/src/connection.ts',
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      const out = [];
+      const hit = (index, what) =>
+        out.push({ line: lineOf(code, index), msg: `${what} — dùng stampInsert / stampUpdate / stampSoftDelete` });
+      // khoá object (giá trị cho Kysely .values / .set, tham số repo, kiểu dòng viết tay)
+      for (const m of findAll(code, /(?:^|[{,(\s])['"]?((?:created|updated|deleted)_by)['"]?\s*\??:/m)) {
+        hit(m.index, `khoá ${m[1]}`);
+      }
+      // SQL: cột *_by trong danh sách cột INSERT
+      for (const m of findAll(code, /\bINSERT\s+INTO\s+["`\w.]+\s*\(([^)]{0,2000})\)/i)) {
+        const c = /\b(?:created|updated|deleted)_by\b/.exec(m[1]);
+        if (c) hit(m.index, `INSERT ghi ${c[0]}`);
+      }
+      // SQL: gán *_by trong mệnh đề SET (đến WHERE / hết chuỗi)
+      for (const m of findAll(code, /\bSET\s/gi)) {
+        const tail = code.slice(m.index, m.index + 2000);
+        const end = tail.search(/\bWHERE\b|['"`;]/i);
+        const clause = end === -1 ? tail : tail.slice(0, end);
+        const c = /\b(?:created|updated|deleted)_by\s*=/.exec(clause);
+        if (c) hit(m.index, `SET ${c[0]}`);
+      }
+      return out;
+    },
+  },
+  {
     id: 'db-privileged-api-paths',
     why: 'conn.bootstrap() / conn.maintenance() (actor system, app_maint()=1) chỉ gọi trong packages/db — nơi khác gọi hàm đã xuất của @ga/db (CNS-170)',
     applies: (rel) =>
