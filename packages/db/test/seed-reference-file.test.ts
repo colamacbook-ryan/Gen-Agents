@@ -10,6 +10,7 @@ import {
   type AppConnection,
   applyGlobalSeed,
   applyWorkspaceSeed,
+  globalSystemActorId,
   migrate,
   openWriter,
   SQLITE_MIGRATIONS_DIR,
@@ -62,10 +63,13 @@ describe('áp seed_reference.json thật lên migration thật', () => {
     const nW = rowsOf(seed.perWorkspace);
     expect(applyGlobalSeed(conn, seed)).toEqual({ inserted: nG, skipped: 0 });
     expect(applyGlobalSeed(conn, seed)).toEqual({ inserted: 0, skipped: nG });
-    // app (Onboarding) ghi hàng workspaces của tenant trước khi seed
-    conn.db
-      .prepare("INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, 'tenant', 'afi', 'Afi', '7K2Q')")
-      .run(TENANT_WS);
+    // app (Onboarding) ghi hàng workspaces của tenant trước khi seed — DB v2.3.5: tạo workspace ngoài bootstrap / bảo trì chỉ bằng
+    // actor system của workspace hệ thống (workspaces_writer_i)
+    conn.write(globalSystemActorId(seed), (w) =>
+      w.run("INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, 'tenant', 'afi', 'Afi', '7K2Q')", [
+        TENANT_WS,
+      ]),
+    );
     const actorIds = Object.fromEntries(
       ACTOR_SYSTEM_KEYS.map((k, i) => [k, `01JWSACT${'0'.repeat(17)}${i}`]),
     ) as Record<(typeof ACTOR_SYSTEM_KEYS)[number], string> & { system: string };

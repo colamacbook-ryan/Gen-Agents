@@ -1,9 +1,9 @@
 {
   "format": "ga.seed-reference.v1",
-  "databaseVersion": "2.3.4",
+  "databaseVersion": "2.3.5",
   "source": {
     "repo": "colamacbook-ryan/gen-agents",
-    "rev": "22009034d765cd6579ed8a5a3899ff063ba79faf",
+    "rev": "2bbd12bfb226bb6348b0c29276ef5c7a3e1e5a67",
     "generator": "db/spec/gen_seed.py"
   },
   "global": [
@@ -1440,5 +1440,5 @@
       ]
     }
   ],
-  "sha256": "b8b18641391d002e95e471c1407a489b1fac2c73af316af10d87df0d14b68a77"
+  "sha256": "7b379f49af38ec84ddd55884f7834c2d6fa5fd4876f676c7781dda3dc06482c3"
 }
