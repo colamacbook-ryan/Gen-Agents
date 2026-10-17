@@ -1,0 +1,2871 @@
+{
+  "source": "origin/feat/m2-api@fb46003 packages/contracts/src/api/grid-columns.ts (GRID_COLUMNS) + grids.ts (GRID_PREFIX) — ảnh chụp tạm, thay bằng import @ga/contracts khi m2-api vào nền",
+  "grids": {
+    "roles": {
+      "prefix": "RL",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": ["ten"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "run",
+          "aliases": ["chay"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "condition",
+          "aliases": ["the-trang"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "color",
+          "aliases": ["mau"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "dna": {
+      "prefix": "DN",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": ["nguon"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "prompt",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tokens",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "key",
+          "aliases": ["khoa"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "group",
+          "aliases": ["nhom"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tier",
+          "aliases": ["tang"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "confirmed",
+          "aliases": ["xac-nhan"],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "value",
+          "aliases": [],
+          "type": "json",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "instructions": {
+      "prefix": "IN",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "layer",
+          "aliases": ["lop"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cond",
+          "aliases": ["dieu-kien"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "engine",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "on",
+          "aliases": ["bat"],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tokens",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": ["nguon"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        },
+        {
+          "name": "content",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        },
+        {
+          "name": "ordinal",
+          "aliases": [],
+          "type": "int",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "skills": {
+      "prefix": "SK",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "engine",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "on",
+          "aliases": ["bat"],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tokens",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "uses",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "version",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "slug",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "origin",
+          "aliases": ["nguon"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cat",
+          "aliases": ["chung-loai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tier",
+          "aliases": ["bac"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "description",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        },
+        {
+          "name": "content",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "knowledge": {
+      "prefix": "KN",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "type",
+          "aliases": ["loai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "scope",
+          "aliases": ["pham-vi"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "indexed",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "recall",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "dup",
+          "aliases": ["trung"],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "memories": {
+      "prefix": "MM",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "scope",
+          "aliases": ["pham-vi"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": ["loai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "conf",
+          "aliases": ["tin-cay"],
+          "type": "real",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": ["nguon"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "ref",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "sens",
+          "aliases": ["nhay-cam"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "content",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "tasks": {
+      "prefix": "TK",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "due",
+          "aliases": ["han"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": ["kenh"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "priority",
+          "aliases": ["uu-tien"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "verified",
+          "aliases": ["danh-gia"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "commitments": {
+      "prefix": "CM",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "due",
+          "aliases": ["han"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "source",
+          "aliases": ["kenh"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "ledger": {
+      "prefix": "LG",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "type",
+          "aliases": ["loai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "amount",
+          "aliases": ["so-tien"],
+          "type": "money",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "task",
+          "aliases": ["viec"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "class",
+          "aliases": ["hang"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "audit": {
+      "prefix": "AU",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "actor",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "action",
+          "aliases": ["hanh-dong"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "result",
+          "aliases": ["ket-qua"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tool",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "channel",
+          "aliases": ["kenh"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "events": {
+      "prefix": "EV",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": ["loai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "severity",
+          "aliases": ["muc"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "capabilities": {
+      "prefix": "CAP",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "account",
+          "aliases": ["tai-khoan"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": ["loai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "state",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "confidence",
+          "aliases": ["tin-cay"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "taxonomy": {
+      "prefix": "TX",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": ["sua"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": ["ten"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "domain",
+          "aliases": ["mien"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "level",
+          "aliases": ["tang"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "parent",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": ["trang-thai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": ["nguon"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "polaris_checks": {
+      "prefix": "PC",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": ["loai"],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "rule",
+          "aliases": ["luat"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "gain",
+          "aliases": [],
+          "type": "money",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "wounds": {
+      "prefix": "RW",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": ["tao"],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": ["vai"],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "open",
+          "aliases": ["dang-mo"],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "engine_accounts": {
+      "prefix": "EN",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "engine",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "label",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "auth",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "login",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "quota",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "quota_pct",
+          "aliases": [],
+          "type": "real",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "quota_reset",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "outage",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cli",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cli_pinned",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "overhead",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "engine_bindings": {
+      "prefix": "EB",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "consumer",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "account",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "priority",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "model",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "effort",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "on",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "selection",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "containers": {
+      "prefix": "CT",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "image",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "desired",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "observed",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "health",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "health_checked",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cpu",
+          "aliases": [],
+          "type": "real",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "mem_mb",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "started",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "stopped",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cold_start_ms",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "model_ranks": {
+      "prefix": "MR",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "engine",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "model",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "rank",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "ranked",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "system_agents": {
+      "prefix": "SA",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "key",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "model",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "effort",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "on",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "selection",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "telegram_bots": {
+      "prefix": "TG",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "username",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "getme_ok",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "last_update",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "error",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "telegram_allowlist": {
+      "prefix": "AL",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "bot",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tg_user",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "owner",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "via",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "proactive_policies": {
+      "prefix": "PP",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "on",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "max_per_day",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "quiet_start",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "quiet_end",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "weekend_differs",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "timezone",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "channel",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "break_quiet",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "proactive_jobs": {
+      "prefix": "PA",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "position",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cron",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "timezone",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "action",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "trigger",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "on",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "misfire",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "next_run",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "last_run",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "last_status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "proactive_sends": {
+      "prefix": "PN",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "policy",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "trigger",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "urgency",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "day",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "channel",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "sent",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "reason",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "update_runs": {
+      "prefix": "UR",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "from",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "to",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "trigger",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "started",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "finished",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "duration_ms",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "schema_from",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "schema_to",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "error",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "app_versions": {
+      "prefix": "UP",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "semver",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "channel",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "released",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "schema",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "discovered",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "change_sets": {
+      "prefix": "CS",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "scope",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "title",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "proposed_by",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "decided",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "employee_cards": {
+      "prefix": "CD",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "issued",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "suspended",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "revoked",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tokens",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "trial_runs": {
+      "prefix": "TR",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "scenarios",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "passed",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "score",
+          "aliases": [],
+          "type": "real",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "threshold",
+          "aliases": [],
+          "type": "real",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "judge",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "decided",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "notifications": {
+      "prefix": "NT",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "severity",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "title",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "target",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "read",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "dismissed",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "resolved",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "characters": {
+      "prefix": "SN",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "pack",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "code",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        },
+        {
+          "name": "faction",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "enabled",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "char_kind",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "gender",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "avatars": {
+      "prefix": "AV",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "source",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "mime",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "size",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "width",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "height",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "skin_pack",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "sessions": {
+      "prefix": "SS",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "agent",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "position",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "task",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "trigger",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "engine",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "model",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "effort",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "phase",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "error",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "started",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "ended",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "duration_ms",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cold_start_ms",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tokens_in",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tokens_out",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "cost_micro",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "failover",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    },
+    "permission_requests": {
+      "prefix": "PM",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tool",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "scope",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "reason",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        },
+        {
+          "name": "task",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "session",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "decided",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "note",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "tool_grants": {
+      "prefix": "GR",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tool",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "role",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "position",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "mode",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "expires",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "note",
+          "aliases": [],
+          "type": "text",
+          "queryable": false,
+          "sortable": false
+        }
+      ]
+    },
+    "tools": {
+      "prefix": "TL",
+      "columns": [
+        {
+          "name": "id",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "created",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": true
+        },
+        {
+          "name": "updated",
+          "aliases": [],
+          "type": "ts",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "slug",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "name",
+          "aliases": [],
+          "type": "text",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "kind",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "risk",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "default_mode",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "builtin",
+          "aliases": [],
+          "type": "bool",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "type": "enum",
+          "queryable": true,
+          "sortable": false
+        },
+        {
+          "name": "tokens",
+          "aliases": [],
+          "type": "int",
+          "queryable": true,
+          "sortable": false
+        }
+      ]
+    }
+  }
+}

@@ -9,7 +9,15 @@
     ".": "./src/index.ts",
     "./connection": "./src/connection.ts",
     "./runner": "./src/runner/index.ts",
-    "./schema": "./src/generated/schema.ts"
+    "./schema": "./src/generated/schema.ts",
+    "./repos": "./src/repos/index.ts",
+    "./fake": "./src/repos/fake/index.ts",
+    "./ids": "./src/ids/index.ts",
+    "./sqlite": "./src/repos/sqlite/index.ts",
+    "./fixture": "./src/repos/fixture/index.ts",
+    "./audit-writer": "./src/audit-writer/index.ts",
+    "./query-box": "./src/query-box/index.ts",
+    "./search": "./src/search/index.ts"
   },
   "scripts": {
     "test": "node ../../scripts/vitest-run.mjs"

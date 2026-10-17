@@ -11,6 +11,7 @@ export { SYNC } from './generated/sync.ts';
 export * from './runner/index.ts';
 export * from './seed/ids.ts';
 export * from './seed/reference.ts';
+export * from './seed/tenant.ts';
 export * from './stamp.ts';
 
 /** Query builder có kiểu trên một kết nối đã qua hợp đồng (writer / reader). Cấm `.orReplace()` (lint no-or-replace). */
