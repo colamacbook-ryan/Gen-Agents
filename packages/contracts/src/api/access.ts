@@ -152,3 +152,21 @@ export function sseEventAllows(
  * `scope: 'self'`): OPS-33 / 34 / 35 trên các lưới này cũng phải lọc theo người dùng, không chỉ theo workspace.
  */
 export const GRID_SELF_SCOPED: readonly GridKeyName[] = ['notifications'];
+
+/**
+ * `workspace_members.access_level` (CHECK của DB: `owner`, `admin`, `operator`, `viewer`) → quyền của API. Fail-closed (review bảo mật
+ * PR #7, L1): `operator` tồn tại ở DB nhưng KHÔNG có mức tương ứng trong API (`O` / `A` / `V`) ⇒ `null` (handler từ chối, 403
+ * `auth.forbidden`), không bao giờ làm tròn lên `A` hay xuống `V`. Giá trị lạ cũng `null`.
+ */
+export function accessLevelToAuth(level: unknown): Exclude<AuthLevel, 'public'> | null {
+  switch (level) {
+    case 'owner':
+      return 'O';
+    case 'admin':
+      return 'A';
+    case 'viewer':
+      return 'V';
+    default:
+      return null;
+  }
+}
