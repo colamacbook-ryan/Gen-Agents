@@ -13,6 +13,7 @@ import {
   idOf,
   requireReasonForCore,
   TOKENIZER_LABEL,
+  withPermissionMapping,
 } from './shared.ts';
 
 const ROLE_LAYERS: readonly string[] = ['values', 'persona', 'style', 'drive'];
@@ -145,51 +146,53 @@ export const instructionHandlers: readonly Handler[] = [
     // quyền kiểm TRƯỚC mọi ghi (lớp của IN sắp tạo quyết định, không phải gì client khai về "quyền")
     assertMayApply(ctx, { core, houseRules });
     const reason = requireReasonForCore(core, body.reason);
-    return ctx.write(
-      (tx) => {
-        const filter =
-          roleRef !== null
-            ? { roleId: roleRef.id, layer: body.layer }
-            : positionRef !== null
-              ? { positionId: positionRef.id, layer: body.layer }
-              : { layer: body.layer };
-        const siblings = tx.instructions.list(filter).filter((r) => (houseRules ? r.role_id === null : true));
-        const ordinal = siblings.reduce((m, r) => Math.max(m, r.ordinal), 0) + 1;
-        const { changeSet } = tx.changeSets.propose({
-          scope: body.scope,
-          ...(roleRef === null ? {} : { roleId: roleRef.id }),
-          ...(positionRef === null ? {} : { positionId: positionRef.id }),
-          title: `Thêm khối ${body.name}`,
-          items: [
-            {
-              target: 'instruction',
-              op: 'create',
-              layer: body.layer,
-              ordinal,
-              name: body.name,
-              content: body.content,
-              ...(body.condition === undefined
-                ? {}
-                : { conditionKind: body.condition.kind, conditionValue: body.condition.value }),
-              ...(engine === undefined ? {} : { engineScope: engine }),
-              ...(body.enabled === undefined ? {} : { isEnabled: body.enabled }),
-              tokenCount: estimateTokens(body.content),
-              tokenizer: TOKENIZER_LABEL,
-              source: 'owner',
-              ...(reason === undefined ? {} : { reason }),
-            },
-          ],
-        });
-        const applied = tx.changeSets.apply(changeSet.id, reason === undefined ? {} : { note: reason });
-        const created = newestIn(tx, { ...filter, layer: body.layer });
-        return {
-          instruction: idOf(created),
-          changeSet: idOf(applied.changeSet),
-          revision: idOf(applied.revision),
-          budget: budgetFor(tx, roleRef?.id ?? null),
-        };
-      },
-      { reason: 'instruction.create' },
+    return withPermissionMapping(() =>
+      ctx.write(
+        (tx) => {
+          const filter =
+            roleRef !== null
+              ? { roleId: roleRef.id, layer: body.layer }
+              : positionRef !== null
+                ? { positionId: positionRef.id, layer: body.layer }
+                : { layer: body.layer };
+          const siblings = tx.instructions.list(filter).filter((r) => (houseRules ? r.role_id === null : true));
+          const ordinal = siblings.reduce((m, r) => Math.max(m, r.ordinal), 0) + 1;
+          const { changeSet } = tx.changeSets.propose({
+            scope: body.scope,
+            ...(roleRef === null ? {} : { roleId: roleRef.id }),
+            ...(positionRef === null ? {} : { positionId: positionRef.id }),
+            title: `Thêm khối ${body.name}`,
+            items: [
+              {
+                target: 'instruction',
+                op: 'create',
+                layer: body.layer,
+                ordinal,
+                name: body.name,
+                content: body.content,
+                ...(body.condition === undefined
+                  ? {}
+                  : { conditionKind: body.condition.kind, conditionValue: body.condition.value }),
+                ...(engine === undefined ? {} : { engineScope: engine }),
+                ...(body.enabled === undefined ? {} : { isEnabled: body.enabled }),
+                tokenCount: estimateTokens(body.content),
+                tokenizer: TOKENIZER_LABEL,
+                source: 'owner',
+                ...(reason === undefined ? {} : { reason }),
+              },
+            ],
+          });
+          const applied = tx.changeSets.apply(changeSet.id, reason === undefined ? {} : { note: reason });
+          const created = newestIn(tx, { ...filter, layer: body.layer });
+          return {
+            instruction: idOf(created),
+            changeSet: idOf(applied.changeSet),
+            revision: idOf(applied.revision),
+            budget: budgetFor(tx, roleRef?.id ?? null),
+          };
+        },
+        { reason: 'instruction.create' },
+      ),
     );
   }),
 
@@ -199,55 +202,57 @@ export const instructionHandlers: readonly Handler[] = [
     if (Object.keys(body).filter((k) => k !== 'reason').length === 0) {
       throw new ApiError('validation.failed', { field: 'name', reason: 'nothing_to_change' });
     }
-    return ctx.write(
-      (tx) => {
-        const row = tx.instructions.get(ref.id);
-        if (row === null || row.deleted_at !== null) throw notFound();
-        // lõi / Nội quy tính từ HÀNG ĐÃ LƯU (lớp + is_core), không từ request
-        const core = row.is_core === 1;
-        const houseRules = row.layer === 'house_rules';
-        assertMayApply(ctx, { core, houseRules });
-        const reason = requireReasonForCore(core, body.reason);
-        if (row.status !== 'active') throw new ApiError('conflict', { reason: 'pending_proposal' });
-        const content = body.content ?? row.content;
-        const scope = houseRules ? 'workspace' : row.layer === 'position' ? 'position' : 'role';
-        const { changeSet } = tx.changeSets.propose({
-          scope,
-          ...(scope === 'role' && row.role_id !== null ? { roleId: row.role_id } : {}),
-          ...(scope === 'position' && row.position_id !== null ? { positionId: row.position_id } : {}),
-          title: `Sửa khối ${row.name}`,
-          items: [
-            {
-              target: 'instruction',
-              op: 'update',
-              instructionId: row.id,
-              baseVersion: row.version,
-              patch: {
-                ...(body.name === undefined ? {} : { name: body.name }),
-                ...(body.content === undefined ? {} : { content: body.content }),
-                ...(body.ordinal === undefined ? {} : { ordinal: body.ordinal }),
-                ...(body.condition === undefined
-                  ? {}
-                  : body.condition === null
-                    ? { conditionKind: 'always' as const, conditionValue: null }
-                    : { conditionKind: body.condition.kind, conditionValue: body.condition.value }),
-                ...(engine === undefined ? {} : { engineScope: engine }),
-                ...(body.enabled === undefined ? {} : { isEnabled: body.enabled }),
+    return withPermissionMapping(() =>
+      ctx.write(
+        (tx) => {
+          const row = tx.instructions.get(ref.id);
+          if (row === null || row.deleted_at !== null) throw notFound();
+          // lõi / Nội quy tính từ HÀNG ĐÃ LƯU (lớp + is_core), không từ request
+          const core = row.is_core === 1;
+          const houseRules = row.layer === 'house_rules';
+          assertMayApply(ctx, { core, houseRules });
+          const reason = requireReasonForCore(core, body.reason);
+          if (row.status !== 'active') throw new ApiError('conflict', { reason: 'pending_proposal' });
+          const content = body.content ?? row.content;
+          const scope = houseRules ? 'workspace' : row.layer === 'position' ? 'position' : 'role';
+          const { changeSet } = tx.changeSets.propose({
+            scope,
+            ...(scope === 'role' && row.role_id !== null ? { roleId: row.role_id } : {}),
+            ...(scope === 'position' && row.position_id !== null ? { positionId: row.position_id } : {}),
+            title: `Sửa khối ${row.name}`,
+            items: [
+              {
+                target: 'instruction',
+                op: 'update',
+                instructionId: row.id,
+                baseVersion: row.version,
+                patch: {
+                  ...(body.name === undefined ? {} : { name: body.name }),
+                  ...(body.content === undefined ? {} : { content: body.content }),
+                  ...(body.ordinal === undefined ? {} : { ordinal: body.ordinal }),
+                  ...(body.condition === undefined
+                    ? {}
+                    : body.condition === null
+                      ? { conditionKind: 'always' as const, conditionValue: null }
+                      : { conditionKind: body.condition.kind, conditionValue: body.condition.value }),
+                  ...(engine === undefined ? {} : { engineScope: engine }),
+                  ...(body.enabled === undefined ? {} : { isEnabled: body.enabled }),
+                },
+                tokenCount: estimateTokens(content),
+                ...(reason === undefined ? {} : { reason }),
               },
-              tokenCount: estimateTokens(content),
-              ...(reason === undefined ? {} : { reason }),
-            },
-          ],
-        });
-        const applied = tx.changeSets.apply(changeSet.id, reason === undefined ? {} : { note: reason });
-        return {
-          instruction: idOf(row),
-          changeSet: idOf(applied.changeSet),
-          revision: idOf(applied.revision),
-          budget: budgetFor(tx, scope === 'role' ? row.role_id : null),
-        };
-      },
-      { reason: 'instruction.update' },
+            ],
+          });
+          const applied = tx.changeSets.apply(changeSet.id, reason === undefined ? {} : { note: reason });
+          return {
+            instruction: idOf(row),
+            changeSet: idOf(applied.changeSet),
+            revision: idOf(applied.revision),
+            budget: budgetFor(tx, scope === 'role' ? row.role_id : null),
+          };
+        },
+        { reason: 'instruction.update' },
+      ),
     );
   }),
 ];

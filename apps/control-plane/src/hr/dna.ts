@@ -12,6 +12,7 @@ import {
   idOf,
   isViewerOnly,
   requireReasonForCore,
+  withPermissionMapping,
 } from './shared.ts';
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -182,149 +183,156 @@ export const dnaHandlers: readonly Handler[] = [
     if (body.value === undefined && body.inPrompt === undefined) {
       throw new ApiError('validation.failed', { field: 'value', reason: 'nothing_to_change' });
     }
-    return ctx.write(
-      (tx) => {
-        const role = liveRole(tx, roleRef.id);
-        const field = tx.dna.field(dnaRef.id);
-        // quan hệ cha–con: ô DNA phải thuộc đúng Role trên đường dẫn (HANDLER-OBLIGATIONS #2)
-        if (field === null || field.role_id !== role.id || field.deleted_at !== null) throw notFound();
-        const def = tx.dna.defs().find((d) => d.id === field.def_id);
-        if (def === undefined) throw new ApiError('internal');
-        // lõi tính từ ĐỊNH NGHĨA ĐÃ LƯU của trường — không từ request
-        const core = def.is_core === 1;
-        assertMayApply(ctx, { core, houseRules: false });
-        const reason = requireReasonForCore(core, body.reason);
-        if (field.status !== 'active') throw new ApiError('conflict', { reason: 'pending_proposal' });
-        if (def.is_identity_locked === 1 && role.lifecycle_status !== 'draft' && body.value !== undefined) {
-          throw new ApiError('db.immutable_identity');
-        }
-        const next = body.value === undefined ? null : validateDnaValue(def, body.value);
-        const valueJson = next?.valueJson ?? field.value_json;
-        const { changeSet } = tx.changeSets.propose({
-          scope: 'role',
-          roleId: role.id,
-          title: `Sửa ${def.key}`,
-          items: [
-            {
-              target: 'dna',
-              op: 'update',
-              dnaFieldId: field.id,
-              baseVersion: field.version,
-              valueJson,
-              ...(next === null ? {} : { valueNum: next.valueNum }),
-              ...(body.inPrompt === undefined ? {} : { isInPrompt: body.inPrompt }),
-              tokenCount: dnaTokens(valueJson),
-              ...(reason === undefined ? {} : { reason }),
-            },
-          ],
-        });
-        const applied = tx.changeSets.apply(changeSet.id, reason === undefined ? {} : { note: reason });
-        const fresh = tx.dna.field(field.id);
-        if (fresh === null) throw new ApiError('internal');
-        return {
-          changeSet: idOf(applied.changeSet),
-          revision: idOf(applied.revision),
-          field: dnaRow(tx, fresh, def, false),
-          budget: budgetOf(tx, role),
-        };
-      },
-      { reason: 'dna.update' },
+    return withPermissionMapping(() =>
+      ctx.write(
+        (tx) => {
+          const role = liveRole(tx, roleRef.id);
+          const field = tx.dna.field(dnaRef.id);
+          // quan hệ cha–con: ô DNA phải thuộc đúng Role trên đường dẫn (HANDLER-OBLIGATIONS #2)
+          if (field === null || field.role_id !== role.id || field.deleted_at !== null) throw notFound();
+          const def = tx.dna.defs().find((d) => d.id === field.def_id);
+          if (def === undefined) throw new ApiError('internal');
+          // lõi tính từ ĐỊNH NGHĨA ĐÃ LƯU của trường — không từ request
+          const core = def.is_core === 1;
+          assertMayApply(ctx, { core, houseRules: false });
+          const reason = requireReasonForCore(core, body.reason);
+          if (field.status !== 'active') throw new ApiError('conflict', { reason: 'pending_proposal' });
+          if (def.is_identity_locked === 1 && role.lifecycle_status !== 'draft' && body.value !== undefined) {
+            throw new ApiError('db.immutable_identity');
+          }
+          const next = body.value === undefined ? null : validateDnaValue(def, body.value);
+          const valueJson = next?.valueJson ?? field.value_json;
+          const { changeSet } = tx.changeSets.propose({
+            scope: 'role',
+            roleId: role.id,
+            title: `Sửa ${def.key}`,
+            items: [
+              {
+                target: 'dna',
+                op: 'update',
+                dnaFieldId: field.id,
+                baseVersion: field.version,
+                valueJson,
+                ...(next === null ? {} : { valueNum: next.valueNum }),
+                ...(body.inPrompt === undefined ? {} : { isInPrompt: body.inPrompt }),
+                tokenCount: dnaTokens(valueJson),
+                ...(reason === undefined ? {} : { reason }),
+              },
+            ],
+          });
+          const applied = tx.changeSets.apply(changeSet.id, reason === undefined ? {} : { note: reason });
+          const fresh = tx.dna.field(field.id);
+          if (fresh === null) throw new ApiError('internal');
+          return {
+            changeSet: idOf(applied.changeSet),
+            revision: idOf(applied.revision),
+            field: dnaRow(tx, fresh, def, false),
+            budget: budgetOf(tx, role),
+          };
+        },
+        { reason: 'dna.update' },
+      ),
     );
   }),
 
   defineHandler('SYS-39', ({ params, body }, ctx) => {
     const roleRef = ctx.ref('RL', params.roleRef);
     const refs = 'refs' in body ? body.refs.map((r) => ctx.ref('DN', r)) : null;
-    return ctx.write(
-      (tx) => {
-        const role = liveRole(tx, roleRef.id);
-        const defs = defsById(tx);
-        const pending = tx.dna.fields(role.id, { status: 'proposed' }).filter(isPendingInferred);
-        if (refs !== null) {
-          for (const r of refs) {
-            const f = tx.dna.field(r.id);
-            // quan hệ cha–con: ô DNA phải thuộc Role trên đường dẫn
-            if (f === null || f.role_id !== role.id || f.deleted_at !== null) throw notFound();
+    return withPermissionMapping(() =>
+      ctx.write(
+        (tx) => {
+          const role = liveRole(tx, roleRef.id);
+          const defs = defsById(tx);
+          const pending = tx.dna.fields(role.id, { status: 'proposed' }).filter(isPendingInferred);
+          if (refs !== null) {
+            for (const r of refs) {
+              const f = tx.dna.field(r.id);
+              // quan hệ cha–con: ô DNA phải thuộc Role trên đường dẫn
+              if (f === null || f.role_id !== role.id || f.deleted_at !== null) throw notFound();
+            }
           }
-        }
-        const wanted = refs === null ? null : new Set(refs.map((r) => r.id));
-        const targets = pending.filter((f) => wanted === null || wanted.has(f.id));
-        // gom theo change set chứa đề xuất; chỉ áp change set mà MỌI mục đang chờ đều nằm trong tập xác nhận (áp = từ chối
-        // phần còn lại ⇒ không áp lẫn mục không được hỏi tới; change set lẫn thì duyệt từng mục ở luồng đề xuất)
-        const groups = new Map<string, { csId: string; versionIds: Set<string>; core: boolean; count: number }>();
-        for (const f of targets) {
-          const v = tx.dna.versions(f.id).find((x) => x.status === 'proposed' && x.change_set_id !== null);
-          if (v === undefined || v.change_set_id === null) continue;
-          const g = groups.get(v.change_set_id) ?? {
-            csId: v.change_set_id,
-            versionIds: new Set<string>(),
-            core: false,
-            count: 0,
-          };
-          g.versionIds.add(v.id);
-          g.core ||= defs.get(f.def_id)?.is_core === 1;
-          g.count++;
-          groups.set(g.csId, g);
-        }
-        let confirmed = 0;
-        for (const g of groups.values()) {
-          const cs = tx.changeSets.get(g.csId);
-          if (cs === null || cs.status !== 'open' || cs.role_id !== role.id) continue;
-          const items = tx.changeSets.items(cs.id).filter((i) => i.status === 'pending');
-          if (items.some((i) => i.dna_field_version_id === null || !g.versionIds.has(i.dna_field_version_id))) continue;
-          // quyền theo hàng đã lưu: lõi chỉ owner; người duyệt ≠ người đề xuất
-          assertMayApply(ctx, { core: g.core, houseRules: false });
-          assertApproverIsNotProposer(cs.proposed_by, tx.actorId);
-          tx.changeSets.apply(cs.id, g.core ? { note: 'Chủ sở hữu xác nhận giá trị AI suy ra' } : {});
-          confirmed += g.count;
-        }
-        return { confirmed, inferredPending: progressOf(tx, role.id).inferredPending };
-      },
-      { reason: 'dna.confirm' },
+          const wanted = refs === null ? null : new Set(refs.map((r) => r.id));
+          const targets = pending.filter((f) => wanted === null || wanted.has(f.id));
+          // gom theo change set chứa đề xuất; chỉ áp change set mà MỌI mục đang chờ đều nằm trong tập xác nhận (áp = từ chối
+          // phần còn lại ⇒ không áp lẫn mục không được hỏi tới; change set lẫn thì duyệt từng mục ở luồng đề xuất)
+          const groups = new Map<string, { csId: string; versionIds: Set<string>; core: boolean; count: number }>();
+          for (const f of targets) {
+            const v = tx.dna.versions(f.id).find((x) => x.status === 'proposed' && x.change_set_id !== null);
+            if (v === undefined || v.change_set_id === null) continue;
+            const g = groups.get(v.change_set_id) ?? {
+              csId: v.change_set_id,
+              versionIds: new Set<string>(),
+              core: false,
+              count: 0,
+            };
+            g.versionIds.add(v.id);
+            g.core ||= defs.get(f.def_id)?.is_core === 1;
+            g.count++;
+            groups.set(g.csId, g);
+          }
+          let confirmed = 0;
+          for (const g of groups.values()) {
+            const cs = tx.changeSets.get(g.csId);
+            if (cs === null || cs.status !== 'open' || cs.role_id !== role.id) continue;
+            const items = tx.changeSets.items(cs.id).filter((i) => i.status === 'pending');
+            if (items.some((i) => i.dna_field_version_id === null || !g.versionIds.has(i.dna_field_version_id)))
+              continue;
+            // quyền theo hàng đã lưu: lõi chỉ owner; người duyệt ≠ người đề xuất
+            assertMayApply(ctx, { core: g.core, houseRules: false });
+            assertApproverIsNotProposer(cs.proposed_by, tx.actorId);
+            tx.changeSets.apply(cs.id, g.core ? { note: 'Chủ sở hữu xác nhận giá trị AI suy ra' } : {});
+            confirmed += g.count;
+          }
+          return { confirmed, inferredPending: progressOf(tx, role.id).inferredPending };
+        },
+        { reason: 'dna.confirm' },
+      ),
     );
   }),
 
   defineHandler('SYS-40', ({ params }, ctx) => {
     const roleRef = ctx.ref('RL', params.roleRef);
-    return ctx.write(
-      (tx) => {
-        const role = liveRole(tx, roleRef.id);
-        if (role.lifecycle_status !== 'draft' || role.registry_no !== null) {
-          throw new ApiError('conflict', { reason: 'already_signed' });
-        }
-        const blocked = (reason: 'unconfirmed_inferred' | 'budget_exceeded'): never => {
-          throw new ApiError('gate.sign_blocked', { reason });
-        };
-        const defs = tx.dna.defs();
-        const active = tx.dna.fields(role.id, { status: 'active' });
-        const needed = defs.filter((d) => d.is_required_for_birth === 1);
-        // chưa xác nhận: còn field AI suy ra chưa duyệt, hoặc field bắt buộc khi khai sinh còn thiếu
-        const revision = tx.revisions.latest({ roleId: role.id });
-        const inferredPending = tx.dna.fields(role.id, { status: 'proposed' }).some(isPendingInferred);
-        if (revision === null || inferredPending || needed.some((d) => !active.some((f) => f.def_id === d.id))) {
-          blocked('unconfirmed_inferred');
-        }
-        const b = tx.roles.promptBudget(role.id);
-        if (b === null || !asBool(b.sign_ok)) blocked('budget_exceeded');
-        const last = tx.roles
-          .list({ includeDeleted: true })
-          .map((r) => REGISTRY_RE.exec(r.registry_no ?? ''))
-          .reduce((m, x) => Math.max(m, x === null ? 0 : Number(x[1])), 0);
-        const registryNo = `GA-${tx.workspace.get().short_code}-${String(last + 1).padStart(4, '0')}`;
-        const signed = tx.roles.setLifecycle(role.id, 'born', { registryNo });
-        const audit = tx.audit.list({ action: 'role.lifecycle', roleId: role.id, page: { order: 'desc', limit: 1 } })
-          .items[0];
-        if (signed.born_at === null || signed.registry_no === null || audit === undefined || revision === null) {
-          throw new ApiError('internal');
-        }
-        return {
-          registryNo: signed.registry_no,
-          signedAt: signed.born_at,
-          audit: idOf(audit),
-          revision: idOf(revision),
-        };
-      },
-      { reason: 'role.sign' },
+    return withPermissionMapping(() =>
+      ctx.write(
+        (tx) => {
+          const role = liveRole(tx, roleRef.id);
+          if (role.lifecycle_status !== 'draft' || role.registry_no !== null) {
+            throw new ApiError('conflict', { reason: 'already_signed' });
+          }
+          const blocked = (reason: 'unconfirmed_inferred' | 'budget_exceeded'): never => {
+            throw new ApiError('gate.sign_blocked', { reason });
+          };
+          const defs = tx.dna.defs();
+          const active = tx.dna.fields(role.id, { status: 'active' });
+          const needed = defs.filter((d) => d.is_required_for_birth === 1);
+          // chưa xác nhận: còn field AI suy ra chưa duyệt, hoặc field bắt buộc khi khai sinh còn thiếu
+          const revision = tx.revisions.latest({ roleId: role.id });
+          const inferredPending = tx.dna.fields(role.id, { status: 'proposed' }).some(isPendingInferred);
+          if (revision === null || inferredPending || needed.some((d) => !active.some((f) => f.def_id === d.id))) {
+            blocked('unconfirmed_inferred');
+          }
+          const b = tx.roles.promptBudget(role.id);
+          if (b === null || !asBool(b.sign_ok)) blocked('budget_exceeded');
+          const last = tx.roles
+            .list({ includeDeleted: true })
+            .map((r) => REGISTRY_RE.exec(r.registry_no ?? ''))
+            .reduce((m, x) => Math.max(m, x === null ? 0 : Number(x[1])), 0);
+          const registryNo = `GA-${tx.workspace.get().short_code}-${String(last + 1).padStart(4, '0')}`;
+          const signed = tx.roles.setLifecycle(role.id, 'born', { registryNo });
+          const audit = tx.audit.list({ action: 'role.lifecycle', roleId: role.id, page: { order: 'desc', limit: 1 } })
+            .items[0];
+          if (signed.born_at === null || signed.registry_no === null || audit === undefined || revision === null) {
+            throw new ApiError('internal');
+          }
+          return {
+            registryNo: signed.registry_no,
+            signedAt: signed.born_at,
+            audit: idOf(audit),
+            revision: idOf(revision),
+          };
+        },
+        { reason: 'role.sign' },
+      ),
     );
   }),
 

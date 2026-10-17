@@ -1,7 +1,9 @@
 // LUẬT QUYỀN ÁP THAY ĐỔI (INTENT): chạm lõi (giá trị / tính cách / DN is_core) hoặc Nội quy (house_rules) CHỈ owner áp, tính từ
 // TRẠNG THÁI ĐÃ LƯU; lý do bắt buộc khi lõi; ô DNA phải thuộc đúng Role; người duyệt ≠ người đề xuất.
+
+import { DbRuleError } from '@ga/db/repos';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { assertApproverIsNotProposer, assertMayApply } from '../../src/hr/shared.ts';
+import { assertApproverIsNotProposer, assertMayApply, withPermissionMapping } from '../../src/hr/shared.ts';
 import { ApiError } from '../../src/http/errors.ts';
 import type { TestApp } from '../http/harness.ts';
 import { addDna, addInstruction, makeHrApp, mkRole, ownerWrite, uniq } from './helpers.ts';
@@ -212,6 +214,21 @@ describe('SYS-47 / SYS-48 — Instruction: lõi + Nội quy chỉ owner', () => 
 });
 
 describe('quy tắc quyền dùng chung (đơn vị)', () => {
+  it('withPermissionMapping: permission.* của repo ⇒ auth.forbidden; lỗi khác đi qua nguyên vẹn', () => {
+    const denied = new DbRuleError('permission.denied', 'x');
+    expect(() =>
+      withPermissionMapping(() => {
+        throw denied;
+      }),
+    ).toThrow(expect.objectContaining({ code: 'auth.forbidden' }));
+    const other = new DbRuleError('repo.not_found', 'x');
+    expect(() =>
+      withPermissionMapping(() => {
+        throw other;
+      }),
+    ).toThrow(other);
+  });
+
   const ctxOf = (authLevel: 'V' | 'A' | 'O') => ({ actor: { authLevel } }) as never;
 
   it('assertMayApply: lõi / Nội quy chỉ owner; việc thường admin được', () => {

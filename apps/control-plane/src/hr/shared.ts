@@ -2,6 +2,7 @@
 // theo TRẠNG THÁI ĐÃ LƯU (không theo cờ client gửi).
 import { AVATAR_STATES } from '@ga/contracts';
 import type { RoleRow as DbRole, ReadTx } from '@ga/db/repos';
+import { DbRuleError } from '@ga/db/repos';
 import type { HandlerContext } from '../context/context.ts';
 import { ApiError, notFound } from '../http/errors.ts';
 
@@ -168,4 +169,19 @@ export function requireReasonForCore(core: boolean, reason: string | undefined):
     throw new ApiError('validation.failed', { field: 'reason', reason: 'required_for_core' });
   }
   return r === undefined || r.length === 0 ? undefined : r;
+}
+
+/**
+ * Repo là chốt cuối của luật quyền (áp lõi / Nội quy chỉ owner, DB v2.3.5): `permission.*` từ DB ⇒ `auth.forbidden` của
+ * hợp đồng (không để lọt thành `db.rule_violation`). Handler vẫn kiểm trước (assertMayApply) để từ chối sớm, trước mọi ghi.
+ */
+export function withPermissionMapping<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof DbRuleError && e.rule.startsWith('permission.')) {
+      throw new ApiError('auth.forbidden', { reason: 'db_permission' });
+    }
+    throw e;
+  }
 }
