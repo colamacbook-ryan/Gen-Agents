@@ -161,14 +161,17 @@ export const WRK_03 = work({
   id: 'WRK-03',
   method: 'POST',
   path: '/telegram/bots/{botRef}/captures',
-  auth: 'A',
-  ownerWhen: { in: 'body', field: 'purpose', equals: 'owner_change' },
+  // Mở cửa sổ bắt user ID để THÊM người vào allowlist (kể cả đổi chủ) = NỚI ai được ra lệnh cho bot ⇒ owner (Gen, fail-closed).
+  // `purpose` được dịch vụ LƯU phía máy chủ cùng cửa sổ; WRK-05 đọc lại từ đó (HANDLER-OBLIGATIONS #3), không tin client.
+  // WRK-04 (xem trạng thái) và WRK-06 (huỷ) giữ A: chỉ đọc / siết.
+  auth: 'O',
+  writesAccessPolicy: ['telegram_allowlist'],
   o4: 'blocked',
   request: {
     params: z.strictObject({ botRef: Ref('TG') }),
     body: z.strictObject({ purpose: z.enum(['allowlist', 'owner_change']) }),
   },
-  // Cửa sổ 5 phút; rồi SSE `telegram.capture`. `owner_change` chỉ owner (`auth.forbidden`).
+  // Cửa sổ 5 phút; rồi SSE `telegram.capture`. Bot phải thuộc cùng workspace (HANDLER-OBLIGATIONS #1, #3).
   response: ok(z.strictObject({ captureId: OpaqueId, expiresAt: Ts })),
   cli: ['telegram connect', 'telegram allow', 'telegram owner-change'],
 });
@@ -195,11 +198,14 @@ export const WRK_05 = work({
   id: 'WRK-05',
   method: 'POST',
   path: '/telegram/captures/{captureId}/confirm',
-  auth: 'A',
-  ownerWhen: { in: 'body', field: 'asOwner', equals: true },
+  // Xác nhận thêm người vào allowlist = NỚI ⇒ owner. KHÔNG có body: trước đây `asOwner` do client gửi chỉ dùng để nâng quyền
+  // nên đã bỏ. Dịch vụ BẮT BUỘC đọc `capture.purpose` ĐÃ LƯU phía máy chủ (allowlist | owner_change) để quyết hành vi — không
+  // bao giờ từ request; `captureId` phải thuộc đúng workspace và đúng bot (HANDLER-OBLIGATIONS #3).
+  auth: 'O',
+  writesAccessPolicy: ['telegram_allowlist'],
   o4: 'blocked',
-  request: { params: CaptureId, body: z.strictObject({ asOwner: z.boolean().optional() }) },
-  // `owner_change`: thêm hàng owner mới, bot gửi mã 6 chữ số (hạn 10 phút).
+  request: { params: CaptureId },
+  // `owner_change`: thêm hàng owner mới, bot gửi mã 6 chữ số (hạn 10 phút; xác minh ở WRK-07).
   response: ok(
     z.strictObject({
       allowlist: IdOf('AL'),
@@ -263,6 +269,7 @@ export const WRK_09 = work({
   id: 'WRK-09',
   method: 'DELETE',
   path: '/telegram/allowlist/{allowlistRef}',
+  // GỠ người khỏi allowlist = siết ⇒ A (mở cả khi recovery, dùng cho `emergency`); vì vậy KHÔNG gắn `writesAccessPolicy`.
   auth: 'A',
   o4: 'open',
   request: { params: z.strictObject({ allowlistRef: Ref('AL') }) },

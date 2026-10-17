@@ -158,6 +158,8 @@ describe('registry — quyền', () => {
       'GW-13',
       'GW-14',
       'WRK-02',
+      'WRK-03',
+      'WRK-05',
       'WRK-07',
       'WRK-08',
       'OPS-10',
@@ -178,15 +180,16 @@ describe('registry — quyền', () => {
     const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen.length > 0)
       .map((r) => r.id)
       .sort();
-    expect(withOwnerWhen).toEqual(['GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08', 'WRK-03', 'WRK-05']);
-    const wrk03 = routeById('WRK-03');
-    const wrk05 = routeById('WRK-05');
+    expect(withOwnerWhen).toEqual(['GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08']);
     const ops03 = routeById('OPS-03');
-    expect(wrk03 && requiredAccess(wrk03, { body: { purpose: 'owner_change' } })).toBe('O');
-    expect(wrk03 && requiredAccess(wrk03, { body: { purpose: 'allowlist' } })).toBe('A');
-    expect(wrk05 && requiredAccess(wrk05, { body: { asOwner: true } })).toBe('O');
-    expect(wrk05 && requiredAccess(wrk05, { body: { asOwner: false } })).toBe('A');
-    expect(wrk05 && requiredAccess(wrk05, { body: {} })).toBe('A');
+    // Telegram allowlist (H2): thêm người = nới ⇒ cả WRK-03 và WRK-05 là O không điều kiện; WRK-05 không còn body `asOwner`.
+    for (const id of ['WRK-03', 'WRK-05']) {
+      expect(routeById(id)?.auth, id).toBe('O');
+      expect(routeById(id)?.ownerWhen, id).toEqual([]);
+    }
+    expect(routeById('WRK-05')?.request.body).toBeUndefined();
+    expect(routeById('WRK-04')?.auth).toBe('A');
+    expect(routeById('WRK-06')?.auth).toBe('A');
     // OPS-03: `backup.remote_anchor` chỉ owner (admin không ghi được); khoá chung vẫn A; khoá lạ ⇒ O (fail-closed).
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'backup.remote_anchor' } })).toBe('O');
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'purge.grace_days' } })).toBe('A');
@@ -304,12 +307,14 @@ describe('registry — route ghi chính sách truy cập (egress_rules / tool_gr
         true,
       );
     // golden: thêm / bớt route ghi chính sách phải sửa test có chủ đích
-    expect(writers.map((r) => r.id).sort()).toEqual(['GW-29', 'GW-31', 'OPS-07', 'OPS-08']);
+    expect(writers.map((r) => r.id).sort()).toEqual(['GW-29', 'GW-31', 'OPS-07', 'OPS-08', 'WRK-03', 'WRK-05']);
     expect(writers.map((r) => `${r.id}:${r.writesAccessPolicy.join(',')}`).sort()).toEqual([
       'GW-29:tool_grants',
       'GW-31:tool_grants',
       'OPS-07:egress_rules',
       'OPS-08:egress_rules',
+      'WRK-03:telegram_allowlist',
+      'WRK-05:telegram_allowlist',
     ]);
   });
 });

@@ -50,7 +50,7 @@ export type OwnerWhen =
   | { rule: 'egress_loosen' };
 
 /** Bảng chính sách truy cập mà việc ghi có thể nới hàng rào (route ghi phải `O` hoặc có `ownerWhen`). */
-export const ACCESS_POLICY_TABLES = ['egress_rules', 'tool_grants'] as const;
+export const ACCESS_POLICY_TABLES = ['egress_rules', 'tool_grants', 'telegram_allowlist'] as const;
 export type AccessPolicyTable = (typeof ACCESS_POLICY_TABLES)[number];
 
 export interface RequestSpec {
