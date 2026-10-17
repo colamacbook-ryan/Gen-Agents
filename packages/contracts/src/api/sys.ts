@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { BOUNDS } from '../bounds.ts';
 import { EngineInstallStatus } from '../engine.ts';
 import { FIXED_CODES } from '../ids.ts';
 import { Anchor } from '../mcp.ts';
 import { TURN_REJECTIONS } from '../sessions.ts';
+import { ReadableAnchor } from './access.ts';
 import {
   AnyId,
   IanaTimezone,
@@ -25,6 +27,7 @@ import {
   Ulid,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok, sse } from './define.ts';
+import { Redacted } from './masking.ts';
 import {
   AccountSummary,
   ANCHOR_KINDS,
@@ -59,7 +62,7 @@ import { UiActionRow } from './ui-actions.ts';
 const sys = defineLane('L-SYS');
 
 /** Trần độ dài tin chat người dùng (SYS-19). */
-export const CHAT_TEXT_MAX = 20_000;
+export const CHAT_TEXT_MAX = BOUNDS.chatText;
 /** Trần tin trả về (AI có thể dài hơn tin người dùng). */
 export const CHAT_CONTENT_MAX = 65_536;
 export const ATTACHMENT_PURPOSES = ['chat', 'knowledge', 'avatar', 'skill_import'] as const;
@@ -447,7 +450,7 @@ export const SYS_17 = sys({
       roleRef: Ref('RL').optional(),
       screenRoute: str(200).optional(),
       // "Nhờ AI chỉnh" = intent `adjust`.
-      context: z.strictObject({ intent: z.literal('adjust'), anchors: z.array(Anchor).max(20) }).optional(),
+      context: z.strictObject({ intent: z.literal('adjust'), anchors: z.array(ReadableAnchor).max(20) }).optional(),
     }),
   },
   response: ok(ThreadRow),
@@ -526,7 +529,8 @@ export const SYS_19 = sys({
     headers: IdempotencyHeaders,
     body: z.strictObject({
       text: str(CHAT_TEXT_MAX, 1),
-      anchors: z.array(Anchor).max(20),
+      // ReadableAnchor: không ghim bản ghi US / SEC / BK vào chat (snapshot sẽ vào prompt model) — review bảo mật PR #7.
+      anchors: z.array(ReadableAnchor).max(20),
       attachmentRefs: z.array(Ref('AT')).max(10),
       screen: z.strictObject({
         route: str(200, 1),
@@ -607,7 +611,8 @@ export const SYS_23 = sys({
   path: '/anchors/resolve',
   auth: 'V',
   o4: 'blocked',
-  request: { query: z.strictObject({ anchor: Anchor }) },
+  // ReadableAnchor: không resolve ra bản ghi deny; prefix mức A (AL / TG…) dịch vụ kiểm bằng `effectiveReadAuth` (HANDLER-OBLIGATIONS #8).
+  request: { query: z.strictObject({ anchor: ReadableAnchor }) },
   response: ok(
     z.strictObject({
       state: z.enum(['ok', 'changed', 'gone']),
@@ -619,6 +624,7 @@ export const SYS_23 = sys({
       snapshot: str(16_384),
       snapshotHash: str(128, 1),
       version: Nat.nullable(),
+      redacted: Redacted,
     }),
   ),
   cli: ['REPL (in đích của ghim / Soi)'],
@@ -816,6 +822,7 @@ export const SYS_82 = sys({
 
 export const SYS_83 = sys({
   id: 'SYS-83',
+  scope: 'self',
   method: 'GET',
   path: '/notifications',
   auth: 'V',
@@ -839,6 +846,7 @@ export const SYS_83 = sys({
 
 export const SYS_84 = sys({
   id: 'SYS-84',
+  scope: 'self',
   method: 'POST',
   path: '/notifications/read',
   auth: 'V',

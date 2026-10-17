@@ -23,6 +23,7 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok } from './define.ts';
+import { Redacted } from './masking.ts';
 import {
   ACCOUNT_LOGIN_STATUSES,
   Budget,
@@ -252,6 +253,9 @@ export const SYS_36 = hr({
   cli: ['role delete'],
 });
 
+/** Toạ độ trên bản đồ tri thức: hữu hạn, trong ±1e6 (chặn 1e308 / số làm hỏng layout). */
+const Coord = z.number().min(-1_000_000).max(1_000_000);
+
 // ---------------------------------------------------------------- DNA, ký, revision (A1, A3)
 const DNA_TEXT_MAX = 20_000;
 
@@ -270,6 +274,7 @@ export const DnaRow = z.strictObject({
   tokenCount: Nat,
   version: Nat,
   isCore: z.boolean(),
+  redacted: Redacted,
 });
 
 export const SYS_37 = hr({
@@ -292,7 +297,7 @@ export const SYS_37 = hr({
           sections: list(
             z.strictObject({
               group: KeyStr,
-              items: list(z.strictObject({ key: str(128, 1), itemIndex: Nat, value: Json }), 200),
+              items: list(z.strictObject({ key: str(128, 1), itemIndex: Nat, value: Json, redacted: Redacted }), 200),
             }),
             64,
           ),
@@ -429,7 +434,8 @@ export const SYS_44 = hr({
   request: { params: z.strictObject({ positionRef: Ref('PS') }) },
   response: ok(PositionRow),
   cli: ['position'],
-  cliOnly: 'Position chỉ-đọc ở FS (DATABASE §6.1: cột Position GĐ2); không có màn riêng ở §3.11',
+  cliOnly:
+    'Position chưa có lưới ở Data Console (prefix PS có trong ENTITY_TYPES; chờ quyết định thêm khoá lưới `positions`); FS: cột Position GĐ2',
 });
 
 export const SYS_45 = hr({
@@ -437,6 +443,12 @@ export const SYS_45 = hr({
   method: 'PATCH',
   path: '/positions/{positionRef}',
   auth: 'A',
+  // Đặt / đổi / gỡ hạn mức (`dailyTokenQuota`) và trần thưởng (`rewardCapMinor`) là NỚI hàng rào ⇒ owner (Gen, fail-closed).
+  // `present`: khoá có mặt (kể cả `null` = gỡ trần). Sửa `title` / `jd` / `kpi` / `heartbeat` vẫn A.
+  ownerWhen: [
+    { in: 'body', field: 'dailyTokenQuota', present: true },
+    { in: 'body', field: 'rewardCapMinor', present: true },
+  ],
   o4: 'blocked',
   request: {
     params: z.strictObject({ positionRef: Ref('PS') }),
@@ -452,7 +464,8 @@ export const SYS_45 = hr({
   response: ok(PositionRow),
   errors: ['db.*'],
   cli: ['position set'],
-  cliOnly: 'Position chỉ-đọc ở FS (DATABASE §6.1: cột Position GĐ2); không có màn riêng ở §3.11',
+  cliOnly:
+    'Position chưa có lưới ở Data Console (prefix PS có trong ENTITY_TYPES; chờ quyết định thêm khoá lưới `positions`); FS: cột Position GĐ2',
 });
 
 // ---------------------------------------------------------------- Instructions, Skills, Knowledge (A2 Bảng)
@@ -679,6 +692,7 @@ export const KnowledgeRow = z.strictObject({
   lastRecalledAt: Ts.nullable(),
   recallCount: Nat,
   category: IdOf('TX').nullable(),
+  redacted: Redacted,
 });
 
 export const SYS_54 = hr({
@@ -848,7 +862,7 @@ export const SYS_62 = hr({
     params: z.strictObject({ roleRef: Ref('RL') }),
     body: z.strictObject({
       kind: z.enum(['skills', 'knowledge']),
-      positions: z.array(z.strictObject({ ref: Ref(['SK', 'KN']), x: z.number(), y: z.number() })).max(2000),
+      positions: z.array(z.strictObject({ ref: Ref(['SK', 'KN']), x: Coord, y: Coord })).max(2000),
     }),
   },
   response: noContent(),
@@ -1153,9 +1167,11 @@ export const SYS_78 = hr({
   method: 'POST',
   path: '/cards/{cardRef}/resume',
   auth: 'A',
-  o4: 'open',
+  // Review bảo mật PR #7 (M5): suspend là công tắc dừng nên mở khi recovery; resume khởi động lại container có credential
+  // ⇒ KHÔNG mở khi `mode = recovery` (423 recovery.blocked). Muốn nối lại trong sự cố: gỡ sự cố trước (CLI `emergency`).
+  o4: 'blocked',
   request: { params: z.strictObject({ cardRef: Ref('CD') }) },
-  // `suspended → issued`; guard O4 không chặn.
+  // `suspended → issued`.
   response: ok(CardRow),
   cli: ['card resume', 'emergency'],
 });

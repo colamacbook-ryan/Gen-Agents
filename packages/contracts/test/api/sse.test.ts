@@ -214,16 +214,17 @@ describe('ui_actions §3.8 (Soi)', () => {
     expect(UiActionRow.safeParse({ ...row, payload: otherPayload }).success).toBe(false);
   });
 
-  it('tham số dùng lại ToolArgs (không định nghĩa trùng); propose_edit chỉ siết newValue có trần', () => {
+  it('tham số dùng lại NGUYÊN ToolArgs (không định nghĩa trùng)', () => {
     expect(UiActionArgs.highlight).toBe(ToolArgs.highlight);
     expect(UiActionArgs.navigate).toBe(ToolArgs.navigate);
     expect(UiActionArgs.annotate).toBe(ToolArgs.annotate);
     expect(UiActionArgs.tour).toBe(ToolArgs.tour);
-    expect(UiActionArgs.propose_edit).not.toBe(ToolArgs.propose_edit);
+    // propose_edit.newValue đã là JSON có trần ở chính ToolArgs (fix M0): cùng trần cho gateway và replay.
+    expect(UiActionArgs.propose_edit).toBe(ToolArgs.propose_edit);
     expect(UiActionArgs.propose_edit.safeParse({ anchor: base.anchor, newValue: 'x'.repeat(16_385) }).success).toBe(
       false,
     );
-    expect(ToolArgs.propose_edit.safeParse({ anchor: base.anchor, newValue: 'x'.repeat(16_385) }).success).toBe(true);
+    expect(ToolArgs.propose_edit.safeParse({ anchor: base.anchor, newValue: 'x'.repeat(16_385) }).success).toBe(false);
   });
 
   it('propose_edit BẮT BUỘC có change set (tạo trước); hành động khác không có change set', () => {

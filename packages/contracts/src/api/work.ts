@@ -24,6 +24,7 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok } from './define.ts';
+import { Redacted } from './masking.ts';
 import { EngineSlug, I18nParams, LEDGER_ENTRY_TYPES, ROLE_RUNTIMES, TgUserId } from './shapes.ts';
 
 // L-WORK — Telegram, chủ động, việc, kinh tế (₲), Polaris, Trọng thương, Brain (BACKEND-TRIAL §3.5: 43 route).
@@ -161,14 +162,17 @@ export const WRK_03 = work({
   id: 'WRK-03',
   method: 'POST',
   path: '/telegram/bots/{botRef}/captures',
-  auth: 'A',
-  ownerWhen: { in: 'body', field: 'purpose', equals: 'owner_change' },
+  // Mở cửa sổ bắt user ID để THÊM người vào allowlist (kể cả đổi chủ) = NỚI ai được ra lệnh cho bot ⇒ owner (Gen, fail-closed).
+  // `purpose` được dịch vụ LƯU phía máy chủ cùng cửa sổ; WRK-05 đọc lại từ đó (HANDLER-OBLIGATIONS #3), không tin client.
+  // WRK-04 (xem trạng thái) và WRK-06 (huỷ) giữ A: chỉ đọc / siết.
+  auth: 'O',
+  writesAccessPolicy: ['telegram_allowlist'],
   o4: 'blocked',
   request: {
     params: z.strictObject({ botRef: Ref('TG') }),
     body: z.strictObject({ purpose: z.enum(['allowlist', 'owner_change']) }),
   },
-  // Cửa sổ 5 phút; rồi SSE `telegram.capture`. `owner_change` chỉ owner (`auth.forbidden`).
+  // Cửa sổ 5 phút; rồi SSE `telegram.capture`. Bot phải thuộc cùng workspace (HANDLER-OBLIGATIONS #1, #3).
   response: ok(z.strictObject({ captureId: OpaqueId, expiresAt: Ts })),
   cli: ['telegram connect', 'telegram allow', 'telegram owner-change'],
 });
@@ -195,11 +199,14 @@ export const WRK_05 = work({
   id: 'WRK-05',
   method: 'POST',
   path: '/telegram/captures/{captureId}/confirm',
-  auth: 'A',
-  ownerWhen: { in: 'body', field: 'asOwner', equals: true },
+  // Xác nhận thêm người vào allowlist = NỚI ⇒ owner. KHÔNG có body: trước đây `asOwner` do client gửi chỉ dùng để nâng quyền
+  // nên đã bỏ. Dịch vụ BẮT BUỘC đọc `capture.purpose` ĐÃ LƯU phía máy chủ (allowlist | owner_change) để quyết hành vi — không
+  // bao giờ từ request; `captureId` phải thuộc đúng workspace và đúng bot (HANDLER-OBLIGATIONS #3).
+  auth: 'O',
+  writesAccessPolicy: ['telegram_allowlist'],
   o4: 'blocked',
-  request: { params: CaptureId, body: z.strictObject({ asOwner: z.boolean().optional() }) },
-  // `owner_change`: thêm hàng owner mới, bot gửi mã 6 chữ số (hạn 10 phút).
+  request: { params: CaptureId },
+  // `owner_change`: thêm hàng owner mới, bot gửi mã 6 chữ số (hạn 10 phút; xác minh ở WRK-07).
   response: ok(
     z.strictObject({
       allowlist: IdOf('AL'),
@@ -263,6 +270,7 @@ export const WRK_09 = work({
   id: 'WRK-09',
   method: 'DELETE',
   path: '/telegram/allowlist/{allowlistRef}',
+  // GỠ người khỏi allowlist = siết ⇒ A (mở cả khi recovery, dùng cho `emergency`); vì vậy KHÔNG gắn `writesAccessPolicy`.
   auth: 'A',
   o4: 'open',
   request: { params: z.strictObject({ allowlistRef: Ref('AL') }) },
@@ -332,7 +340,10 @@ export const WRK_11 = work({
   id: 'WRK-11',
   method: 'PUT',
   path: '/roles/{roleRef}/proactive',
-  auth: 'A',
+  // Đặt trần tin chủ động / giờ im lặng / loại trigger = NỚI trần ⇒ owner (Gen, fail-closed). Hợp đồng không tách được "chỉ giảm"
+  // khỏi "tăng" (so với `maxPerDay` đã lưu) nên cả route là O; WRK-14 tách riêng để admin vẫn TẮT được.
+  auth: 'O',
+  writesAccessPolicy: ['proactive_policies'],
   o4: 'blocked',
   request: {
     params: RoleParams,
@@ -354,7 +365,9 @@ export const WRK_12 = work({
   id: 'WRK-12',
   method: 'POST',
   path: '/roles/{roleRef}/proactive/reset',
-  auth: 'A',
+  // Về mặc định `proactive.defaults` có thể NỚI trần so với chính sách đang đặt ⇒ owner.
+  auth: 'O',
+  writesAccessPolicy: ['proactive_policies'],
   o4: 'blocked',
   request: { params: RoleParams },
   // Về mặc định `proactive.defaults`.
@@ -378,7 +391,11 @@ export const WRK_14 = work({
   id: 'WRK-14',
   method: 'PUT',
   path: '/roles/{roleRef}/proactive/enabled',
+  // TẮT (`enabled = false`) là siết ⇒ A (mở cả khi recovery, dùng cho `emergency`); BẬT (`enabled = true`) là nới ⇒ O.
+  // Dịch vụ: khi `mode = recovery` CHỈ chấp nhận `enabled = false` (HANDLER-OBLIGATIONS #4).
   auth: 'A',
+  ownerWhen: { in: 'body', field: 'enabled', equals: true },
+  writesAccessPolicy: ['proactive_policies'],
   o4: 'open',
   request: { params: RoleParams, body: z.strictObject({ enabled: z.boolean() }) },
   response: ok(PolicyResult),
@@ -488,7 +505,6 @@ export const WRK_19 = work({
   response: ok(TaskRow),
   errors: ['db.check_failed'],
   cli: ['task verify'],
-  cliOnly: 'xác minh việc chưa có màn riêng ở §3.11 (menu `⋯` của Việc: WRK-16…18)',
 });
 
 export const WRK_20 = work({
@@ -684,7 +700,6 @@ export const WRK_26 = work({
   response: ok(z.strictObject({ entry: IdOf('LG') })),
   errors: ['db.ledger_rule'],
   cli: ['reverse'],
-  cliOnly: 'đảo bút toán chưa có màn riêng ở §3.11',
 });
 
 // ---------------------------------------------------------------- WRK-27…33 Polaris, Trọng thương, bảng xếp hạng
@@ -904,6 +919,7 @@ const MemoryRow = z.strictObject({
   createdAt: Ts,
   lastRecalledAt: Ts.nullable(),
   recallCount: Nat,
+  redacted: Redacted,
 });
 const MemoryParams = z.strictObject({ memoryRef: Ref('MM') });
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS } from './bounds.ts';
 import { AUTH_METHODS, ENGINES_ROOT, EngineInstallStatus } from './engine.ts';
 import { ULID_RE } from './ids.ts';
 import {
@@ -8,6 +9,7 @@ import {
   LOGIN_EXEC,
   LoginCheckBundle,
   PROBE_EXEC,
+  RUNNER_STDOUT_LINE_MAX_CHARS,
   type RunnerCommand,
 } from './runner.ts';
 
@@ -108,7 +110,8 @@ export const EnsureContainerResponse = z.strictObject({
   container: ContainerRef,
   observed: ObservedState,
   /** IP trên mạng ga-roles — gateway kiểm IP nguồn của vé lượt (§B.3). */
-  rolesNetworkIp: z.string().nullable(),
+  // IPv4 / IPv6 (≤ 45 ký tự).
+  rolesNetworkIp: z.string().max(45).nullable(),
 });
 
 // ---------------------------------------------------------------- exec headless (lượt, kiểm đăng nhập, quét khả năng)
@@ -155,16 +158,21 @@ export function execStdinPayload(run: ExecRun): string {
 
 /** Khung NDJSON trả về từ POST /rpc/v1/exec (luồng). stdout đã đi qua bộ lọc che bí mật ở ga-runner. */
 export const ExecFrame = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('stdout'), data: z.string() }),
-  z.strictObject({ type: z.literal('stderr'), data: z.string() }),
+  // Một khung = một dòng stdout / stderr đã bọc: trần = trần dòng stdout của giao thức runner.
+  z.strictObject({ type: z.literal('stdout'), data: z.string().max(RUNNER_STDOUT_LINE_MAX_CHARS) }),
+  z.strictObject({ type: z.literal('stderr'), data: z.string().max(RUNNER_STDOUT_LINE_MAX_CHARS) }),
   z.strictObject({
     type: z.literal('exit'),
     exitCode: z.number().int().nullable(),
-    signal: z.string().nullable(),
+    signal: z.string().max(BOUNDS.signal).nullable(),
     timedOut: z.boolean(),
     durationMs: z.number().int().nonnegative(),
   }),
-  z.strictObject({ type: z.literal('error'), code: z.string(), message: z.string() }),
+  z.strictObject({
+    type: z.literal('error'),
+    code: z.string().max(BOUNDS.code),
+    message: z.string().max(BOUNDS.message),
+  }),
 ]);
 export type ExecFrame = z.infer<typeof ExecFrame>;
 
@@ -217,23 +225,25 @@ export const DesiredContainer = z.strictObject({
   desired: DesiredState,
   authVolumes: z.array(AuthVolumeName).max(64),
 });
-export const ReconcileRequest = z.strictObject({ desired: z.array(DesiredContainer) });
+export const ReconcileRequest = z.strictObject({ desired: z.array(DesiredContainer).max(BOUNDS.mediumList) });
 export const ReconcileReport = z.strictObject({
-  items: z.array(
-    z.strictObject({
-      container: ContainerRef,
-      desired: DesiredState,
-      observed: ObservedState,
-      action: z.enum(['none', 'created', 'started', 'stopped', 'removed', 'failed']),
-      error: z.string().nullable(),
-    }),
-  ),
+  items: z
+    .array(
+      z.strictObject({
+        container: ContainerRef,
+        desired: DesiredState,
+        observed: ObservedState,
+        action: z.enum(['none', 'created', 'started', 'stopped', 'removed', 'failed']),
+        error: z.string().max(BOUNDS.message).nullable(),
+      }),
+    )
+    .max(BOUNDS.mediumList),
 });
 export const SupervisorStatus = z.strictObject({
-  version: z.string(),
+  version: z.string().max(BOUNDS.version),
   dockerReachable: z.boolean(),
-  templates: z.array(ContainerTemplate),
-  containers: z.array(z.strictObject({ container: ContainerRef, observed: ObservedState })),
+  templates: z.array(ContainerTemplate).max(BOUNDS.smallList),
+  containers: z.array(z.strictObject({ container: ContainerRef, observed: ObservedState })).max(BOUNDS.mediumList),
 });
 
 /** Bề mặt RPC (ga-app gọi qua supervisor-client). Mỗi phương thức một POST dưới SUPERVISOR_RPC.basePath. */
@@ -293,7 +303,7 @@ export const TermTicketClaims = z.strictObject({
   guiSessionHash: z.string().regex(/^[0-9a-f]{64}$/),
   /** epoch giây */
   exp: z.number().int().positive(),
-  nonce: z.string().min(16),
+  nonce: z.string().min(16).max(128),
 });
 export type TermTicketClaims = z.infer<typeof TermTicketClaims>;
 

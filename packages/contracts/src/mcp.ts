@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS, BoundedJson } from './bounds.ts';
 import { ENTITY_TYPES, type EntityPrefix } from './ids.ts';
 import { CERTAINTY_LEVELS } from './sessions.ts';
 
@@ -89,30 +90,37 @@ export const Anchor = z
 
 export const PinnedAnchor = z.strictObject({
   anchor: Anchor,
-  entity: z.string().min(1),
+  entity: z.string().min(1).max(BOUNDS.name),
   /** display_id của hàng (vd SK-0004). */
-  id: z.string().min(1),
-  column: z.string().nullable(),
-  label: z.string(),
+  id: z.string().min(1).max(BOUNDS.displayId),
+  column: z.string().max(BOUNDS.name).nullable(),
+  label: z.string().max(200),
   /** Đã cắt theo ngân sách token. */
-  snapshot: z.string(),
-  snapshotHash: z.string().min(1),
+  snapshot: z.string().max(16_384),
+  snapshotHash: z.string().min(1).max(128),
   version: z.number().int().nonnegative().nullable(),
 });
 export type PinnedAnchor = z.infer<typeof PinnedAnchor>;
 
 export const PinPayload = z.strictObject({
-  text: z.string(),
+  text: z.string().max(BOUNDS.chatText),
   screen: z.strictObject({
-    route: z.string(),
-    role: z.string().nullable(),
-    tab: z.string().nullable(),
-    filters: z.string().nullable(),
+    route: z.string().max(200),
+    role: z.string().max(BOUNDS.displayId).nullable(),
+    tab: z.string().max(64).nullable(),
+    filters: z.string().max(500).nullable(),
   }),
-  anchors: z.array(PinnedAnchor),
-  attachments: z.array(
-    z.strictObject({ id: z.string(), name: z.string(), mime: z.string(), size: z.number().int().nonnegative() }),
-  ),
+  anchors: z.array(PinnedAnchor).max(20),
+  attachments: z
+    .array(
+      z.strictObject({
+        id: z.string().max(26),
+        name: z.string().max(255),
+        mime: z.string().max(127),
+        size: z.number().int().nonnegative(),
+      }),
+    )
+    .max(10),
 });
 export type PinPayload = z.infer<typeof PinPayload>;
 
@@ -141,12 +149,12 @@ export const ToolArgs = {
     scope: z.enum(['personal', 'position']),
   }),
   set_field: z.strictObject({
-    field: z.string().min(1),
+    field: z.string().min(1).max(BOUNDS.name),
     itemIndex: z.number().int().min(0).default(0),
-    value: z.json(),
+    value: BoundedJson,
   }),
   report_task: z.strictObject({
-    taskId: z.string().nullable(),
+    taskId: z.string().max(26).nullable(),
     status: z.enum(['done', 'failed', 'blocked', 'waiting_approval']),
     summary: z.string().max(4000),
     /** Role tự khai chưa chắc (nguồn chat_messages.certainty / avatar 'unsure', G-13). */
@@ -157,12 +165,15 @@ export const ToolArgs = {
    * chat_id / username từ Role (review tay M0, LOW: không định tuyến bằng chuỗi tự do).
    */
   send_telegram: z.strictObject({ chatRef: z.string().regex(/^AL-\d{4,8}$/), text: z.string().min(1).max(4096) }),
-  propose_change: z.strictObject({ title: z.string().min(1).max(200), items: z.array(z.json()).min(1) }),
+  propose_change: z.strictObject({
+    title: z.string().min(1).max(200),
+    items: z.array(BoundedJson).min(1).max(BOUNDS.smallList),
+  }),
   highlight: z.strictObject({ anchor: Anchor, label: z.string().max(120).nullable() }),
   navigate: z.strictObject({ anchor: Anchor }),
   annotate: z.strictObject({ anchor: Anchor, note: z.string().max(500), n: z.number().int().min(1).max(20) }),
   tour: z.strictObject({ anchors: z.array(Anchor).min(1).max(20) }),
-  propose_edit: z.strictObject({ anchor: Anchor, newValue: z.json() }),
+  propose_edit: z.strictObject({ anchor: Anchor, newValue: BoundedJson }),
 } as const satisfies Record<McpToolName, z.ZodType>;
 
 /**
@@ -192,6 +203,9 @@ function isStrictString(def: ZodDef): boolean {
  * unknown, lazy, transform… Rỗng ⇒ schema chặt.
  */
 export function freeFormFields(schema: z.ZodType, path = '$'): string[] {
+  // JSON tự do CÓ TRẦN (`BoundedJson`, thay z.json()) vẫn là trường tự do về NGỮ NGHĨA (hình dạng do tầng dịch vụ kiểm): nhận
+  // theo định danh, không đi vào các nhánh union bên trong.
+  if (schema === BoundedJson) return [path];
   const def = defOf(schema);
   switch (def.type) {
     case 'string':
@@ -850,13 +864,13 @@ export function credentialBlockedAudit(tool: string, patternId: string): Credent
 }
 
 export const ToolResult = z.discriminatedUnion('status', [
-  z.strictObject({ status: z.literal('ok'), data: z.json() }),
+  z.strictObject({ status: z.literal('ok'), data: BoundedJson }),
   z.strictObject({
     status: z.literal('denied'),
     code: z.enum(TOOL_DENIAL_CODES),
-    auditDisplayId: z.string().nullable(),
+    auditDisplayId: z.string().max(BOUNDS.displayId).nullable(),
   }),
-  z.strictObject({ status: z.literal('error'), message: z.string() }),
+  z.strictObject({ status: z.literal('error'), message: z.string().max(BOUNDS.message) }),
 ]);
 export type ToolResult = z.infer<typeof ToolResult>;
 

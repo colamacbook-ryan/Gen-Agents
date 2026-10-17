@@ -3,7 +3,7 @@ import { isSettingKey, settingWritableBy } from '../settings.ts';
 import { AUTH_ROUTES } from './auth.ts';
 import { ALL_ERROR_CODES, API_BASE, COMMON_ERROR_CODES, type ErrorCode, type RouteErrorCode } from './common.ts';
 import { fsOf } from './coverage.ts';
-import type { AuthLevel, Route, RouteDraft } from './define.ts';
+import type { AuthLevel, OwnerWhen, Route, RouteDraft } from './define.ts';
 import { GW_ROUTES } from './gw.ts';
 import { HR_ROUTES } from './hr.ts';
 import { OPS_ROUTES } from './ops.ts';
@@ -13,7 +13,7 @@ import { WORK_ROUTES } from './work.ts';
 export * from './define.ts';
 
 // Registry route (BACKEND-TRIAL §3.1): MỘT nguồn cho edge (quyền, CSRF, RecoveryGuard), CLI, frontend và contract test.
-// 196 route M2 (SYS 85 = L-SYS 35 + L-HR 50, GW 32, WRK 43, OPS 36) + 5 route có chủ ở M1 (EXT-01…05, L-SEC / L-RT).
+// 197 route M2 (SYS 85 = L-SYS 35 + L-HR 50, GW 32, WRK 43, OPS 37 — OPS-37 locate do round 4) + 5 route có chủ ở M1 (EXT-01…05, L-SEC / L-RT).
 
 const DRAFTS: readonly RouteDraft[] = [
   ...AUTH_ROUTES,
@@ -27,7 +27,7 @@ const DRAFTS: readonly RouteDraft[] = [
 /** Mọi route. `fs` dẫn xuất từ bảng độ phủ §3.11 (`coverage.ts`). */
 export const ROUTES: readonly Route[] = DRAFTS.map((d) => ({ ...d, fs: fsOf(d.id) }));
 
-/** 196 route M2 (không gồm EXT-01…05 đã có chủ ở M1). */
+/** 197 route M2 (không gồm EXT-01…05 đã có chủ ở M1). */
 export const M2_ROUTES: readonly Route[] = ROUTES.filter((r) => !r.id.startsWith('EXT-'));
 
 const BY_ID = new Map(ROUTES.map((r) => [r.id, r] as const));
@@ -46,7 +46,14 @@ export function requestSchemaOf(route: Pick<Route, 'request'>): z.ZodType {
   if (r.query) shape.query = r.query;
   if (r.headers) shape.headers = r.headers;
   if (r.body) shape.body = r.body;
-  return z.strictObject(shape);
+  const refine = r.refine;
+  if (!refine) return z.strictObject(shape);
+  return z.strictObject(shape).superRefine((value, ctx) => {
+    const v = value as { params?: Record<string, unknown>; query?: Record<string, unknown>; body?: unknown };
+    for (const message of refine({ params: v.params ?? {}, query: v.query ?? {}, body: v.body })) {
+      ctx.addIssue({ code: 'custom', message });
+    }
+  });
 }
 
 /** Schema của response JSON (`null` nếu route trả 204 / luồng / tệp). */
@@ -117,27 +124,40 @@ export function expandRouteErrors(codes: readonly RouteErrorCode[]): ErrorCode[]
   return [...out];
 }
 
-const LEVEL_RANK: Record<AuthLevel, number> = { public: 0, V: 1, A: 2, O: 3 };
-export function authAtLeast(have: AuthLevel, need: AuthLevel): boolean {
-  return LEVEL_RANK[have] >= LEVEL_RANK[need];
+/** Trạng thái ĐÃ LƯU của đối tượng đích (dịch vụ tra DB theo ref, cùng workspace) — dùng cho `ownerWhen` theo chiều thay đổi. */
+export interface StoredState {
+  /** `egress_rules.action` của luật bị xoá (OPS-08). */
+  egressAction?: 'allow' | 'deny';
+}
+
+function ownerWhenMatches(
+  w: OwnerWhen,
+  req: { params?: Record<string, unknown>; body?: unknown; query?: unknown; stored?: StoredState },
+): boolean {
+  if ('rule' in w) {
+    if (w.rule === 'setting_writers') {
+      const key = req.params?.settingKey;
+      // Khoá lạ ⇒ coi như chỉ owner (fail-closed); dịch vụ trả 404 sau.
+      return typeof key !== 'string' || !isSettingKey(key) || !settingWritableBy(key, 'admin');
+    }
+    // egress_loosen: chỉ xoá luật `allow` (siết) mới ở mức A; `deny` hoặc không rõ ⇒ O.
+    return req.stored?.egressAction !== 'allow';
+  }
+  const source = (w.in === 'body' ? req.body : req.query) as Record<string, unknown> | undefined;
+  if (source === undefined || source === null || typeof source !== 'object') return false;
+  const value = source[w.field];
+  if ('present' in w) return value !== undefined;
+  if ('equalsAny' in w) return w.equalsAny.some((x) => x === value);
+  return value === w.equals;
 }
 
 /**
- * Quyền THỰC SỰ cần cho một request: `auth` của route, nâng lên `O` khi `ownerWhen` khớp (vd WRK-03 `purpose = owner_change`,
- * WRK-05 `asOwner = true`, OPS-03 khoá admin không ghi được). Gọi SAU khi parse request.
+ * Quyền THỰC SỰ cần cho một request: `auth` của route, nâng lên `O` khi BẤT KỲ `ownerWhen` nào khớp (vd OPS-07 `action = allow`,
+ * GW-31 `mode ∈ {allow, ask}`, OPS-03 khoá admin không ghi được, OPS-08 xoá luật `deny`). Gọi SAU khi parse request.
  */
 export function requiredAccess(
   route: Pick<Route, 'auth' | 'ownerWhen'>,
-  req: { params?: Record<string, unknown>; body?: unknown; query?: unknown },
+  req: { params?: Record<string, unknown>; body?: unknown; query?: unknown; stored?: StoredState },
 ): AuthLevel {
-  const w = route.ownerWhen;
-  if (!w) return route.auth;
-  if ('rule' in w) {
-    const key = req.params?.settingKey;
-    // Khoá lạ ⇒ coi như chỉ owner (fail-closed); dịch vụ trả 404 sau.
-    if (typeof key !== 'string' || !isSettingKey(key)) return 'O';
-    return settingWritableBy(key, 'admin') ? route.auth : 'O';
-  }
-  const source = (w.in === 'body' ? req.body : req.query) as Record<string, unknown> | undefined;
-  return source !== undefined && source !== null && source[w.field] === w.equals ? 'O' : route.auth;
+  return route.ownerWhen.some((w) => ownerWhenMatches(w, req)) ? 'O' : route.auth;
 }

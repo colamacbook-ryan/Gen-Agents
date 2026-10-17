@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { collectNodes, defOf } from '../../src/api/introspect.ts';
 import {
   ALL_ERROR_CODES,
   API_ERROR_CODES,
@@ -33,22 +34,22 @@ const ids = (...parts: string[]) =>
   });
 
 describe('registry — số lượng và định danh', () => {
-  it('201 route = 196 M2 + 5 EXT; đúng số route mỗi lane', () => {
-    expect(ROUTES.length).toBe(201);
-    expect(M2_ROUTES.length).toBe(196);
+  it('202 route = 197 M2 (196 theo đặc tả + OPS-37 locate của round 4) + 5 EXT; đúng số route mỗi lane', () => {
+    expect(ROUTES.length).toBe(202);
+    expect(M2_ROUTES.length).toBe(197);
     const count = (lane: string) => ROUTES.filter((r) => r.lane === lane).length;
     expect(count('L-SYS')).toBe(35);
     expect(count('L-HR')).toBe(50);
     expect(count('L-GW')).toBe(32);
     expect(count('L-WORK')).toBe(43);
-    expect(count('L-OPS')).toBe(36);
+    expect(count('L-OPS')).toBe(37);
     expect(count('L-SEC')).toBe(4);
     expect(count('L-RT')).toBe(1);
     expect(LANES.length).toBe(7);
   });
 
-  it('đủ mọi ID của đặc tả: SYS-01…85, GW-01…32, WRK-01…43, OPS-01…36, EXT-01…05', () => {
-    const want = [...ids('SYS-01..85', 'GW-01..32', 'WRK-01..43', 'OPS-01..36', 'EXT-01..05')];
+  it('đủ mọi ID của đặc tả: SYS-01…85, GW-01…32, WRK-01…43, OPS-01…37, EXT-01…05', () => {
+    const want = [...ids('SYS-01..85', 'GW-01..32', 'WRK-01..43', 'OPS-01..37', 'EXT-01..05')];
     expect([...ROUTES.map((r) => r.id)].sort()).toEqual([...want].sort());
   });
 
@@ -123,7 +124,7 @@ describe('registry — tham số đường dẫn, method, body', () => {
       ROUTES.filter((r) => r.noCli)
         .map((r) => r.id)
         .sort(),
-    ).toEqual(['SYS-62', 'WRK-04']);
+    ).toEqual(['OPS-37', 'SYS-62', 'WRK-04']);
     expect(routeById('SYS-62')?.pendingDb).toBe(true);
     expect(ROUTES.filter((r) => r.pendingDb).map((r) => r.id)).toEqual(['SYS-62']);
   });
@@ -149,7 +150,9 @@ describe('registry — quyền', () => {
       'SYS-11',
       'SYS-36',
       'SYS-79',
-      // GW-07, GW-08: nâng từ A lên O (rà soát bảo mật 2026-10-17); GW-11…14 theo đặc tả.
+      // GW-07, GW-08: nâng từ A lên O (rà soát bảo mật 2026-10-17); GW-11…14 theo đặc tả; GW-03/04, OPS-14: mọi update / pin = owner.
+      'GW-03',
+      'GW-04',
       'GW-07',
       'GW-08',
       'GW-11',
@@ -157,10 +160,15 @@ describe('registry — quyền', () => {
       'GW-13',
       'GW-14',
       'WRK-02',
+      'WRK-03',
+      'WRK-05',
       'WRK-07',
       'WRK-08',
+      'WRK-11',
+      'WRK-12',
       'OPS-10',
       'OPS-11',
+      'OPS-14',
       'OPS-15',
       'OPS-30',
       'OPS-31',
@@ -174,23 +182,68 @@ describe('registry — quyền', () => {
   });
 
   it('ownerWhen: trường tồn tại trong request; requiredAccess nâng lên O đúng lúc', () => {
-    const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen)
+    const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen.length > 0)
       .map((r) => r.id)
       .sort();
-    expect(withOwnerWhen).toEqual(['OPS-03', 'WRK-03', 'WRK-05']);
-    const wrk03 = routeById('WRK-03');
-    const wrk05 = routeById('WRK-05');
+    expect(withOwnerWhen).toEqual(['GW-10', 'GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08', 'SYS-45', 'WRK-14']);
     const ops03 = routeById('OPS-03');
-    expect(wrk03 && requiredAccess(wrk03, { body: { purpose: 'owner_change' } })).toBe('O');
-    expect(wrk03 && requiredAccess(wrk03, { body: { purpose: 'allowlist' } })).toBe('A');
-    expect(wrk05 && requiredAccess(wrk05, { body: { asOwner: true } })).toBe('O');
-    expect(wrk05 && requiredAccess(wrk05, { body: { asOwner: false } })).toBe('A');
-    expect(wrk05 && requiredAccess(wrk05, { body: {} })).toBe('A');
+    // Telegram allowlist (H2): thêm người = nới ⇒ cả WRK-03 và WRK-05 là O không điều kiện; WRK-05 không còn body `asOwner`.
+    for (const id of ['WRK-03', 'WRK-05']) {
+      expect(routeById(id)?.auth, id).toBe('O');
+      expect(routeById(id)?.ownerWhen, id).toEqual([]);
+    }
+    expect(routeById('WRK-05')?.request.body).toBeUndefined();
+    expect(routeById('WRK-04')?.auth).toBe('A');
+    expect(routeById('WRK-06')?.auth).toBe('A');
     // OPS-03: `backup.remote_anchor` chỉ owner (admin không ghi được); khoá chung vẫn A; khoá lạ ⇒ O (fail-closed).
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'backup.remote_anchor' } })).toBe('O');
-    expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'purge.grace_days' } })).toBe('A');
+    // H4: purge.grace_days nới hàng rào (giữ dữ liệu xoá) ⇒ owner; khoá thuần giao diện vẫn A.
+    expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'purge.grace_days' } })).toBe('O');
+    expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'ui.avatar_motion' } })).toBe('A');
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'no.such_key' } })).toBe('O');
     expect(ops03 && requiredAccess(ops03, {})).toBe('O');
+    // OPS-07: thêm luật `allow` (mở đường dữ liệu đi ra) = nới ⇒ O; thêm `deny` = siết ⇒ A.
+    const ops07 = routeById('OPS-07');
+    expect(ops07 && requiredAccess(ops07, { body: { action: 'allow' } })).toBe('O');
+    expect(ops07 && requiredAccess(ops07, { body: { action: 'deny' } })).toBe('A');
+    // GW-29 / GW-31 (tool grant): `allow` / `ask` = nới ⇒ O; `deny` = siết ⇒ A.
+    for (const id of ['GW-29', 'GW-31']) {
+      const r = routeById(id);
+      const field = id === 'GW-29' ? 'decision' : 'mode';
+      expect(r && requiredAccess(r, { body: { [field]: 'allow' } }), `${id} allow`).toBe('O');
+      expect(r && requiredAccess(r, { body: { [field]: 'ask' } }), `${id} ask`).toBe('O');
+      expect(r && requiredAccess(r, { body: { [field]: 'deny' } }), `${id} deny`).toBe('A');
+      expect(r && requiredAccess(r, { body: {} }), `${id} thiếu trường`).toBe('A');
+    }
+    // GW-10: BẬT binding (gắn credential vào container) = nới ⇒ O; tắt / đổi model / effort = A.
+    const gw10 = routeById('GW-10');
+    expect(gw10 && requiredAccess(gw10, { body: { enabled: true } })).toBe('O');
+    expect(gw10 && requiredAccess(gw10, { body: { enabled: false } })).toBe('A');
+    expect(gw10 && requiredAccess(gw10, { body: { modelKey: 'model-1', effort: 'high' } })).toBe('A');
+    expect(gw10 && requiredAccess(gw10, { body: { modelKey: 'model-1', enabled: true } })).toBe('O');
+    // GW-20: đo trên binding của Role (bindingRef), không còn accountRef tuỳ ý.
+    const gw20body = routeById('GW-20')?.request.body;
+    expect(gw20body?.safeParse({ bindingRef: 'EB-0001' }).success).toBe(true);
+    expect(gw20body?.safeParse({ accountRef: 'EN-0001' }).success).toBe(false);
+    expect(gw20body?.safeParse({}).success).toBe(true);
+    // SYS-45: đặt / gỡ hạn mức token và trần thưởng = nới ⇒ O; sửa tiêu đề / JD vẫn A. `null` (gỡ trần) cũng là nới.
+    const sys45 = routeById('SYS-45');
+    expect(sys45 && requiredAccess(sys45, { body: { dailyTokenQuota: 1000 } })).toBe('O');
+    expect(sys45 && requiredAccess(sys45, { body: { rewardCapMinor: 5 } })).toBe('O');
+    expect(sys45 && requiredAccess(sys45, { body: { rewardCapMinor: null } })).toBe('O');
+    expect(sys45 && requiredAccess(sys45, { body: { title: 'T', jd: 'x' } })).toBe('A');
+    expect(sys45 && requiredAccess(sys45, { body: { title: 'T', dailyTokenQuota: 0 } })).toBe('O');
+    // WRK-14: TẮT chính sách chủ động = siết ⇒ A; BẬT = nới ⇒ O. WRK-11 / WRK-12 (đặt / reset trần) là O không điều kiện.
+    const wrk14 = routeById('WRK-14');
+    expect(wrk14 && requiredAccess(wrk14, { body: { enabled: true } })).toBe('O');
+    expect(wrk14 && requiredAccess(wrk14, { body: { enabled: false } })).toBe('A');
+    expect(wrk14 && requiredAccess(wrk14, { body: {} })).toBe('A');
+    for (const id of ['WRK-11', 'WRK-12']) expect(routeById(id)?.auth, id).toBe('O');
+    // OPS-08: xoá luật `deny` = nới ⇒ O; xoá `allow` = siết ⇒ A; không biết luật đã lưu ⇒ O (fail-closed).
+    const ops08 = routeById('OPS-08');
+    expect(ops08 && requiredAccess(ops08, { stored: { egressAction: 'deny' } })).toBe('O');
+    expect(ops08 && requiredAccess(ops08, { stored: { egressAction: 'allow' } })).toBe('A');
+    expect(ops08 && requiredAccess(ops08, {})).toBe('O');
     // route không có ownerWhen: giữ nguyên.
     const sys15 = routeById('SYS-15');
     expect(sys15 && requiredAccess(sys15, { body: { purpose: 'owner_change' } })).toBe('A');
@@ -208,7 +261,7 @@ describe('registry — quyền', () => {
 
 describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
   const OPEN = [
-    ...ids('SYS-08..13', 'SYS-14', 'SYS-15', 'SYS-77', 'SYS-78', 'SYS-81..85', 'SYS-06'),
+    ...ids('SYS-08..13', 'SYS-14', 'SYS-15', 'SYS-77', 'SYS-81..85', 'SYS-06'),
     ...ids('GW-01', 'GW-02', 'GW-18', 'GW-25'),
     ...ids('WRK-09', 'WRK-14'),
     ...ids('OPS-01', 'OPS-12..16', 'OPS-19', 'OPS-20..25'),
@@ -241,6 +294,15 @@ describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
     for (const r of ROUTES) if (r.setupOnly) expect(r.recovery, r.id).toBe(false);
   });
 
+  it('suspend mở khi recovery (công tắc dừng), resume thì không (khởi động lại container có credential)', () => {
+    const suspend = routeById('SYS-77');
+    const resume = routeById('SYS-78');
+    expect(suspend?.recovery).toBe(true);
+    expect(resume?.recovery).toBe(false);
+    expect(resume && recoveryDecision(resume, { isCoreAgentAccount: true })).toBe('blocked');
+    expect(resume && recoveryDecision(resume, { isCoreAgentAccount: false })).toBe('blocked');
+  });
+
   it('recoveryDecision: ✗ luôn chặn; ✓ cho qua; ✓* chỉ với tài khoản Core agent', () => {
     const blocked = routeById('SYS-30');
     const open = routeById('SYS-08');
@@ -249,6 +311,64 @@ describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
     expect(open && recoveryDecision(open, { isCoreAgentAccount: false })).toBe('allow');
     expect(core && recoveryDecision(core, { isCoreAgentAccount: true })).toBe('allow');
     expect(core && recoveryDecision(core, { isCoreAgentAccount: false })).toBe('blocked');
+  });
+});
+
+describe('registry — ownerWhen khớp schema request', () => {
+  it('mỗi điều kiện ownerWhen dạng trường trỏ tới khoá CÓ THẬT; giá trị so sánh hợp lệ theo schema (enum / boolean)', () => {
+    let checked = 0;
+    for (const r of ROUTES) {
+      for (const w of r.ownerWhen) {
+        if ('rule' in w) continue;
+        const root = r.request[w.in];
+        expect(root, `${r.id}: ownerWhen.in = ${w.in} nhưng route không khai ${w.in}`).toBeDefined();
+        const nodes = collectNodes(root as never, w.in).filter((n) => n.key === w.field && n.type !== 'object');
+        expect(nodes.length, `${r.id}: ownerWhen.field ${w.field} không có trong ${w.in}`).toBeGreaterThan(0);
+        const values = 'equals' in w ? [w.equals] : 'equalsAny' in w ? [...w.equalsAny] : [];
+        for (const node of nodes) {
+          const def = defOf(node.schema);
+          for (const v of values) {
+            if (def.type === 'enum') expect(Object.values(def.entries as object), `${r.id}.${w.field}`).toContain(v);
+            else if (def.type === 'boolean') expect(typeof v, `${r.id}.${w.field}`).toBe('boolean');
+          }
+        }
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('registry — route ghi chính sách truy cập (egress_rules / tool_grants)', () => {
+  it('mọi route ghi egress_rules / tool_grants phải O hoặc có ownerWhen (chỉ phần SIẾT được ở mức A)', () => {
+    const writers = ROUTES.filter((r) => r.writesAccessPolicy.length > 0);
+    for (const r of writers)
+      expect(r.auth === 'O' || r.ownerWhen.length > 0, `${r.id} ghi chính sách truy cập mà ai cũng nới được`).toBe(
+        true,
+      );
+    // golden: thêm / bớt route ghi chính sách phải sửa test có chủ đích
+    expect(writers.map((r) => r.id).sort()).toEqual([
+      'GW-29',
+      'GW-31',
+      'OPS-07',
+      'OPS-08',
+      'WRK-03',
+      'WRK-05',
+      'WRK-11',
+      'WRK-12',
+      'WRK-14',
+    ]);
+    expect(writers.map((r) => `${r.id}:${r.writesAccessPolicy.join(',')}`).sort()).toEqual([
+      'GW-29:tool_grants',
+      'GW-31:tool_grants',
+      'OPS-07:egress_rules',
+      'OPS-08:egress_rules',
+      'WRK-03:telegram_allowlist',
+      'WRK-05:telegram_allowlist',
+      'WRK-11:proactive_policies',
+      'WRK-12:proactive_policies',
+      'WRK-14:proactive_policies',
+    ]);
   });
 });
 
