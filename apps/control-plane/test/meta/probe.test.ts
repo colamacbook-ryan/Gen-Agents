@@ -26,12 +26,10 @@ const field = (id: string, path: string) => {
 const probeWith = (handlers: readonly Handler[]) => makeProbe(makeTestApp({ handlers, world }));
 
 describe('checkCrossTenant đỏ / xanh đúng', () => {
-  it('prefix chưa có seeder (SYS-55 body.attachmentRefs[] — AT) ⇒ đỏ đúng thông điệp', async () => {
-    const p = probeWith([
-      defineHandler('SYS-55', () => ({ knowledge: [], job: { jobDisplayId: 'JB-0001', state: 'queued' } }) as never),
-    ]);
-    await expect(p.checkCrossTenant(route('SYS-55'), field('SYS-55', 'body.attachmentRefs[]'))).rejects.toThrow(
-      /chưa chứng minh chống IDOR cho AT/,
+  it('prefix chưa có seeder (SYS-56 params.knowledgeRef — KN) ⇒ đỏ đúng thông điệp', async () => {
+    const p = probeWith([defineHandler('SYS-56', () => ({}) as never)]);
+    await expect(p.checkCrossTenant(route('SYS-56'), field('SYS-56', 'params.knowledgeRef'))).rejects.toThrow(
+      /chưa chứng minh chống IDOR cho KN/,
     );
   });
 

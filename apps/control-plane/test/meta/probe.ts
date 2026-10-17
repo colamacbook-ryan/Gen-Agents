@@ -34,7 +34,17 @@ export function makeProbe(t: TestApp): Probe {
     if (cached && !fresh) return cached;
     const seeder = tk.CROSS_TENANT_SEEDERS[prefix];
     if (!seeder) return null;
-    const s = seeder({ world: t.world, tenant: t.world.tenants[tenant], seeded: new Map() });
+    // quan hệ cha–con: gieo cha TRƯỚC (đã cache) rồi truyền qua `seeded` — DN / IN / RV / AV thuộc đúng Role mà bộ kiểm
+    // dùng cho các trường Ref còn lại của cùng tenant (HANDLER-OBLIGATIONS #2)
+    const seeded = new Map<EntityPrefix, Seeded>();
+    if (!fresh) {
+      const parent = tk.SEEDER_PARENTS[prefix];
+      if (parent !== undefined) {
+        const p = seedFor(tenant, parent);
+        if (p) seeded.set(parent, p);
+      }
+    }
+    const s = seeder({ world: t.world, tenant: t.world.tenants[tenant], seeded });
     if (!fresh) cache.set(key, s);
     return s;
   };
@@ -96,6 +106,9 @@ export function makeProbe(t: TestApp): Probe {
       const mine = seedFor('A', prefix) as Seeded;
       const s = tk.sampleRequest(r, { refFor: refForTenant('A'), targetField: field, targetValue: mine.displayId });
       const ctl = await t.as(who).call(r.id, toInput(s));
+      // `confirm.mismatch` (400) chỉ ném SAU khi ref đã tra ra hàng của A ⇒ chính là bằng chứng "thấy được" (route ConfirmName
+      // không thể khớp tên Role seed bằng mẫu tối thiểu; khớp thật còn xoá luôn hàng dùng chung của các ca khác)
+      if (ctl.code === 'confirm.mismatch') continue;
       expect([404, 400, 500], `đối chứng ${r.id} ${field.path}: ${ctl.text.slice(0, 160)}`).not.toContain(ctl.status);
     }
   };

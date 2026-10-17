@@ -143,13 +143,13 @@ describe('client + seeder + coverage', () => {
 
   it('coverage: đếm theo lane + liệt kê route đã mount mà thiếu seeder', () => {
     expect(missingSeederPrefixes(['RL'])).toEqual([]);
-    expect(missingSeederPrefixes(['AT'])).toEqual(['AT']);
+    expect(missingSeederPrefixes(['KN'])).toEqual(['KN']);
     const rep = coverageReport([route('SYS-34'), route('SYS-55'), route('OPS-01')]);
     expect(rep.total).toBe(ROUTES.length);
     expect(rep.total).toBe(202);
     expect(rep.implemented).toBe(3);
     expect(rep.lanes.find((l) => l.lane === 'L-HR')?.implemented).toBe(2);
-    expect(rep.missingSeeders.some((m) => m.routeId === 'SYS-55' && m.prefixes.includes('AT'))).toBe(true);
+    expect(rep.missingSeeders.some((m) => m.routeId === 'SYS-55' && m.prefixes.includes('TX'))).toBe(true);
     expect(rep.missingSeeders.some((m) => m.routeId === 'SYS-34')).toBe(false);
     expect(formatCoverage(rep)).toContain('3/202');
   });

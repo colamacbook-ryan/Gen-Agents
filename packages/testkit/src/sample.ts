@@ -6,6 +6,7 @@
 // Chuỗi có regex / refine phải có `.meta({ example })` ở hợp đồng (contract test của L-API đã ép).
 import { Anchor, type EntityPrefix, type Route, refPrefixesOf } from '@ga/contracts';
 import type { z } from 'zod';
+import { HR_ROUTE_PATCHES } from './sample-hr.ts';
 
 type Def = { type: string; [k: string]: unknown };
 type Check = Record<string, unknown>;
@@ -135,6 +136,7 @@ const OVERRIDES: ReadonlyMap<z.ZodType, unknown> = new Map<z.ZodType, unknown>([
 
 /** Route có ràng buộc chéo trường (refine) mà mẫu tối thiểu không thoả: bổ sung phần còn thiếu (bằng ref của `refFor`). */
 const ROUTE_PATCHES: Readonly<Record<string, (s: SampleRequest, refFor: SampleOptions['refFor']) => void>> = {
+  ...HR_ROUTE_PATCHES,
   // WRK-25: "ít nhất một bằng chứng"
   'WRK-25': (s, refFor) => {
     const body = s.body as Record<string, unknown> | undefined;

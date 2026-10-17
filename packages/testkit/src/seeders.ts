@@ -5,7 +5,10 @@
 //   - `seeded`: hàng đã seed TRƯỚC trong cùng request (theo tên trường) — cho quan hệ cha–con (vd DNA thuộc Role).
 import type { EntityPrefix } from '@ga/contracts';
 import type { RefPrefixes } from './sample.ts';
+import { HR_SEEDERS } from './seeders-hr.ts';
 import type { TestTenant, TestWorld } from './world.ts';
+
+export { SEEDER_PARENTS } from './seeders-hr.ts';
 
 export interface Seeded {
   readonly id: string;
@@ -36,6 +39,7 @@ const seedRole: CrossTenantSeeder = ({ world, tenant }) => {
 /** prefix → seeder. Thêm ở đây (một dòng / prefix) khi route có Ref của prefix mới được mount. */
 export const CROSS_TENANT_SEEDERS: Readonly<Partial<Record<EntityPrefix, CrossTenantSeeder>>> = Object.freeze({
   RL: seedRole,
+  ...HR_SEEDERS,
 });
 
 /** Prefix dùng để chứng minh cho Ref `'*'` (OPS-35 recordRef: mọi prefix) — prefix đầu có seeder. */
