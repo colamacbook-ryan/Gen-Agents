@@ -2,7 +2,16 @@
 import type { AppConnection, StatementRunner } from '../connection.ts';
 import { type CompiledQuery, compileGridQuery, type GridCursor, type GridPage, type QueryContext } from './compile.ts';
 
-export { type CompiledQuery, compileGridQuery, type GridCursor, type GridPage, type QueryContext } from './compile.ts';
+export {
+  type CompiledFilter,
+  type CompiledQuery,
+  compileGridFilter,
+  compileGridQuery,
+  type GridCursor,
+  type GridPage,
+  gridDefOf,
+  type QueryContext,
+} from './compile.ts';
 export { type FieldDef, type FieldType, findField, GRIDS, type GridDef, type GridKey, prefixOfTable } from './grids.ts';
 export {
   type Atom,
@@ -15,6 +24,22 @@ export {
   type QueryBoxErrorCode,
   type QueryOp,
 } from './parser.ts';
+export {
+  type CompiledLocate,
+  type CompiledSelect,
+  compileAliasHints,
+  compileGridLocate,
+  compileGridSelect,
+  displaySqlOf,
+  GRID_CONFIDENTIAL,
+  GRID_DISPLAY,
+  GRID_FOOTERS,
+  GRID_SELF_COLUMN,
+  type SelectOptions,
+  type SelectScope,
+  type SortSpec,
+  type Stmt,
+} from './select.ts';
 
 export interface GridResult<T = Record<string, unknown>> {
   items: T[];

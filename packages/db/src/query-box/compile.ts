@@ -274,20 +274,36 @@ function ftsOf(text: string, phrase: boolean): string | null {
   return phrase ? `"${terms.join(' ')}"` : terms.map((t) => `"${t}"*`).join(' ');
 }
 
-/** Biên dịch chuỗi ô truy vấn trên một lưới. Lỗi cú pháp / trường ⇒ QueryBoxError (không chạy nửa vời). */
-export function compileGridQuery(
-  gridKey: string,
-  input: string,
-  ctx: QueryContext,
-  page: GridPage = {},
-): CompiledQuery {
+export interface CompiledFilter {
+  grid: GridDef;
+  /** Mệnh đề đã phân tích (mọi chuỗi đầu vào, theo thứ tự). */
+  clauses: Clause[];
+  /** Điều kiện AND (luôn có `t.workspace_id = ?` đầu tiên). */
+  where: string[];
+  params: unknown[];
+  /** Có mệnh đề văn bản tự do (FTS) — người gọi dùng để loại hàng bị che khỏi kết quả tìm chữ. */
+  hasText: boolean;
+}
+
+/** Tra lưới theo prefix; lạ ⇒ QueryBoxError (không bao giờ dựng SQL với tên bảng lạ). */
+export function gridDefOf(gridKey: string): GridDef {
   const grid = Object.hasOwn(GRIDS, gridKey) ? GRIDS[gridKey] : undefined;
   if (grid === undefined) throw new QueryBoxError('unknown_field', gridKey, 0, 'lưới không có trong whitelist');
-  const clauses = parseQuery(input);
+  return grid;
+}
+
+/**
+ * Phần WHERE của ô truy vấn (một hoặc nhiều chuỗi, nối AND — vd bộ lọc view + `q` của người dùng). Luôn mở đầu bằng
+ * `t.workspace_id = ?` [+ `t.deleted_at IS NULL`]. Lỗi cú pháp / trường ⇒ QueryBoxError.
+ */
+export function compileGridFilter(gridKey: string, inputs: readonly string[], ctx: QueryContext): CompiledFilter {
+  const grid = gridDefOf(gridKey);
+  const clauses = inputs.flatMap((input) => parseQuery(input));
   const b = new Builder();
   b.add('t.workspace_id = ?', ctx.workspaceId);
   if (grid.softDelete) b.add('t.deleted_at IS NULL');
   const match: string[] = [];
+  let hasText = false;
   for (const c of clauses) {
     if (c.kind === 'field') {
       const f = findField(grid, c.field);
@@ -303,6 +319,7 @@ export function compileGridQuery(
         throw new QueryBoxError('unknown_field', c.raw, c.start, 'lưới này không tìm văn bản tự do');
       const q = ftsOf(c.text, c.phrase);
       if (q === null) continue;
+      hasText = true;
       if (c.negate) {
         b.add(
           't.id NOT IN (SELECT d.entity_id FROM search_fts JOIN search_documents d ON d.id = search_fts.rowid ' +
@@ -323,6 +340,20 @@ export function compileGridQuery(
       grid.textEntity,
     );
   }
+  return { grid, clauses, where: b.parts, params: b.params, hasText };
+}
+
+/** Biên dịch chuỗi ô truy vấn trên một lưới. Lỗi cú pháp / trường ⇒ QueryBoxError (không chạy nửa vời). */
+export function compileGridQuery(
+  gridKey: string,
+  input: string,
+  ctx: QueryContext,
+  page: GridPage = {},
+): CompiledQuery {
+  const filter = compileGridFilter(gridKey, [input], ctx);
+  const grid = filter.grid;
+  const b = new Builder();
+  b.add(filter.where.join(' AND '), ...filter.params);
   const limit = Math.min(Math.max(Math.trunc(page.limit ?? PAGE_DEFAULT), 1), PAGE_MAX);
   const desc = page.order === 'desc';
   let sortSql = 't.display_seq';
