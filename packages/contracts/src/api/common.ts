@@ -422,6 +422,8 @@ export const ErrorDetail = z.strictObject({
   retryAfterS: Nat.optional(),
   /** Vị trí ký tự (từ 0) của mệnh đề lỗi trong ô truy vấn (`query.invalid`) — để vẽ chip đỏ đúng chỗ. */
   position: Nat.optional(),
+  /** Độ dài (ký tự) của đoạn gây lỗi bắt đầu tại `position` (`query.invalid`) — chip đỏ gạch đúng đoạn, không phải đoán. */
+  length: Nat.optional(),
 });
 
 /** Thân lỗi (mở rộng `ApiErrorBody` của errors.ts với `detail`). */

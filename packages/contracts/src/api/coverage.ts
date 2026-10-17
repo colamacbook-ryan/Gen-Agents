@@ -113,7 +113,7 @@ export const FS_COVERAGE = {
     'WRK-30',
   ),
   // Data Console (STD-07 §5): DataGrid, FormulaBar, ô truy vấn — route ghi của từng miền; KHÔNG có PATCH chung.
-  DataGrid: [...new Set([...ids('OPS-32..35'), ...gridRouteIds()])],
+  DataGrid: [...new Set([...ids('OPS-32..35'), 'OPS-37', ...gridRouteIds()])],
   TokenMeter: ids('GW-22'),
   'QuotaBar/CapabilityCard': ids('GW-05', 'GW-18'),
   ChatPanel: ids('SYS-16..24', 'SYS-85'),

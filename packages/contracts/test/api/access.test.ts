@@ -24,7 +24,7 @@ import {
 // Review bảo mật PR #7 (H5): route đọc TỔNG QUÁT (OPS-33/34/35/36, SYS-23, lưới) phải tôn trọng mức đọc của TỪNG loại bản ghi.
 
 const PREFIXES = Object.keys(ENTITY_TYPES) as EntityPrefix[];
-const GENERIC_READERS = ['OPS-33', 'OPS-34', 'OPS-35', 'OPS-36', 'SYS-23'] as const;
+const GENERIC_READERS = ['OPS-33', 'OPS-34', 'OPS-35', 'OPS-36', 'OPS-37', 'SYS-23'] as const;
 
 describe('RECORD_ACCESS: quét MỌI prefix của ENTITY_TYPES (không mặc định)', () => {
   it('có đúng mọi prefix, mỗi prefix một mức hợp lệ — thiếu prefix là đỏ', () => {

@@ -158,6 +158,15 @@ export function gridRouteIds(): string[] {
 
 export const GRID_PAGE_MAX = 500;
 export const GRID_PAGE_DEFAULT = 200;
+/**
+ * Trần `offset` của OPS-33 (truy cập ngẫu nhiên theo CHỈ SỐ HÀNG — `GridDataSource.fetchRange(start, limit)` của DataGrid).
+ * Vì sao `offset` mà không phải `around=<displayId>` + before / after: lưới ảo hoá yêu cầu hàng [start, start + limit) với `start`
+ * tuỳ ý khi người dùng kéo thanh cuộn, không có hàng neo nào để quanh đó; `around` chỉ phục vụ "nhảy tới một ID" mà việc đó đã có
+ * route `locate` (OPS-37) trả chỉ số. Chi phí trên SQLite: OFFSET quét n hàng đầu theo chỉ mục sắp xếp (O(offset)); 100_000 hàng
+ * vẫn nằm trong trần 2 giây ở connection chỉ đọc, nên chặn cứng ở đây để một client không đòi OFFSET 10^9. Kết quả sâu hơn: đảo
+ * chiều sắp xếp hoặc lọc thêm (cùng cách các bảng tính chặn).
+ */
+export const GRID_OFFSET_MAX = 100_000;
 /** Truy vấn ô truy vấn chạy ở connection chỉ đọc, trần thời gian (DATABASE §8.3). */
 export const GRID_QUERY_TIMEOUT_MS = 2000;
 
@@ -187,7 +196,7 @@ const EntityPrefixStr = z.string().min(2).max(3).refine(isEntityPrefix, 'prefix 
 
 /** Phần chọn dữ liệu dùng chung của OPS-33 (hàng) và OPS-34 (xuất): cùng truy vấn, cùng whitelist. */
 export const gridSelectShape = {
-  /** Ô truy vấn DATABASE §8.1 (mệnh đề nối bằng AND). Sai ngữ pháp / cột ngoài whitelist ⇒ `400 query.invalid` (`detail.reason`, `detail.position`). */
+  /** Ô truy vấn DATABASE §8.1 (mệnh đề nối bằng AND). Sai ngữ pháp / cột ngoài whitelist ⇒ `400 query.invalid` (`detail.reason`, `detail.position`, `detail.length`). */
   q: str(500, 1).optional(),
   /** Khoá view dựng sẵn (`GridInfo.views[].key`); bộ lọc của view cộng với `q`. */
   view: KeyStr.optional(),
@@ -263,9 +272,11 @@ export const GridRow = z.strictObject({
 });
 
 export const GridRowsPage = PageOf(GridRow).extend({
-  /** Tổng số hàng khớp truy vấn; `null` khi đếm quá đắt (client hiện "≥ N"). */
-  total: Nat.nullable(),
-  /** Ô Σ: khoá theo `GridInfo.footerKeys`. */
+  /** Chỉ số (từ 0) của hàng đầu trong kết quả đã lọc + sắp xếp: `offset` đã yêu cầu; ở chế độ `cursor` = vị trí tính được. */
+  start: Nat,
+  /** Tổng số hàng khớp truy vấn (COUNT, cùng `q` / `view`) — lưới ảo hoá cần số chính xác để dựng thanh cuộn. */
+  total: Nat,
+  /** Ô Σ do MÁY CHỦ tính trên TOÀN BỘ kết quả (không phải trang): khoá theo `GridInfo.footerKeys`; frontend không tự cộng. */
   footer: z.record(KeyStr, z.number()).refine((o) => Object.keys(o).length <= 32, 'quá nhiều ô footer'),
   /** Mệnh đề đã phân tích của `q` (kèm `view`); `[]` nếu không có `q`. */
   clauses: list(QueryClause, 64),
@@ -274,6 +285,17 @@ export const GridRowsPage = PageOf(GridRow).extend({
   /** Có `group`: số hàng mỗi nhóm trên TOÀN tập khớp (hàng vẫn phân trang keyset, sort theo cột nhóm trước). */
   groups: list(z.strictObject({ value: Json, count: Nat }), GRID_PAGE_MAX).nullable(),
 });
+
+/**
+ * OPS-37: vị trí của một hàng trong kết quả của CÙNG truy vấn (`q` / `view` / `sort`) — Soi `navigate` tới hàng ngoài màn.
+ * `found.index` = số hàng đứng TRƯỚC nó (COUNT theo khoá keyset `(cột sort…, display_seq)`), từ 0; `filtered` = hàng còn nhưng không
+ * khớp truy vấn; `gone` = không còn / không thuộc lưới / không đủ quyền đọc.
+ */
+export const GridLocate = z.discriminatedUnion('state', [
+  z.strictObject({ state: z.literal('found'), index: Nat }),
+  z.strictObject({ state: z.literal('filtered') }),
+  z.strictObject({ state: z.literal('gone') }),
+]);
 
 /** Prefix của một lưới (tra ngược cho test / CLI). */
 export function gridPrefix(key: GridKeyName): EntityPrefix {

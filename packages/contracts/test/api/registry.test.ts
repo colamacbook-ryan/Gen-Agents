@@ -34,22 +34,22 @@ const ids = (...parts: string[]) =>
   });
 
 describe('registry — số lượng và định danh', () => {
-  it('201 route = 196 M2 + 5 EXT; đúng số route mỗi lane', () => {
-    expect(ROUTES.length).toBe(201);
-    expect(M2_ROUTES.length).toBe(196);
+  it('202 route = 197 M2 (196 theo đặc tả + OPS-37 locate của round 4) + 5 EXT; đúng số route mỗi lane', () => {
+    expect(ROUTES.length).toBe(202);
+    expect(M2_ROUTES.length).toBe(197);
     const count = (lane: string) => ROUTES.filter((r) => r.lane === lane).length;
     expect(count('L-SYS')).toBe(35);
     expect(count('L-HR')).toBe(50);
     expect(count('L-GW')).toBe(32);
     expect(count('L-WORK')).toBe(43);
-    expect(count('L-OPS')).toBe(36);
+    expect(count('L-OPS')).toBe(37);
     expect(count('L-SEC')).toBe(4);
     expect(count('L-RT')).toBe(1);
     expect(LANES.length).toBe(7);
   });
 
-  it('đủ mọi ID của đặc tả: SYS-01…85, GW-01…32, WRK-01…43, OPS-01…36, EXT-01…05', () => {
-    const want = [...ids('SYS-01..85', 'GW-01..32', 'WRK-01..43', 'OPS-01..36', 'EXT-01..05')];
+  it('đủ mọi ID của đặc tả: SYS-01…85, GW-01…32, WRK-01…43, OPS-01…37, EXT-01…05', () => {
+    const want = [...ids('SYS-01..85', 'GW-01..32', 'WRK-01..43', 'OPS-01..37', 'EXT-01..05')];
     expect([...ROUTES.map((r) => r.id)].sort()).toEqual([...want].sort());
   });
 
@@ -124,7 +124,7 @@ describe('registry — tham số đường dẫn, method, body', () => {
       ROUTES.filter((r) => r.noCli)
         .map((r) => r.id)
         .sort(),
-    ).toEqual(['SYS-62', 'WRK-04']);
+    ).toEqual(['OPS-37', 'SYS-62', 'WRK-04']);
     expect(routeById('SYS-62')?.pendingDb).toBe(true);
     expect(ROUTES.filter((r) => r.pendingDb).map((r) => r.id)).toEqual(['SYS-62']);
   });

@@ -274,7 +274,7 @@ export function expectedLane(id: string): Lane | null {
     case 'WRK':
       return n >= 1 && n <= 43 ? 'L-WORK' : null;
     case 'OPS':
-      return n >= 1 && n <= 36 ? 'L-OPS' : null;
+      return n >= 1 && n <= 37 ? 'L-OPS' : null;
     case 'EXT':
       return n >= 1 && n <= 4 ? 'L-SEC' : n === 5 ? 'L-RT' : null;
     default:

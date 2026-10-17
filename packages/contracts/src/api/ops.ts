@@ -30,7 +30,17 @@ import {
 } from './common.ts';
 import { accepted, binary, csv, defineLane, noContent, ok, type RequestParts, sse } from './define.ts';
 import { gridOfPrefix, gridSelectionIssues } from './grid-columns.ts';
-import { ColumnName, GRID_PAGE_MAX, GridInfo, GridKey, GridRowsPage, gridSelectShape } from './grids.ts';
+import {
+  ColumnName,
+  GRID_OFFSET_MAX,
+  GRID_PAGE_MAX,
+  GRID_PREFIX,
+  GridInfo,
+  GridKey,
+  GridLocate,
+  GridRowsPage,
+  gridSelectShape,
+} from './grids.ts';
 import { Redacted } from './masking.ts';
 import { LogLine, LogLineEvent } from './sse.ts';
 
@@ -676,13 +686,30 @@ const GridParams = z.strictObject({ gridKey: GridKey });
 function refineGridSelection(req: RequestParts): string[] {
   const grid = GridKey.safeParse(req.params.gridKey);
   if (!grid.success) return [];
-  const { q, sort, cols, group } = req.query as {
+  const { q, sort, cols, group, offset, cursor } = req.query as {
     q?: string;
     sort?: string[];
     cols?: string[];
     group?: string;
+    offset?: number;
+    cursor?: string;
   };
-  return gridSelectionIssues(grid.data, { q, sort, cols, group });
+  const issues = gridSelectionIssues(grid.data, { q, sort, cols, group });
+  // Hai cách phân trang không trộn: `offset` (truy cập ngẫu nhiên theo chỉ số) XOR `cursor` (keyset tuần tự).
+  if (offset !== undefined && cursor !== undefined) issues.push('offset và cursor loại trừ nhau');
+  return issues;
+}
+
+/** OPS-37: cùng whitelist với OPS-33 cho `q` / `sort`; `displayId` phải mang prefix của CHÍNH lưới (hàng lưới khác không bao giờ ở đây). */
+function refineLocate(req: RequestParts): string[] {
+  const grid = GridKey.safeParse(req.params.gridKey);
+  if (!grid.success) return [];
+  const { q, sort, displayId } = req.query as { q?: string; sort?: string[]; displayId?: string };
+  const issues = gridSelectionIssues(grid.data, { q, sort });
+  const parsed = displayId === undefined ? null : parseDisplayId(displayId);
+  if (!parsed || parsed.prefix !== GRID_PREFIX[grid.data])
+    issues.push(`displayId: không phải mã hàng của lưới ${grid.data}`);
+  return issues;
 }
 
 /** OPS-35: có `cols` thì phải biết lưới của bản ghi — mã hiển thị mang prefix; ULID không mang ⇒ handler kiểm lại sau khi tra prefix THẬT. */
@@ -719,11 +746,14 @@ export const OPS_33 = ops({
       ...gridSelectShape,
       // Nhóm theo cột (toolbar "Group"): hàng sort theo cột nhóm trước; `groups` trả số hàng mỗi nhóm.
       group: ColumnName.optional(),
+      // Truy cập ngẫu nhiên theo chỉ số hàng (DataGrid `fetchRange(start, limit)`); loại trừ `cursor`. Lý do chọn: xem GRID_OFFSET_MAX.
+      offset: queryInt(0, GRID_OFFSET_MAX).optional(),
       ...pageQueryShape(GRID_PAGE_MAX),
     }),
     refine: refineGridSelection,
   },
-  // Keyset `(sort_col, display_seq)`, không OFFSET; ≤ 500 hàng / trang. Chạy connection chỉ đọc, trần thời gian 2 giây.
+  // Hai chế độ: `cursor` = keyset `(sort_col, display_seq)` tuần tự (không OFFSET); `offset` = nhảy tới chỉ số bất kỳ (≤ GRID_OFFSET_MAX).
+  // ≤ 500 hàng / trang. Chạy connection chỉ đọc, trần thời gian 2 giây. `total` / `footer` / `groups` do máy chủ tính trên TOÀN tập khớp.
   response: ok(GridRowsPage),
   errors: ['query.invalid'],
   cli: ['grid'],
@@ -735,7 +765,9 @@ export const OPS_34 = ops({
   path: '/grids/{gridKey}/export',
   auth: 'V',
   o4: 'blocked',
-  // Chạy đúng cùng truy vấn với OPS-33, theo luồng; `text/csv` + `X-Content-SHA256`; ô công thức được thoát.
+  // Chạy đúng cùng truy vấn với OPS-33 (không `offset` / `cursor`: luôn từ đầu). Handler PHẢI ghi THEO LUỒNG (đọc từng khối từ connection chỉ
+  // đọc, ghi ngay, tôn trọng backpressure) — KHÔNG gom cả tệp vào bộ nhớ; cắt ở `maxRows` (API_LIMITS.csvMaxRows) kèm dòng báo cắt;
+  // hash `X-Content-SHA256` tính dần trong khi ghi (trailer) hoặc ở tệp tạm; ghi nhật ký audit một lần mỗi lần xuất. Chạy đúng cùng truy vấn; `text/csv` + `X-Content-SHA256`; ô công thức được thoát.
   request: { params: GridParams, query: z.strictObject(gridSelectShape), refine: refineGridSelection },
   response: csv({ formulaEscape: true, maxRows: API_LIMITS.csvMaxRows }),
   errors: ['query.invalid'],
@@ -796,6 +828,35 @@ export const OPS_36 = ops({
   cli: ['search'],
 });
 
+export const OPS_37 = ops({
+  id: 'OPS-37',
+  method: 'GET',
+  path: '/grids/{gridKey}/locate',
+  auth: 'V',
+  o4: 'blocked',
+  request: {
+    params: GridParams,
+    query: z.strictObject({
+      // Mã hàng cần định vị (đúng prefix của lưới — `refineLocate`).
+      displayId: z
+        .string()
+        .max(20)
+        .regex(/^[A-Z]{2,3}-\d{4,12}$/)
+        .meta({ example: 'RL-0001' }),
+      // Cùng `q` / `view` / `sort` như OPS-33 để chỉ số khớp đúng thứ tự đang xem (không `cols` / `group` / phân trang).
+      q: gridSelectShape.q,
+      view: gridSelectShape.view,
+      sort: gridSelectShape.sort,
+    }),
+    refine: refineLocate,
+  },
+  // `index` = COUNT số hàng đứng trước theo khoá keyset `(sort…, display_seq)` trên cùng bộ lọc. Quyền đọc hiệu lực như OPS-33
+  // (`effectiveReadAuth`); hàng không đọc được ⇒ `gone` (không lộ sự tồn tại).
+  response: ok(GridLocate),
+  errors: ['query.invalid'],
+  noCli: 'vị trí hàng chỉ phục vụ lưới ảo hoá của giao diện; CLI đọc tuần tự bằng `grid`',
+});
+
 export const OPS_ROUTES = [
   OPS_01,
   OPS_02,
@@ -833,4 +894,5 @@ export const OPS_ROUTES = [
   OPS_34,
   OPS_35,
   OPS_36,
+  OPS_37,
 ] as const;
