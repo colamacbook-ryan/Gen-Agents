@@ -339,7 +339,10 @@ export const WRK_11 = work({
   id: 'WRK-11',
   method: 'PUT',
   path: '/roles/{roleRef}/proactive',
-  auth: 'A',
+  // Đặt trần tin chủ động / giờ im lặng / loại trigger = NỚI trần ⇒ owner (Gen, fail-closed). Hợp đồng không tách được "chỉ giảm"
+  // khỏi "tăng" (so với `maxPerDay` đã lưu) nên cả route là O; WRK-14 tách riêng để admin vẫn TẮT được.
+  auth: 'O',
+  writesAccessPolicy: ['proactive_policies'],
   o4: 'blocked',
   request: {
     params: RoleParams,
@@ -361,7 +364,9 @@ export const WRK_12 = work({
   id: 'WRK-12',
   method: 'POST',
   path: '/roles/{roleRef}/proactive/reset',
-  auth: 'A',
+  // Về mặc định `proactive.defaults` có thể NỚI trần so với chính sách đang đặt ⇒ owner.
+  auth: 'O',
+  writesAccessPolicy: ['proactive_policies'],
   o4: 'blocked',
   request: { params: RoleParams },
   // Về mặc định `proactive.defaults`.
@@ -385,7 +390,11 @@ export const WRK_14 = work({
   id: 'WRK-14',
   method: 'PUT',
   path: '/roles/{roleRef}/proactive/enabled',
+  // TẮT (`enabled = false`) là siết ⇒ A (mở cả khi recovery, dùng cho `emergency`); BẬT (`enabled = true`) là nới ⇒ O.
+  // Dịch vụ: khi `mode = recovery` CHỈ chấp nhận `enabled = false` (HANDLER-OBLIGATIONS #4).
   auth: 'A',
+  ownerWhen: { in: 'body', field: 'enabled', equals: true },
+  writesAccessPolicy: ['proactive_policies'],
   o4: 'open',
   request: { params: RoleParams, body: z.strictObject({ enabled: z.boolean() }) },
   response: ok(PolicyResult),

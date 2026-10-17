@@ -162,6 +162,8 @@ describe('registry — quyền', () => {
       'WRK-05',
       'WRK-07',
       'WRK-08',
+      'WRK-11',
+      'WRK-12',
       'OPS-10',
       'OPS-11',
       'OPS-15',
@@ -180,7 +182,7 @@ describe('registry — quyền', () => {
     const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen.length > 0)
       .map((r) => r.id)
       .sort();
-    expect(withOwnerWhen).toEqual(['GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08']);
+    expect(withOwnerWhen).toEqual(['GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08', 'WRK-14']);
     const ops03 = routeById('OPS-03');
     // Telegram allowlist (H2): thêm người = nới ⇒ cả WRK-03 và WRK-05 là O không điều kiện; WRK-05 không còn body `asOwner`.
     for (const id of ['WRK-03', 'WRK-05']) {
@@ -208,6 +210,12 @@ describe('registry — quyền', () => {
       expect(r && requiredAccess(r, { body: { [field]: 'deny' } }), `${id} deny`).toBe('A');
       expect(r && requiredAccess(r, { body: {} }), `${id} thiếu trường`).toBe('A');
     }
+    // WRK-14: TẮT chính sách chủ động = siết ⇒ A; BẬT = nới ⇒ O. WRK-11 / WRK-12 (đặt / reset trần) là O không điều kiện.
+    const wrk14 = routeById('WRK-14');
+    expect(wrk14 && requiredAccess(wrk14, { body: { enabled: true } })).toBe('O');
+    expect(wrk14 && requiredAccess(wrk14, { body: { enabled: false } })).toBe('A');
+    expect(wrk14 && requiredAccess(wrk14, { body: {} })).toBe('A');
+    for (const id of ['WRK-11', 'WRK-12']) expect(routeById(id)?.auth, id).toBe('O');
     // OPS-08: xoá luật `deny` = nới ⇒ O; xoá `allow` = siết ⇒ A; không biết luật đã lưu ⇒ O (fail-closed).
     const ops08 = routeById('OPS-08');
     expect(ops08 && requiredAccess(ops08, { stored: { egressAction: 'deny' } })).toBe('O');
@@ -307,7 +315,17 @@ describe('registry — route ghi chính sách truy cập (egress_rules / tool_gr
         true,
       );
     // golden: thêm / bớt route ghi chính sách phải sửa test có chủ đích
-    expect(writers.map((r) => r.id).sort()).toEqual(['GW-29', 'GW-31', 'OPS-07', 'OPS-08', 'WRK-03', 'WRK-05']);
+    expect(writers.map((r) => r.id).sort()).toEqual([
+      'GW-29',
+      'GW-31',
+      'OPS-07',
+      'OPS-08',
+      'WRK-03',
+      'WRK-05',
+      'WRK-11',
+      'WRK-12',
+      'WRK-14',
+    ]);
     expect(writers.map((r) => `${r.id}:${r.writesAccessPolicy.join(',')}`).sort()).toEqual([
       'GW-29:tool_grants',
       'GW-31:tool_grants',
@@ -315,6 +333,9 @@ describe('registry — route ghi chính sách truy cập (egress_rules / tool_gr
       'OPS-08:egress_rules',
       'WRK-03:telegram_allowlist',
       'WRK-05:telegram_allowlist',
+      'WRK-11:proactive_policies',
+      'WRK-12:proactive_policies',
+      'WRK-14:proactive_policies',
     ]);
   });
 });
