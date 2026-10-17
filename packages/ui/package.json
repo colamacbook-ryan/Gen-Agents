@@ -1,0 +1,36 @@
+{
+  "name": "@ga/ui",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Component giao diện dùng chung của Admin (Data Console STD-07): DataGrid, thanh công thức, ô truy vấn (BUILD-PLAN §E.4).",
+  "exports": {
+    "./datagrid": "./src/datagrid/index.ts",
+    "./formula-bar": "./src/formula-bar/index.ts",
+    "./query-box": "./src/query-box/index.ts"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@ga/contracts": "workspace:*",
+    "@tanstack/react-table": "8.21.3",
+    "@tanstack/react-virtual": "3.14.21"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "axe-core": "4.14.0",
+    "playwright-core": "1.56.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vite": "8.3.4",
+    "zod": "4.6.7"
+  }
+}

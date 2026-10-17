@@ -3,18 +3,25 @@
 > SINH TỰ ĐỘNG bởi `pnpm license:check -- --write` (scripts/license-gate.mjs). Không sửa tay — CI đỏ nếu lệch.
 > License đọc từ chính tệp LICENSE của từng gói (STD-04 §6). Chính sách: `scripts/license-policy.json`.
 
-## Đi vào sản phẩm (4 gói, gồm phụ thuộc gián tiếp)
+## Đi vào sản phẩm (11 gói, gồm phụ thuộc gián tiếp)
 
 | Gói | Phiên bản | License | Nhận ra từ tệp LICENSE | Ghi chú |
 |---|---|---|---|---|
+| @tanstack/react-table | 8.21.3 | MIT | MIT |  |
+| @tanstack/react-virtual | 3.14.21 | MIT | MIT |  |
+| @tanstack/table-core | 8.21.3 | MIT | MIT |  |
+| @tanstack/virtual-core | 3.19.6 | MIT | MIT |  |
 | better-sqlite3 | 13.0.3 | MIT | MIT |  |
 | kysely | 0.29.6 | MIT | MIT |  |
 | node-addon-api | 8.9.2 | MIT | MIT |  |
+| react | 19.3.1 | MIT | MIT |  |
+| react-dom | 19.3.1 | MIT | MIT |  |
+| scheduler | 0.28.0 | MIT | MIT |  |
 | zod | 4.6.7 | MIT | MIT |  |
 
 Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — sqlite.org/copyright.html) trong bản build N-API.
 
-## Chỉ dùng lúc dev / build / test — không đóng gói vào sản phẩm (53 gói)
+## Chỉ dùng lúc dev / build / test — không đóng gói vào sản phẩm (58 gói)
 
 | Gói | Phiên bản | License | Nhận ra từ tệp LICENSE | Ghi chú |
 |---|---|---|---|---|
@@ -32,6 +39,8 @@ Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — s
 | @types/deep-eql | 4.0.2 | MIT | MIT |  |
 | @types/estree | 1.0.9 | MIT | MIT |  |
 | @types/node | 22.20.5 | MIT | MIT |  |
+| @types/react | 19.3.0 | MIT | MIT |  |
+| @types/react-dom | 19.3.0 | MIT | MIT |  |
 | @vitest/expect | 4.1.12 | MIT | MIT |  |
 | @vitest/mocker | 4.1.12 | MIT | MIT |  |
 | @vitest/pretty-format | 4.1.12 | MIT | MIT |  |
@@ -40,8 +49,10 @@ Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — s
 | @vitest/spy | 4.1.12 | MIT | MIT |  |
 | @vitest/utils | 4.1.12 | MIT | MIT |  |
 | assertion-error | 2.0.1 | MIT | MIT |  |
+| axe-core | 4.14.0 | MPL-2.0 | MPL-2.0, MIT, ISC | tệp license còn nhắc: MIT, ISC (gói nhúng — xem tệp) |
 | chai | 6.3.0 | MIT | MIT |  |
 | convert-source-map | 2.0.0 | MIT | MIT |  |
+| csstype | 3.2.3 | MIT | MIT |  |
 | detect-libc | 2.1.2 | Apache-2.0 | Apache-2.0 |  |
 | es-module-lexer | 2.3.2 | MIT | MIT |  |
 | estree-walker | 3.0.3 | MIT | MIT |  |
@@ -56,6 +67,7 @@ Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — s
 | pathe | 2.0.3 | MIT | MIT |  |
 | picocolors | 1.1.1 | ISC | ISC |  |
 | picomatch | 4.0.7 | MIT | MIT |  |
+| playwright-core | 1.56.1 | Apache-2.0 | Apache-2.0 |  |
 | postcss | 8.5.30 | MIT | MIT |  |
 | rolldown | 1.2.14 | MIT | MIT |  |
 | siginfo | 2.0.0 | ISC | ISC |  |
