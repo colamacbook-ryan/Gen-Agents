@@ -82,7 +82,6 @@ export function UiKit() {
         }
         secondary={[<Button key="s">{t('devkit.button.secondary')}</Button>]}
       />
-      <p>{t('devkit.intro')}</p>
 
       <Section id="buttons" title={t('devkit.section.buttons')}>
         <Button variant="primary" icon={Check}>

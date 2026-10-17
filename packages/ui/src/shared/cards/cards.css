@@ -1,4 +1,10 @@
 /* Document (giấy): nền ngà, chữ serif, số hiệu mono — "giấy tờ hành chính" có trọng lượng (STD-07 §7). */
+.ga-card,
+.ga-cert {
+  /* chữ phụ trên giấy: ink pha giấy, đạt AA (≥ 6:1) — không dùng opacity vì opacity kéo contrast xuống dưới 4,5:1 */
+  --ga-doc-ink-soft: #5c564e;
+}
+
 .ga-card {
   --ga-card-w: 340px;
 
@@ -59,8 +65,8 @@
 }
 
 .ga-card__position {
+  color: var(--ga-doc-ink-soft);
   font-size: var(--ga-fs-meta);
-  opacity: 0.75;
 }
 
 .ga-card__foot {
@@ -81,7 +87,7 @@
 }
 
 .ga-card__lines dt {
-  opacity: 0.65;
+  color: var(--ga-doc-ink-soft);
 }
 
 .ga-card__lines dd {
@@ -113,18 +119,20 @@
 }
 
 /* trạng thái thẻ */
+/* mờ = bớt màu + viền đứt, KHÔNG dùng opacity (giữ chữ đạt AA); trạng thái luôn có chữ trên thẻ */
 .ga-card--pending {
-  opacity: 0.55;
+  outline: 1px dashed var(--ga-doc-ink-soft);
+  outline-offset: -4px;
+  filter: grayscale(0.6) brightness(0.94);
 }
 
 .ga-card--suspended .ga-card__main {
-  opacity: 0.7;
+  filter: grayscale(0.5);
 }
 
 .ga-card--revoked,
 .ga-card--superseded {
-  filter: grayscale(0.7);
-  opacity: 0.7;
+  filter: grayscale(0.7) brightness(0.92);
 }
 
 .ga-card--revoked .ga-card__name,
@@ -189,9 +197,9 @@
 }
 
 .ga-cert__template {
+  color: var(--ga-doc-ink-soft);
   font-family: var(--ga-font-mono);
   font-size: var(--ga-fs-micro);
-  opacity: 0.6;
 }
 
 .ga-cert__section {
@@ -215,8 +223,8 @@
 }
 
 .ga-cert__fields dt {
+  color: var(--ga-doc-ink-soft);
   font-size: var(--ga-fs-meta);
-  opacity: 0.7;
 }
 
 .ga-cert__fields dd {
@@ -230,9 +238,9 @@
   background: rgb(185 116 26 / 12%);
 }
 
-.ga-cert .ga-prov__tag {
-  color: var(--ga-doc-ink);
-  opacity: 0.6;
+.ga-cert .ga-prov__tag,
+.ga-cert .ga-prov--ai .ga-prov__tag {
+  color: var(--ga-doc-ink-soft);
 }
 
 .ga-trait {
@@ -294,5 +302,16 @@
 }
 
 .ga-cert__unsigned {
-  opacity: 0.65;
+  color: var(--ga-doc-ink-soft);
+}
+
+/* nút trên giấy: dùng ink (màu chữ của console không đủ tương phản trên nền ngà) */
+.ga-cert .ga-btn,
+.ga-cert .ga-btn--ghost {
+  color: var(--ga-doc-ink);
+}
+
+.ga-cert .ga-btn--ghost:hover:not(:disabled, [aria-disabled="true"]) {
+  background: rgb(42 38 34 / 8%);
+  color: var(--ga-doc-ink);
 }

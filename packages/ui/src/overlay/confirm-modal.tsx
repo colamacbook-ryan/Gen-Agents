@@ -158,9 +158,6 @@ export function ConfirmModal({
           </>
         ) : (
           <>
-            <p className="ga-confirm__lead">
-              {t('confirm.typeLead')} <span className="ga-confirm__phrase">{confirmPhrase}</span>
-            </p>
             <TextField
               label={t('confirm.typeLabel', { phrase: confirmPhrase })}
               value={typed}

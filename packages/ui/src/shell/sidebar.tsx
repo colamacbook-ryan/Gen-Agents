@@ -109,8 +109,10 @@ export function Sidebar({
                   title={collapsed ? w.label : undefined}
                 >
                   <Icon icon={w.icon} />
-                  <span className="ga-nav-item__text">{w.label}</span>
-                  {w.badge ? <span className="ga-nav-item__badge ga-nav-item__badge--muted">{w.badge}</span> : null}
+                  <span className="ga-nav-item__stack">
+                    <span className="ga-nav-item__text">{w.label}</span>
+                    {w.badge ? <span className="ga-nav-item__sub">{w.badge}</span> : null}
+                  </span>
                 </span>
               ) : (
                 <Link key={w.id} to={w.to} className="ga-nav-item" title={collapsed ? w.label : undefined}>

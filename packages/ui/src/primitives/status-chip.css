@@ -38,7 +38,9 @@
 
 .ga-chip--idle {
   background: var(--ga-idle-soft);
-  color: var(--ga-idle);
+
+  /* chữ dùng text.secondary: #8a8580 trên nền soft chỉ đạt ~4,4:1 (< AA 4,5:1); chấm / icon vẫn là màu idle */
+  color: var(--ga-text-secondary);
 }
 
 /* Trọng thương: trạng thái con người, KHÔNG tô danger */

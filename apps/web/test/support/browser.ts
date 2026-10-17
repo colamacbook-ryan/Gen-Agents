@@ -58,7 +58,11 @@ export async function watch(page: Page, origin: string): Promise<Watched> {
     else if (m.type() === 'error' || m.type() === 'warning') w.problems.push(`console.${m.type()}: ${text}`);
   });
   page.on('pageerror', (e) => w.problems.push(`pageerror: ${e.message}`));
-  page.on('requestfailed', (r) => w.badRequests.push(`failed: ${r.url()} ${r.failure()?.errorText ?? ''}`));
+  page.on('requestfailed', (r) => {
+    const reason = r.failure()?.errorText ?? '';
+    // yêu cầu đang bay bị huỷ khi trang điều hướng / tải lại là bình thường
+    if (reason !== 'net::ERR_ABORTED') w.badRequests.push(`failed: ${r.url()} ${reason}`);
+  });
   page.on('response', (r) => {
     const url = new URL(r.url());
     w.requested.push(url.pathname);

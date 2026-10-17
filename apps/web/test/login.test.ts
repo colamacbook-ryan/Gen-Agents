@@ -149,8 +149,8 @@ describe('G1 đăng nhập', () => {
   it('VI | EN: đổi ngôn ngữ ngay, ghi nhớ, cập nhật <html lang>; nút báo trạng thái bằng aria-pressed', async () => {
     renderApp(new FakeAuthClient(), { path: '/login' });
     const user = userEvent.setup();
-    const en = await screen.findByRole('button', { name: 'English' });
-    const vi_ = screen.getByRole('button', { name: 'Tiếng Việt' });
+    const en = await screen.findByRole('button', { name: /English/ });
+    const vi_ = screen.getByRole('button', { name: /Tiếng Việt/ });
     expect(vi_.getAttribute('aria-pressed')).toBe('true');
     expect(en.getAttribute('aria-pressed')).toBe('false');
     await user.click(en);
@@ -159,7 +159,7 @@ describe('G1 đăng nhập', () => {
     expect(screen.getByText('The HR department of an AI company.')).toBeTruthy();
     expect(document.documentElement.lang).toBe('en');
     expect(localStorage.getItem('ga.locale')).toBe('en');
-    await user.click(screen.getByRole('button', { name: 'Tiếng Việt' }));
+    await user.click(screen.getByRole('button', { name: /Tiếng Việt/ }));
     expect(screen.getByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeTruthy();
   });
 

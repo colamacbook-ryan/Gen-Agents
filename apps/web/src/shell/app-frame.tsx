@@ -127,9 +127,10 @@ function FrameInner() {
 
   const activeTab = loc?.tab ?? null;
   const tabs = loc?.group.tabs.map((tab) => ({ id: tab.id, label: t(tab.label), to: pathOf(loc.group, tab) }));
+  const isKit = pathname === '/__ui-kit'; // bộ component (dev / test): không thuộc nhóm điều hướng nào
   const crumbs = loc
     ? [{ label: t(loc.group.label), to: pathOf(loc.group) }, ...(activeTab ? [{ label: t(activeTab.label) }] : [])]
-    : [{ label: t('notFound.title') }];
+    : [{ label: isKit ? t('devkit.title') : t('notFound.title') }];
 
   const content =
     tabs && tabs.length > 0 && activeTab ? (
@@ -174,6 +175,8 @@ function FrameInner() {
               tabsLabel={t('a11y.pageTabs')}
               tabId={tabDomId}
             />
+          ) : isKit ? (
+            <PageHeader title={t('devkit.title')} description={t('devkit.intro')} />
           ) : undefined
         }
         drawer={

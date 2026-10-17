@@ -3,7 +3,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
-  min-height: 100%;
+  height: 100%;
   background: var(--ga-bg-canvas);
   color: var(--ga-text-primary);
   font-size: var(--ga-fs-base);
@@ -15,15 +15,31 @@
   flex: 999 1 560px;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
+/* sidebar đứng yên, chỉ vùng nội dung cuộn (log drawer luôn ở đáy khung nhìn) */
 .ga-shell__main {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: var(--ga-sp-3);
   min-width: 0;
+  min-height: 0;
   padding: var(--ga-sp-4);
+  overflow: auto;
+}
+
+/* hẹp hơn sidebar + 560px (< 776px): sidebar xuống trên nội dung và cả trang cuộn (mobile làm cuối, STD-06) */
+@media (max-width: 775px) {
+  .ga-shell {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .ga-shell__main {
+    overflow: visible;
+  }
 }
 
 .ga-shell__main:focus {

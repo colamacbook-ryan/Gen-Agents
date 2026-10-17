@@ -141,7 +141,6 @@
     "step": "Bước {current}/{total}",
     "consequencesLead": "Điều sẽ xảy ra nếu bạn tiếp tục:",
     "continue": "Tiếp tục",
-    "typeLead": "Để xác nhận, gõ lại:",
     "typeLabel": "Gõ “{phrase}” để xác nhận",
     "failed": "Không thực hiện được. Thử lại, hoặc xem log nếu lỗi lặp lại."
   },

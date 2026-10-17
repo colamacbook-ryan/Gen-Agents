@@ -31,14 +31,10 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         <fieldset className="ga-auth__lang">
           <legend className="ga-sr-only">{t('auth.login.language')}</legend>
           {LOCALES.map((l) => (
-            <button
-              key={l}
-              type="button"
-              aria-pressed={locale === l}
-              aria-label={t(`locale.name.${l}`)}
-              onClick={() => choose(l)}
-            >
+            <button key={l} type="button" aria-pressed={locale === l} onClick={() => choose(l)}>
               {t(`locale.short.${l}`)}
+              {/* tên đọc = chữ nhìn thấy + tên đầy đủ (WCAG 2.5.3 Label in Name: tên truy cập phải chứa chữ nhìn thấy) */}
+              <span className="ga-sr-only"> · {t(`locale.name.${l}`)}</span>
             </button>
           ))}
         </fieldset>

@@ -31,14 +31,6 @@
   color: var(--ga-warn);
 }
 
-.ga-confirm__phrase {
-  padding: 0 var(--ga-sp-1);
-  border-radius: var(--ga-r-input);
-  background: var(--ga-bg-sunken);
-  font-family: var(--ga-font-mono);
-  font-weight: 500;
-}
-
 .ga-confirm__step {
   margin-bottom: var(--ga-sp-2);
   color: var(--ga-text-muted);

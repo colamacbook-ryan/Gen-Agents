@@ -6,6 +6,7 @@
   padding: 0 var(--ga-sp-2) var(--ga-sp-2);
   border-right: 1px solid var(--ga-border-subtle);
   background: var(--ga-bg-surface);
+  overflow-y: auto;
 }
 
 .ga-sidebar--rail {
@@ -112,8 +113,28 @@
 }
 
 .ga-nav-item--disabled {
+  align-items: flex-start;
+  height: auto;
+  min-height: var(--ga-nav-item-h);
+  padding-top: var(--ga-sp-1);
+  padding-bottom: var(--ga-sp-1);
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.ga-nav-item--disabled > svg {
+  margin-top: var(--ga-sp-1);
+}
+
+.ga-nav-item__stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ga-nav-item__sub {
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-micro);
 }
 
 .ga-nav-item--disabled:hover {
@@ -242,6 +263,7 @@
 .ga-sidebar--rail .ga-nav-item__text,
 .ga-sidebar--rail .ga-nav-item__count,
 .ga-sidebar--rail .ga-nav-item__badge,
+.ga-sidebar--rail .ga-nav-item__sub,
 .ga-sidebar--rail .ga-sidebar__label,
 .ga-sidebar--rail .ga-pinned__name,
 .ga-sidebar--rail .ga-pinned__code,
