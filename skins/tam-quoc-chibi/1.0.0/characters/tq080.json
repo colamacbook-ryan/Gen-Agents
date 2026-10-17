@@ -1,0 +1,135 @@
+{
+  "schema": 1,
+  "id": "tq080",
+  "name": "Tào Tháo",
+  "han": "曹操",
+  "role": "Thừa tướng",
+  "faction": "Ngụy",
+  "kind": "chu_cong",
+  "gender": "nam",
+  "own": "#8C86E0",
+  "crop": [8, 0, 188],
+  "anim": {
+    "phase": "-2.6s",
+    "breath": "3.1s",
+    "blink": "4.9s",
+    "bdelay": "-0.3s"
+  },
+  "note": "liếc nghi ngờ, che miệng cười khà khà, vung áo choàng; chờ / ngủ: ngủ giả, ai tới gần thì giật mình quơ kiếm (không máu); lên #1 cười ngửa cổ",
+  "p": {
+    "skin": "#F8F3EA",
+    "earSkin": "#EBCBA6",
+    "blush": "#F4A6A6",
+    "mask": "white",
+    "whiteFx": "#D9E2EF",
+    "robe": "#26232B",
+    "trim": "#C89B2C",
+    "sash": "#C89B2C",
+    "inner": "#6B5524",
+    "buckle": "#F2D06B",
+    "sleeve": 28,
+    "glow": "#B04848",
+    "crownY": 6,
+    "cap": "official",
+    "capColor": "#1F1C24",
+    "brow": "swept",
+    "eyes": "slit",
+    "liner": true,
+    "mouth": "smirk",
+    "tassel": "#E0B04A",
+    "beard": "long2",
+    "beardColor": "#1C171F",
+    "prop": "sword",
+    "armL": [22, 46],
+    "armR": [26, 18],
+    "cape": "#26222C",
+    "capeIn": "#B8892A"
+  },
+  "identity": {
+    "p1": "face",
+    "must": [
+      {
+        "p": 1,
+        "label": "Mặt trắng kịch (đại bạch kiểm) + mắt nheo xếch (細眼), vẽ kiểu mặt nạ",
+        "check": {
+          "all": [
+            {
+              "fill": "face",
+              "is": "white"
+            },
+            {
+              "part": "mask-lines"
+            },
+            {
+              "part": "eyes-slit"
+            }
+          ]
+        }
+      },
+      {
+        "p": 2,
+        "label": "Râu dài (長髯)",
+        "check": {
+          "part": "beard-long"
+        }
+      },
+      {
+        "p": 3,
+        "label": "Kiếm Ỷ Thiên (倚天)",
+        "check": {
+          "part": "prop-sword"
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Mũ quan đen (cánh chuồn, sọc vàng)",
+        "check": {
+          "part": "cap-official"
+        }
+      },
+      {
+        "label": "Màu đen + vàng [ĐX], không dùng xanh dương cho Ngụy",
+        "check": {
+          "all": [
+            {
+              "fill": "robe",
+              "is": "dark"
+            },
+            {
+              "trim": "robe",
+              "is": "gold"
+            }
+          ]
+        }
+      },
+      {
+        "label": "Gag: ngủ giả, ai tới gần thì giật mình quơ kiếm (sleep)",
+        "check": {
+          "all": [
+            {
+              "phase": {
+                "state": "sleep",
+                "where": {
+                  "eyes": "peek"
+                }
+              }
+            },
+            {
+              "phase": {
+                "state": "sleep",
+                "where": {
+                  "emote": "excl"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "colors": ["#F8F3EA trắng (mặt nạ)", "#26232B đen (áo, mũ)", "#C89B2C vàng (viền, đai)"],
+    "props": ["kiếm Ỷ Thiên"],
+    "face": "trắng = gian hùng đa nghi (đại bạch kiểm kinh kịch)",
+    "source": "TQDN-001, TQDN-004, TQDN-021, TQDN-041, TQDN-072; kịch: Jing role + 脸谱 (research §4.2 #11)"
+  }
+}

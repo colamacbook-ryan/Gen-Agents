@@ -1,6 +1,7 @@
 // Họ việc (tasks) + hàng đợi / outbox (jobs) trên SQLite (DATABASE §5.9, §5.18).
 import { toDbTimestamp } from '@ga/contracts';
 import { displaySeqFor } from '../../ids/index.ts';
+import { markSearchDocumentDead, upsertSearchDocument } from '../../search/index.ts';
 import { DbRuleError, invalidInput, permissionDenied } from '../errors.ts';
 import { dml } from '../sql.ts';
 import type { JobRow, TaskRow } from '../types.ts';
@@ -28,6 +29,19 @@ import {
 import { insertPolarisCheck } from './polaris.ts';
 
 const TERMINAL: ReadonlySet<TaskRow['status']> = new Set(['done', 'failed', 'cancelled']);
+
+function indexTask(ctx: Ctx, row: TaskRow): void {
+  upsertSearchDocument(requireW(ctx), ctx.ws, {
+    entityType: 'TK',
+    entityId: row.id,
+    displayId: row.display_id,
+    roleId: row.assignee_role_id,
+    positionId: row.position_id,
+    status: row.status,
+    title: row.title,
+    body: row.description,
+  });
+}
 
 export function taskRepo(ctx: Ctx): TaskRepo {
   return {
@@ -71,6 +85,7 @@ export function taskRepo(ctx: Ctx): TaskRepo {
         parent_task_id: i.parentTaskId ?? null,
         source_message_id: i.sourceMessageId ?? null,
       });
+      indexTask(ctx, row);
       return audited(ctx, { action: 'task.create', table: 'tasks', row, roleId: row.assignee_role_id });
     },
     update: (id, p, expectedVersion) => {
@@ -90,6 +105,7 @@ export function taskRepo(ctx: Ctx): TaskRepo {
         },
         { expectedVersion },
       );
+      indexTask(ctx, row);
       return audited(ctx, { action: 'task.update', table: 'tasks', row, before });
     },
     transition: (id, to, o) => {
@@ -118,6 +134,7 @@ export function taskRepo(ctx: Ctx): TaskRepo {
         },
         { expectedVersion: o?.expectedVersion },
       );
+      indexTask(ctx, row);
       return audited(ctx, { action: 'task.transition', table: 'tasks', row, before });
     },
     verify: (id, verdict) => {
@@ -165,6 +182,7 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       allow(ctx, 'tasks.softDelete', OWNER_ADMIN);
       const before = mustGetRow<TaskRow>(ctx, 'tasks', id);
       const row = softDeleteRow<TaskRow>(ctx, 'tasks', id);
+      markSearchDocumentDead(requireW(ctx), ctx.ws, 'TK', id);
       audited(ctx, { action: 'task.delete', table: 'tasks', row, before });
     },
   };

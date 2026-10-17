@@ -1,4 +1,4 @@
-// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v2.3.4) — KHÔNG SỬA TAY.
+// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v2.3.5) — KHÔNG SỬA TAY.
 // Union giá trị từ CHECK (col IN (…)) của từng bảng — test đối chiếu enum của @ga/contracts với DB.
 export const DB_ENUMS = {
   "actors.kind": ['user', 'role', 'system'],

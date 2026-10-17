@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""DDL SQLite cho DATABASE.md v2.2 → v2.3.4 (gen-agents) — sinh từ một DSL nhỏ. Từ v2.3.4: NGUỒN DUY NHẤT = db/spec/ của repo code (changelog: db/spec/CHANGELOG.md).
+"""DDL SQLite cho DATABASE.md v2.2 → v2.3.5 (gen-agents) — sinh từ một DSL nhỏ. Từ v2.3.4: NGUỒN DUY NHẤT = db/spec/ của repo code (changelog: db/spec/CHANGELOG.md).
 (v2.3.x: thư mục / tên tệp giữ "v2_2" — bằng chứng nối tiếp từ v2.2.x; xem DATABASE.md changelog v2.2.13 → v2.3.0, …, v2.3.2 → v2.3.3.)
 v2.3.3 (review bảo mật HIGH trên v2.3.2 — authorization bypass theo LỚP): người ghi = app_actor() (hàm ngữ cảnh kết nối, app đặt cho từng giao dịch ghi);
 cột created_by / updated_by / deleted_by chỉ là bản ghi lại, guard chung {t}_actor_i/_u (sinh từ DDL) buộc khớp; mọi cổng người ghi kiểm app_actor().
@@ -74,7 +74,7 @@ V_RULE = dict(write_once=['version', 'revision_id', 'decided_at', 'decided_by'],
 table('workspaces', 'P', cols=[
     ID, enum('kind', ['system', 'tenant']), "slug TEXT NOT NULL UNIQUE", "name TEXT NOT NULL",
     "owner_user_id TEXT REFERENCES users(id)",
-    "short_code TEXT NOT NULL UNIQUE CHECK (length(short_code) = 4)",
+    "short_code TEXT NOT NULL UNIQUE CHECK (typeof(short_code) = 'text' AND length(short_code) = 4)",          # v2.3.5: + typeof (BLOB lách)
     "locale TEXT NOT NULL DEFAULT 'vi'", "timezone TEXT NOT NULL DEFAULT 'Asia/Ho_Chi_Minh'",
     "currency_code TEXT NOT NULL DEFAULT 'GEN'", "currency_symbol TEXT NOT NULL DEFAULT '₲'",
     enum('status', ['active', 'suspended', 'archived'], default='active'), CA, "updated_at TEXT", "archived_at TEXT",
@@ -185,7 +185,9 @@ table('skin_assets', 'E', 'SN', cols=[
     enum('asset_kind', ['portrait', 'chibi'], default='portrait'), "name_vi TEXT NOT NULL", "name_zh TEXT", "faction TEXT",
     "file_path TEXT", enum('mime', ['image/png', 'image/jpeg', 'image/webp'], nn=False),
     # v2.3.4 (MEDIUM, NUL): GLOB / length() dừng ở ký tự NUL ⇒ 'hex64' + NUL + rác lọt — so byte: length(CAST(x AS BLOB)) = length(x) (chỉ ASCII, không NUL)
-    "sha256 TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*' AND length(CAST(sha256 AS BLOB)) = length(sha256))",
+    # v2.3.5 (review LOW): giá trị BLOB qua được so byte (length của BLOB = số byte ở cả hai vế) ⇒ + typeof = 'text' cho mọi CHECK chuỗi người nhập
+    "sha256 TEXT NOT NULL CHECK (typeof(sha256) = 'text' AND length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*' "
+    "AND length(CAST(sha256 AS BLOB)) = length(sha256))",
     "source TEXT NOT NULL CHECK (length(trim(source)) > 0)", "source_url TEXT",
     "license TEXT NOT NULL CHECK (length(trim(license)) > 0)", "license_url TEXT", "attribution TEXT",
     enum('status', ['active', 'withdrawn'], default='active'),
@@ -321,7 +323,7 @@ AI_GATE = ["CHECK ((confirmed_at IS NULL) = (confirmed_by IS NULL))",
 table('taxonomy_nodes', 'E', 'TX', cols=[
     enum('domain', ['skill', 'knowledge']), enum('level', ['group', 'branch', 'category']),
     f"parent_id TEXT REFERENCES taxonomy_nodes(id) {DEF}",
-    "name TEXT NOT NULL", "name_norm TEXT NOT NULL", "slug TEXT NOT NULL CHECK (length(slug) BETWEEN 1 AND 64)",
+    "name TEXT NOT NULL", "name_norm TEXT NOT NULL", "slug TEXT NOT NULL CHECK (typeof(slug) = 'text' AND length(slug) BETWEEN 1 AND 64)",
     "description TEXT", "ordinal INTEGER NOT NULL DEFAULT 0",
     enum('status', TX_STATUS, default='active'), enum('source', SRC),
     f"change_set_id TEXT REFERENCES change_sets(id) {DEF}", "confirmed_at TEXT", "confirmed_by TEXT REFERENCES actors(id)"],
@@ -330,7 +332,7 @@ table('taxonomy_nodes', 'E', 'TX', cols=[
          "CREATE INDEX ix_tx_tree ON taxonomy_nodes(workspace_id, domain, level, status)"])
 
 table('skills', 'E', 'SK', cols=[
-    "slug TEXT NOT NULL CHECK (length(slug) BETWEEN 1 AND 64)",
+    "slug TEXT NOT NULL CHECK (typeof(slug) = 'text' AND length(slug) BETWEEN 1 AND 64)",
     enum('status', ['active', 'proposed', 'obsolete'], default='active'),
     enum('origin', ['owner', 'trainer', 'imported', 'builtin']),
     f"current_version_id TEXT REFERENCES skill_versions(id) {DEF}",
@@ -724,7 +726,7 @@ table('engine_accounts', 'E', 'EN', cols=[
     enum('auth_method', ['subscription', 'api_key', 'adc']), "secret_id TEXT REFERENCES secrets(id)",
     # chỉ TÊN volume Docker (≤63 ký tự a-z0-9-): không chứa nổi một token OAuth/JWT (CNS-014, test no-session-token)
     # v2.3.4 (MEDIUM, NUL): tên volume + NUL + token lọt CHECK cũ (đúng thứ CNS-014 cấm) ⇒ thêm so byte
-    "auth_volume TEXT CHECK (auth_volume IS NULL OR (length(auth_volume) BETWEEN 3 AND 63 AND auth_volume NOT GLOB '*[^a-z0-9-]*' "
+    "auth_volume TEXT CHECK (auth_volume IS NULL OR (typeof(auth_volume) = 'text' AND length(auth_volume) BETWEEN 3 AND 63 AND auth_volume NOT GLOB '*[^a-z0-9-]*' "
     "AND length(CAST(auth_volume AS BLOB)) = length(auth_volume)))",
     "account_hint TEXT", "plan_label TEXT",
     enum('plan_confidence', ['direct', 'indirect', 'unknown'], nn=False),
@@ -923,9 +925,9 @@ table('telegram_allowlist', 'E', 'AL', cols=[
 TRIG_KIND = ['commitment_reminder', 'task_done', 'opportunity', 'incident', 'heartbeat_digest']
 table('proactive_policies', 'E', 'PP', cols=[
     "role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE", boolc('is_enabled', 1),
-    "max_per_day INTEGER NOT NULL DEFAULT 5 CHECK (max_per_day BETWEEN 0 AND 20)",
-    "quiet_start_min INTEGER NOT NULL CHECK (quiet_start_min BETWEEN 0 AND 1439)",
-    "quiet_end_min INTEGER NOT NULL CHECK (quiet_end_min BETWEEN 0 AND 1439)", boolc('weekend_differs'),
+    "max_per_day INTEGER NOT NULL DEFAULT 5 CHECK (typeof(max_per_day) = 'integer' AND max_per_day BETWEEN 0 AND 20)",   # v2.3.5: + số nguyên thật
+    "quiet_start_min INTEGER NOT NULL CHECK (typeof(quiet_start_min) = 'integer' AND quiet_start_min BETWEEN 0 AND 1439)",
+    "quiet_end_min INTEGER NOT NULL CHECK (typeof(quiet_end_min) = 'integer' AND quiet_end_min BETWEEN 0 AND 1439)", boolc('weekend_differs'),
     "weekend_quiet_start_min INTEGER CHECK (weekend_quiet_start_min IS NULL OR weekend_quiet_start_min BETWEEN 0 AND 1439)",
     "weekend_quiet_end_min INTEGER CHECK (weekend_quiet_end_min IS NULL OR weekend_quiet_end_min BETWEEN 0 AND 1439)",
     "timezone TEXT NOT NULL", enum('break_quiet_level', ['never', 'urgent_only', 'high_and_above'], default='urgent_only'),
@@ -1244,7 +1246,7 @@ table('secrets', 'E', 'SEC', cols=[
     # v2.3.3 (parser-differential): allowed_host = authority của URL neo đúng như WHATWG URL.host — host chữ thường [a-z0-9.-] (không chấm cuối), cổng tuỳ
     # chọn ':<1–65535>' không số 0 đầu và KHÔNG ghi 443 (cổng mặc định của https bị URL parser bỏ) — URL neo phải có authority TRÙNG đúng chuỗi này.
     # Mệnh đề tối thiểu: hai dấu ':' ⇒ phần cổng chứa ':' ⇒ trượt 'chỉ chữ số'; cổng ≥ 1 suy từ '[1-9]*' (không cần mệnh đề riêng).
-    "allowed_host TEXT CHECK (allowed_host IS NULL OR (length(allowed_host) BETWEEN 1 AND 253 AND allowed_host NOT GLOB '*[^a-z0-9.:-]*' "
+    "allowed_host TEXT CHECK (allowed_host IS NULL OR (typeof(allowed_host) = 'text' AND length(allowed_host) BETWEEN 1 AND 253 AND allowed_host NOT GLOB '*[^a-z0-9.:-]*' "
     "AND length(CAST(allowed_host AS BLOB)) = length(allowed_host) "                       # v2.3.4: so byte — không NUL, chỉ ASCII
     "AND allowed_host NOT GLOB ':*' AND allowed_host NOT GLOB '*.' AND allowed_host NOT GLOB '*.:*' "
     "AND (allowed_host NOT GLOB '*:*' OR (substr(allowed_host, instr(allowed_host, ':') + 1) GLOB '[1-9]*' "
@@ -1403,7 +1405,8 @@ def guard_triggers(name):
 # recursive_triggers = ON (REPLACE lọt vẫn chạy guard xoá) và cấm OR REPLACE / REPLACE INTO (lint bước ⑥).
 NO_REPLACE_EXEMPT = {
     'id_counters': 'cấp số bằng upsert ON CONFLICT DO UPDATE / DO NOTHING (§2.1) — không có guard xoá hay bất biến nào để REPLACE lách',
-    'jobs': 'outbox dedupe bằng ON CONFLICT … DO NOTHING (M4) — DELETE job không bị chặn nên REPLACE không lách được gì'}
+    'jobs': 'outbox dedupe bằng ON CONFLICT … DO NOTHING (M4) — guard chống REPLACE sẽ biến DO NOTHING thành lỗi; v2.3.5: DELETE job có cổng jobs_writer_d '
+            '(mặc định) — REPLACE chạy cổng đó vì kết nối bắt buộc recursive_triggers = ON (§2.2), lint cấm OR REPLACE'}
 MSG_NO_REPLACE = ('UNIQUE (chống REPLACE, v2.2.13): {t} — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE '
                   '(REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)')
 def _split_top(s):
@@ -1461,20 +1464,27 @@ def no_replace_triggers(ddl):
         if t in NO_REPLACE_EXEMPT:
             continue
         cols, keys = unique_keys(mem, t)
+        pk = [r for r in mem.execute(f"PRAGMA table_info({t})") if r[5]]
+        if not (len(pk) == 1 and pk[0][2].upper() == 'INTEGER'):
+            keys.append((['rowid'], None))   # v2.3.5 (review LOW): rowid ẩn (bảng không có INTEGER PK) ghi tường minh trùng hàng đang có ⇒ REPLACE xoá hàng đó
         if not keys:                      # không có khoá unique ⇒ REPLACE không có hàng nào để xoá
             continue
         def conflict(exprs, where, upd):
-            eq = ' AND '.join(f"{_pfx(e, cols, 'x')} = {_pfx(e, cols, 'NEW')}" for e in exprs)
+            eq = ' AND '.join("x.rowid = NEW.rowid" if e == 'rowid' else f"{_pfx(e, cols, 'x')} = {_pfx(e, cols, 'NEW')}" for e in exprs)
             wx = f" AND ({_pfx(where, cols, 'x')})" if where else ''
             wn = f"({_pfx(where, cols, 'NEW')}) AND " if where else ''
             me = ' AND x.rowid <> OLD.rowid' if upd else ''
             return f"({wn}EXISTS (SELECT 1 FROM {t} x WHERE {eq}{wx}{me}))"
         msg = MSG_NO_REPLACE.format(t=t)
-        of = [c for c in cols if any(re.search(r'\b' + c + r'\b', ' '.join(e) + ' ' + (w or '')) for e, w in keys)]
+        # v2.3.5 (review rowid): UPDATE đổi rowid KHÔNG gác ở đây — "OF rowid" phụ thuộc parser (SET _rowid_ / oid / cột INTEGER PK lọt) ⇒ {t}_rowid_lock
+        ipk = [pk[0][1]] if len(pk) == 1 and pk[0][2].upper() == 'INTEGER' else None      # cột INTEGER PRIMARY KEY = bí danh rowid ⇒ cũng thuộc {t}_rowid_lock
+        ukeys = [(e, w) for e, w in keys if e != ['rowid'] and e != ipk]
+        of = [c for c in cols if any(re.search(r'\b' + c + r'\b', ' '.join(e) + ' ' + (w or '')) for e, w in ukeys)]
         out.append(f"CREATE TRIGGER {t}_no_replace_i BEFORE INSERT ON {t}\nWHEN (\n  "
                    + "\n  OR ".join(conflict(e, w, False) for e, w in keys) + f")\nBEGIN SELECT RAISE(ABORT, '{msg}'); END")
-        out.append(f"CREATE TRIGGER {t}_no_replace_u BEFORE UPDATE OF {', '.join(of)} ON {t}\nWHEN (\n  "
-                   + "\n  OR ".join(conflict(e, w, True) for e, w in keys) + f")\nBEGIN SELECT RAISE(ABORT, '{msg}'); END")
+        if ukeys:
+            out.append(f"CREATE TRIGGER {t}_no_replace_u BEFORE UPDATE OF {', '.join(of)} ON {t}\nWHEN (\n  "
+                       + "\n  OR ".join(conflict(e, w, True) for e, w in ukeys) + f")\nBEGIN SELECT RAISE(ABORT, '{msg}'); END")
     mem.close()
     return out
 
@@ -1840,7 +1850,8 @@ MSG_TG_RESTORE = ('CONTRACT-r8e §A: khôi phục bot Telegram đã xoá mềm p
 # thật ("còn owner khác"). Một hàng chỉ TRỞ THÀNH owner active khi: (added_via = 'capture' — luồng bắt user ID đã xác minh) VÀ (actor là owner của workspace —
 # OWNER_ONLY, không gồm admin / tác tử — HOẶC bot chưa có hàng owner active nào: bootstrap lần đầu); app_maint() = 1 được miễn.
 MSG_AL_OWNER_NEW = ('v2.2.13 (review bảo mật, HIGH): hàng allowlist chỉ thành chủ sở hữu active khi owner của workspace thêm qua capture (user ID đã xác '
-                    'minh), hoặc bot chưa có hàng chủ sở hữu active nào (bootstrap qua capture) — admin, tác tử, nhập tay không tạo được chủ sở hữu')
+                    'minh), hoặc bot chưa có hàng chủ sở hữu active nào (bootstrap qua capture — v2.3.5: chỉ actor system của chính workspace) '
+                    '— admin, tác tử, nhập tay không tạo được chủ sở hữu')
 MSG_TG_RESTORE_OWNER = 'v2.2.13 (review bảo mật, HIGH): chỉ owner của workspace khôi phục được bot Telegram đã xoá mềm'
 MSG_TC_EVENT = ('CONTRACT-r8c §A: events core_agent.type_changed — actor phải là owner và "to" = loại Core agent hiện hành (ghi sau khi đổi ST-0017)')
 # v2.2.8 (CONTRACT-r8 §A): GỠ HẲN xoay tài khoản cùng hãng của v2.2.6 (setting engines.allow_same_vendor_rotation, consent
@@ -2195,6 +2206,288 @@ f"""CREATE TRIGGER change_sets_proposer_u BEFORE UPDATE OF proposed_by ON change
 WHEN app_maint() = 0 AND NEW.proposed_by IS NOT OLD.proposed_by AND NOT COALESCE(NEW.proposed_by = {ACTOR}, 0)
 BEGIN SELECT RAISE(ABORT, '{MSG_CS_PROPOSER}'); END""",
 ]
+
+
+# ================================================================ v2.3.5 (review bảo mật tay 2bbd12b + auto-review) — CỔNG NGƯỜI GHI cho bảng gốc phân quyền /
+# định tuyến chưa có cổng. Người ghi = app_actor(). Bảng gốc (workspace_members, actors, users) thiếu cổng ⇒ admin tự nâng owner rồi đi qua mọi cổng owner-only
+# (HIGH, pA). Đặt SAU guard chung người ghi, TRƯỚC guard nghiệp vụ trong thứ tự tạo ⇒ chạy SAU guard nghiệp vụ (thông điệp riêng của guard nghiệp vụ giữ nguyên).
+def _sys_of(ws, x=ACTOR):
+    return f"EXISTS (SELECT 1 FROM actors sy WHERE sy.id = {x} AND sy.workspace_id = {ws} AND sy.system_key = 'system')"
+def _owner_admin_of(ws, x=ACTOR):
+    return (f"EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id "
+            f"WHERE sa.id = {x} AND sa.workspace_id = {ws} AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))")
+def _writer_gates(t, msg, cond_i, cond_u, maint_u=True, maint_i=False, cond_d=None, msg_d=None):
+    """BA cổng {t}_writer_i / _u / _d (v2.3.5 — tên cũ _writer_pair: "pair" dễ hiểu nhầm là I/U đủ): chặn khi KHÔNG (cond). UPDATE miễn bảo trì (mẫu secrets)
+    trừ khi maint_u=False; INSERT miễn bảo trì chỉ khi maint_i; DELETE luôn miễn bảo trì (purge), điều kiện = cond_d (mặc định cond_u) đổi NEW.* ⇒ OLD.*
+    (hàng sắp xoá) — bảng nhạy cảm truyền cond_d chặt hơn (xoá cứng mất dấu vết: chỉ owner)."""
+    mu = 'app_maint() = 0 AND ' if maint_u else ''
+    mi = 'app_maint() = 0 AND ' if maint_i else ''
+    cond_d = (cond_d or cond_u).replace('NEW.', 'OLD.')
+    return [f"CREATE TRIGGER {t}_writer_i BEFORE INSERT ON {t}\nWHEN {mi}NOT ({cond_i})\nBEGIN SELECT RAISE(ABORT, '{msg}'); END",
+            f"CREATE TRIGGER {t}_writer_u BEFORE UPDATE ON {t}\nWHEN {mu}NOT ({cond_u})\nBEGIN SELECT RAISE(ABORT, '{msg}'); END",
+            f"CREATE TRIGGER {t}_writer_d BEFORE DELETE ON {t}\nWHEN app_maint() = 0 AND NOT ({cond_d})\nBEGIN SELECT RAISE(ABORT, '{msg_d or msg}'); END"]
+OA_SYS = f"({SYS_ACTOR(ACTOR)} OR {OWNER_ADMIN(ACTOR)})"
+MSG_WM = ('workspace_members (v2.3.5): phân quyền chỉ owner / admin còn là thành viên hoặc actor system của workspace ghi; cấp / gỡ / sửa hàng mức owner '
+          'chỉ owner (hoặc actor system — dựng / khôi phục); workspace_id / user_id bất biến ngoài bảo trì')
+MSG_WM_LAST = 'workspace_members (v2.3.5): workspace tenant phải còn ít nhất một owner đang hoạt động'
+MSG_WM_DEL = 'workspace_members (v2.3.5): xoá cứng thành viên chỉ trong bảo trì — gỡ khỏi workspace = removed_at'
+MSG_WM_X = ('workspace_members (v2.3.5): user đang là thành viên active của workspace khác — chỉ actor system của workspace hệ thống thêm / kích hoạt lại '
+            '(luồng mời qua dịch vụ app); owner / admin chỉ thêm user chưa thuộc workspace nào khác')
+MSG_ACT = ('actors (v2.3.5): actor chỉ actor system hoặc owner / admin còn là thành viên của workspace tạo / sửa; actor system chỉ actor system tạo (actor system '
+           'đầu tiên tự đăng ký lúc dựng workspace)')
+MSG_ACT_LOCK = 'actors (v2.3.5): kind / user_id / role_id / system_key / workspace_id bất biến ngoài bảo trì'
+MSG_USR = ('users (v2.3.5): tài khoản người dùng (bảng toàn cục) — tạo: actor system của workspace hệ thống hoặc owner / admin đang hoạt động; sửa: chỉ chính '
+           'người đó (hồ sơ / mật khẩu / định danh — không đụng khoá đăng nhập, vô hiệu, số thứ tự) hoặc actor system của workspace hệ thống (owner đặt lại mật '
+           'khẩu thành viên = dịch vụ app chạy bằng actor system sau khi app kiểm quyền); xoá: actor system của workspace hệ thống / bảo trì')
+MSG_AS = ('auth_sessions (v2.3.5): phiên đăng nhập (bảng toàn cục) — tạo / sửa / xoá: actor system của workspace hệ thống (dịch vụ đăng nhập) hoặc bảo trì; '
+          'chính người đó chỉ thu hồi (revoked_at) hoặc xoá phiên của mình')
+MSG_DEL = '{t} (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'
+MSG_ACT_DEL = 'actors (v2.3.5): xoá cứng actor chỉ owner hoặc actor system của workspace (hoặc bảo trì)'
+MSG_WS = 'workspaces (v2.3.5): sửa workspace chỉ owner / admin còn là thành viên hoặc actor system của chính workspace đó'
+MSG_WS_NEW = ('workspaces (v2.3.5): tạo workspace chỉ trong conn.bootstrap của chính workspace đó (app_bootstrap() = id), bảo trì, hoặc actor system của '
+              'workspace hệ thống')
+MSG_WS_DEL = 'workspaces (v2.3.5): xoá cứng workspace chỉ trong bảo trì (purge)'
+MSG_SEC_DEL = ('secrets (v2.3.5): xoá cứng bí mật theo luật ghi của kind — anchor_remote_token chỉ owner; telegram_bot_token owner / actor system; còn lại '
+               'owner / admin / actor system (hoặc bảo trì)')
+MSG_TG_DEL = 'telegram_bots (v2.3.5): xoá cứng bot chỉ owner còn là thành viên hoặc actor system của workspace (admin cũng không — như luật ghi cấu hình bot)'
+MSG_EI_DEL = 'engine_installs (v2.3.5): xoá cứng trạng thái cài CLI chỉ actor system của workspace (như luật ghi)'
+MSG_MIG = 'schema_migrations (v2.3.5): lịch sử migration chỉ ghi / sửa / xoá trong bảo trì (runner — conn.maintenance)'
+MSG_CT = 'containers (v2.3.5): container chỉ owner / admin hoặc actor system của workspace ghi; cột cấu hình (image / CLI / tài nguyên) chỉ actor system'
+MSG_AL = ('telegram_allowlist (v2.3.5): danh sách người được nhắn bot chỉ owner / admin còn là thành viên hoặc actor system ghi; tác tử Telegram chỉ thêm '
+          'hàng capture (người nhắn /start — luật owner ở telegram_allowlist_owner_new_i)')
+AL_TELE_CAPTURE = (f"(NEW.added_via = 'capture' AND EXISTS (SELECT 1 FROM actors st WHERE st.id = {ACTOR} AND st.workspace_id = NEW.workspace_id "
+                   f"AND st.system_key = 'telegram'))")
+MSG_ENG = 'engines (v2.3.5): danh mục engine dùng chung — chỉ bảo trì hoặc actor system của workspace hệ thống ghi'
+MSG_ST = 'settings (v2.3.5): mặc định từ chối — khoá nào cũng chỉ owner / admin còn là thành viên hoặc actor system ghi'
+MSG_ST_RET = ('settings (v2.3.5): audit.retention_days (1–36500) / log.retention_days (1–3650) / purge.grace_days (1–3650) là số nguyên trong khoảng, '
+              'chỉ owner ghi')
+MSG_GR = 'tool_grants (v2.3.5): cấp quyền tool chỉ owner / admin còn là thành viên hoặc actor system ghi (Role không tự cấp)'
+MSG_EG = 'egress_rules (v2.3.5): luật mạng ra chỉ owner / admin còn là thành viên hoặc actor system ghi (Role không tự mở)'
+# xoá cứng cấp quyền tool / luật mạng ra (auto-review MEDIUM): mất dấu vết + có thể gỡ luật chặn ⇒ chỉ owner (admin / Role không)
+MSG_GR_DEL = 'tool_grants (v2.3.5): xoá cứng cấp quyền tool chỉ owner còn là thành viên hoặc actor system của workspace (hoặc bảo trì) — admin / Role không'
+MSG_EG_DEL = 'egress_rules (v2.3.5): xoá cứng luật mạng ra chỉ owner còn là thành viên hoặc actor system của workspace (hoặc bảo trì) — admin / Role không'
+MSG_PP = 'proactive_policies (v2.3.5): chính sách tin chủ động chỉ owner / admin còn là thành viên hoặc actor system ghi (Role không tự nới trần / giờ yên tĩnh)'
+CT_SYS_COLS = ['image_ref', 'image_digest', 'cli_bundle', 'cpu_limit', 'mem_limit_mb', 'session_timeout_s']
+ST_RET = {'audit.retention_days': 36500, 'log.retention_days': 3650, 'purge.grace_days': 3650}
+_ST_RET_KEYS = ', '.join(f"'{k}'" for k in ST_RET)
+_ST_RET_OK = ("(NEW.deleted_at IS NOT NULL OR (json_type(NEW.value_json) = 'integer' AND CAST(NEW.value_json AS INTEGER) BETWEEN 1 AND "
+              "CASE NEW.key " + " ".join(f"WHEN '{k}' THEN {v}" for k, v in ST_RET.items()) + " ELSE 0 END))")
+# actor system của WORKSPACE HỆ THỐNG — bảng toàn cục (users, auth_sessions, engines, workspaces mới) và membership chéo workspace KHÔNG nhận actor system của
+# tenant (tenant nào cũng có actor system: auto-review HIGH — USR_SYS cũ không giới hạn workspace ⇒ actor system tenant B sửa mật khẩu user tenant A)
+SYS_SYS = _sys_of(f"'{SYS}'")
+USR_OA_ANY = (f"EXISTS (SELECT 1 FROM actors ua JOIN workspace_members um ON um.workspace_id = ua.workspace_id AND um.user_id = ua.user_id "
+              f"WHERE ua.id = {ACTOR} AND ua.kind = 'user' AND um.removed_at IS NULL AND um.access_level IN ('owner', 'admin'))")
+def _self_user(col):
+    """app_actor() là actor user của chính user {col} (ở workspace bất kỳ)."""
+    return f"EXISTS (SELECT 1 FROM actors uf WHERE uf.id = {ACTOR} AND uf.kind = 'user' AND uf.user_id = {col})"
+# chính người đó: tài khoản chưa vô hiệu; KHÔNG đụng cột định danh / số thứ tự / khoá đăng nhập / vô hiệu (dịch vụ đăng nhập = actor system của workspace hệ thống)
+# — auto-review HIGH: bỏ nhánh "owner của workspace có người đó" (owner A sửa password_hash của user cũng thuộc B = chiếm tài khoản chéo tenant)
+USR_SELF_LOCK = ['id', 'display_id', 'display_seq', 'created_at', 'disabled_at', 'failed_login_count', 'locked_until', 'last_login_at']
+USR_SELF = "(OLD.disabled_at IS NULL AND " + " AND ".join(f"NEW.{c} IS OLD.{c}" for c in USR_SELF_LOCK) + f" AND {_self_user('OLD.id')})"
+# phiên của chính người đó: chỉ thu hồi (revoked_at NULL ⇒ có), mọi cột khác giữ nguyên (không tự gia hạn expires_at, không đổi token)
+AS_SELF_LOCK = ['id', 'user_id', 'token_hash', 'created_at', 'expires_at', 'last_seen_at', 'ip', 'user_agent']
+AS_SELF_REVOKE = ("(OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL AND " + " AND ".join(f"NEW.{c} IS OLD.{c}" for c in AS_SELF_LOCK)
+                  + f" AND {_self_user('OLD.user_id')})")
+def _owner_of(ws, x=ACTOR):
+    return (f"EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id "
+            f"WHERE ow.id = {x} AND ow.workspace_id = {ws} AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner')")
+OA_SYS_OLD = f"({_sys_of('OLD.workspace_id')} OR {_owner_admin_of('OLD.workspace_id')})"
+def _writer_d(t, cond=OA_SYS_OLD, msg=None):
+    """{t}_writer_d (v2.3.5): xoá cứng ngoài bảo trì chỉ người có quyền theo hàng sắp xoá (OLD.*)."""
+    return (f"CREATE TRIGGER {t}_writer_d BEFORE DELETE ON {t}\nWHEN app_maint() = 0 AND NOT ({cond})\n"
+            f"BEGIN SELECT RAISE(ABORT, '{msg or MSG_DEL.format(t=t)}'); END")
+# user đang là thành viên ACTIVE của workspace khác (membership chéo workspace — chỉ SYS_SYS)
+WM_ELSEWHERE = ("EXISTS (SELECT 1 FROM workspace_members ox WHERE ox.user_id = NEW.user_id AND ox.workspace_id <> NEW.workspace_id "
+                "AND ox.removed_at IS NULL)")
+# settings: cổng MẶC ĐỊNH — bảo trì (khôi phục / chuyển đổi) miễn cả INSERT; khoá có luật riêng giữ cổng riêng (retention: INSERT không miễn)
+V235_WRITER_TRIGGERS = [
+# --- workspace_members (HIGH): mức owner chỉ owner (hoặc system); còn lại owner / admin (hoặc system); không bảo trì miễn (gốc phân quyền)
+f"""CREATE TRIGGER workspace_members_writer_i BEFORE INSERT ON workspace_members
+WHEN NOT ({SYS_SYS} OR {SYS_ACTOR(ACTOR)} OR CASE WHEN NEW.access_level = 'owner' THEN {OWNER_ONLY(ACTOR)} ELSE {OWNER_ADMIN(ACTOR)} END)
+BEGIN SELECT RAISE(ABORT, '{MSG_WM}'); END""",
+f"""CREATE TRIGGER workspace_members_writer_u BEFORE UPDATE ON workspace_members
+WHEN (app_maint() = 0 AND (NEW.workspace_id IS NOT OLD.workspace_id OR NEW.user_id IS NOT OLD.user_id))
+  OR NOT ({SYS_SYS} OR {SYS_ACTOR(ACTOR)} OR CASE WHEN 'owner' IN (OLD.access_level, NEW.access_level) THEN {OWNER_ONLY(ACTOR)} ELSE {OWNER_ADMIN(ACTOR)} END)
+BEGIN SELECT RAISE(ABORT, '{MSG_WM}'); END""",
+# membership chéo workspace (review: kéo user của tenant B vào A để thành "owner của user đó"): user đang active ở workspace khác ⇒ chỉ SYS_SYS thêm / kích
+# hoạt lại; không bảo trì miễn (bảo trì chạy bằng actor system của workspace hệ thống — qua được)
+f"""CREATE TRIGGER workspace_members_cross_i BEFORE INSERT ON workspace_members
+WHEN {WM_ELSEWHERE} AND NOT {SYS_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_WM_X}'); END""",
+f"""CREATE TRIGGER workspace_members_cross_u BEFORE UPDATE OF removed_at ON workspace_members
+WHEN OLD.removed_at IS NOT NULL AND NEW.removed_at IS NULL AND {WM_ELSEWHERE} AND NOT {SYS_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_WM_X}'); END""",
+f"""CREATE TRIGGER workspace_members_owner_last_u BEFORE UPDATE ON workspace_members
+WHEN OLD.access_level = 'owner' AND OLD.removed_at IS NULL
+ AND NOT (NEW.access_level = 'owner' AND NEW.removed_at IS NULL AND NEW.workspace_id IS OLD.workspace_id AND NEW.user_id IS OLD.user_id)
+ AND (SELECT kind FROM workspaces WHERE id = OLD.workspace_id) = 'tenant'
+ AND NOT EXISTS (SELECT 1 FROM workspace_members ow WHERE ow.workspace_id = OLD.workspace_id AND ow.user_id <> OLD.user_id
+                 AND ow.access_level = 'owner' AND ow.removed_at IS NULL)
+BEGIN SELECT RAISE(ABORT, '{MSG_WM_LAST}'); END""",
+f"""CREATE TRIGGER workspace_members_delete_d BEFORE DELETE ON workspace_members
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, '{MSG_WM_DEL}'); END""",
+# --- actors (HIGH): system / owner / admin; actor system chỉ system tạo (actor system đầu tiên tự đăng ký lúc dựng); cột định danh khoá ngoài bảo trì
+f"""CREATE TRIGGER actors_writer_i BEFORE INSERT ON actors
+WHEN NOT ({SYS_ACTOR(ACTOR)}
+          OR (NEW.kind = 'system' AND NEW.system_key = 'system' AND COALESCE(NEW.id = {ACTOR}, 0)          -- B2: không bao giờ NULL (app_actor() NULL ⇒ chặn)
+              AND COALESCE(NEW.workspace_id = app_bootstrap(), 0)                                        -- chỉ trong conn.bootstrap của CHÍNH workspace đó
+              AND NOT EXISTS (SELECT 1 FROM actors s0 WHERE s0.workspace_id = NEW.workspace_id AND s0.system_key = 'system'))
+          OR (NEW.kind <> 'system' AND {OWNER_ADMIN(ACTOR)}))
+BEGIN SELECT RAISE(ABORT, '{MSG_ACT}'); END""",
+f"""CREATE TRIGGER actors_writer_u BEFORE UPDATE ON actors
+WHEN app_maint() = 0 AND NOT {OA_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_ACT}'); END""",
+_writer_d('actors', f"({_sys_of('OLD.workspace_id')} OR {_owner_of('OLD.workspace_id')})", MSG_ACT_DEL),
+f"""CREATE TRIGGER actors_lock_u BEFORE UPDATE ON actors
+WHEN app_maint() = 0 AND NOT (NEW.id IS OLD.id AND NEW.kind IS OLD.kind AND NEW.user_id IS OLD.user_id AND NEW.role_id IS OLD.role_id
+                              AND NEW.system_key IS OLD.system_key AND NEW.workspace_id IS OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, '{MSG_ACT_LOCK}'); END""",
+# --- users (HIGH): không còn tự do — viewer từng đổi được password_hash của owner
+f"""CREATE TRIGGER users_writer_i BEFORE INSERT ON users
+WHEN app_maint() = 0 AND NOT ({SYS_SYS} OR {USR_OA_ANY})
+BEGIN SELECT RAISE(ABORT, '{MSG_USR}'); END""",
+f"""CREATE TRIGGER users_writer_u BEFORE UPDATE ON users
+WHEN app_maint() = 0 AND NOT ({SYS_SYS} OR {USR_SELF})
+BEGIN SELECT RAISE(ABORT, '{MSG_USR}'); END""",
+_writer_d('users', SYS_SYS, MSG_USR),
+# --- auth_sessions (toàn cục): dịch vụ đăng nhập = actor system của workspace hệ thống; chính người đó chỉ thu hồi / xoá phiên của mình
+f"""CREATE TRIGGER auth_sessions_writer_i BEFORE INSERT ON auth_sessions
+WHEN app_maint() = 0 AND NOT {SYS_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_AS}'); END""",
+f"""CREATE TRIGGER auth_sessions_writer_u BEFORE UPDATE ON auth_sessions
+WHEN app_maint() = 0 AND NOT ({SYS_SYS} OR {AS_SELF_REVOKE})
+BEGIN SELECT RAISE(ABORT, '{MSG_AS}'); END""",
+_writer_d('auth_sessions', f"({SYS_SYS} OR {_self_user('OLD.user_id')})", MSG_AS),
+# --- schema_migrations (toàn cục): runner ghi trong bảo trì
+f"""CREATE TRIGGER schema_migrations_maint_i BEFORE INSERT ON schema_migrations
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, '{MSG_MIG}'); END""",
+f"""CREATE TRIGGER schema_migrations_maint_u BEFORE UPDATE ON schema_migrations
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, '{MSG_MIG}'); END""",
+f"""CREATE TRIGGER schema_migrations_maint_d BEFORE DELETE ON schema_migrations
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, '{MSG_MIG}'); END""",
+# --- workspaces: sửa (trừ mốc khoá Core agent — trigger probe_runs_core_lock_* ghi, guard riêng workspaces_core_lock_u); INSERT = dựng (chưa có actor)
+f"""CREATE TRIGGER workspaces_writer_u BEFORE UPDATE OF id, kind, slug, name, owner_user_id, short_code, locale, timezone, currency_code, currency_symbol,
+  status, created_at, updated_at, archived_at, restored_at ON workspaces
+WHEN app_maint() = 0 AND NOT ({_sys_of('NEW.id')} OR {_owner_admin_of('NEW.id')})
+BEGIN SELECT RAISE(ABORT, '{MSG_WS}'); END""",
+f"""CREATE TRIGGER workspaces_writer_i BEFORE INSERT ON workspaces
+WHEN app_maint() = 0 AND NOT (COALESCE(NEW.id = app_bootstrap(), 0) OR {SYS_SYS})
+BEGIN SELECT RAISE(ABORT, '{MSG_WS_NEW}'); END""",
+f"""CREATE TRIGGER workspaces_writer_d BEFORE DELETE ON workspaces
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, '{MSG_WS_DEL}'); END""",
+# --- containers (MEDIUM, pC): image / CLI / tài nguyên chỉ actor system; còn lại owner / admin / system
+f"""CREATE TRIGGER containers_writer_i BEFORE INSERT ON containers
+WHEN NOT ({SYS_ACTOR(ACTOR)} OR ({OWNER_ADMIN(ACTOR)} AND {' AND '.join(f'NEW.{c} IS NULL' for c in CT_SYS_COLS)}))
+BEGIN SELECT RAISE(ABORT, '{MSG_CT}'); END""",
+f"""CREATE TRIGGER containers_writer_u BEFORE UPDATE ON containers
+WHEN app_maint() = 0 AND NOT {OA_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_CT}'); END""",
+f"""CREATE TRIGGER containers_sys_u BEFORE UPDATE OF {', '.join(CT_SYS_COLS)} ON containers
+WHEN app_maint() = 0 AND NOT {SYS_ACTOR(ACTOR)}
+BEGIN SELECT RAISE(ABORT, '{MSG_CT}'); END""",
+_writer_d('containers'),
+# --- xoá cứng KHÔNG lỏng hơn luật ghi (bảng credential có luật ghi chặt hơn mặc định owner / admin / system)
+_writer_d('secrets', f"(CASE WHEN OLD.kind = 'anchor_remote_token' THEN {_owner_of('OLD.workspace_id')} "
+                     f"WHEN OLD.kind = 'telegram_bot_token' THEN ({_owner_of('OLD.workspace_id')} OR {_sys_of('OLD.workspace_id')}) ELSE {OA_SYS_OLD} END)",
+          MSG_SEC_DEL),
+_writer_d('telegram_bots', f"({_owner_of('OLD.workspace_id')} OR {_sys_of('OLD.workspace_id')})", MSG_TG_DEL),
+_writer_d('engine_installs', _sys_of('OLD.workspace_id'), MSG_EI_DEL),
+# --- engines (MEDIUM, pD): danh mục dùng chung
+f"""CREATE TRIGGER engines_writer_i BEFORE INSERT ON engines
+WHEN app_maint() = 0 AND NOT {SYS_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_ENG}'); END""",
+f"""CREATE TRIGGER engines_writer_u BEFORE UPDATE ON engines
+WHEN app_maint() = 0 AND NOT {SYS_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_ENG}'); END""",
+f"""CREATE TRIGGER engines_writer_d BEFORE DELETE ON engines
+WHEN app_maint() = 0 AND NOT {SYS_SYS}
+BEGIN SELECT RAISE(ABORT, '{MSG_ENG}'); END""",
+# --- settings (MEDIUM, pI): mặc định từ chối + khoá retention / purge có khoảng, chỉ owner
+f"""CREATE TRIGGER settings_retention_i BEFORE INSERT ON settings
+WHEN NEW.key IN ({_ST_RET_KEYS}) AND NOT ({OWNER_ONLY(ACTOR)} AND {_ST_RET_OK})
+BEGIN SELECT RAISE(ABORT, '{MSG_ST_RET}'); END""",
+f"""CREATE TRIGGER settings_retention_u BEFORE UPDATE OF key, value_json, deleted_at, workspace_id ON settings
+WHEN app_maint() = 0 AND (OLD.key IN ({_ST_RET_KEYS}) OR NEW.key IN ({_ST_RET_KEYS}))
+ AND NOT ({OWNER_ONLY(ACTOR)} AND NEW.key IS OLD.key AND {_ST_RET_OK})
+BEGIN SELECT RAISE(ABORT, '{MSG_ST_RET}'); END""",
+f"""CREATE TRIGGER settings_retention_d BEFORE DELETE ON settings
+WHEN app_maint() = 0 AND OLD.key IN ({_ST_RET_KEYS}) AND NOT {_owner_of('OLD.workspace_id')}
+BEGIN SELECT RAISE(ABORT, '{MSG_ST_RET}'); END""",
+] + _writer_gates('settings', MSG_ST, OA_SYS, OA_SYS, maint_i=True) \
+  + _writer_gates('telegram_allowlist', MSG_AL, f'{OA_SYS} OR {AL_TELE_CAPTURE}', OA_SYS) \
+  + _writer_gates('tool_grants', MSG_GR, OA_SYS, OA_SYS, cond_d=OO_SYS, msg_d=MSG_GR_DEL) \
+  + _writer_gates('egress_rules', MSG_EG, OA_SYS, OA_SYS, cond_d=OO_SYS, msg_d=MSG_EG_DEL) \
+  + _writer_gates('proactive_policies', MSG_PP, OA_SYS, OA_SYS)
+
+# ================================================================ v2.3.5 (review MEDIUM, pB): {t}_notnull_i/_u — sinh từ DDL. INSERT OR REPLACE / UPDATE OR REPLACE
+# ghi NULL vào cột NOT NULL CÓ DEFAULT ⇒ SQLite thay bằng DEFAULT SAU khi mọi guard BEFORE đã đọc NEW.cột = NULL (guard so sánh với NULL ⇒ không chặn): tạo
+# được owner allowlist giả, gỡ được owner cuối. Guard này chặn mọi NULL ở các cột đó; tạo SAU CÙNG ⇒ chạy TRƯỚC mọi BEFORE trigger cùng sự kiện.
+MSG_NOTNULL = 'NOT NULL (v2.3.5, chống REPLACE): {t} — cột NOT NULL có DEFAULT không nhận NULL (OR REPLACE thay NULL bằng DEFAULT sau khi guard đã đọc NULL)'
+def notnull_triggers(ddl):
+    mem = sqlite3.connect(':memory:')
+    for s in ddl:
+        mem.execute(s)
+    out = []
+    for t in MVP_TABLES:
+        nn = [r[1] for r in mem.execute(f"PRAGMA table_info({t})") if r[3] and r[4] is not None]
+        if not nn:
+            continue
+        cond = ' OR '.join(f'NEW.{c} IS NULL' for c in nn)
+        msg = MSG_NOTNULL.format(t=t)
+        out.append(f"CREATE TRIGGER {t}_notnull_i BEFORE INSERT ON {t}\nWHEN {cond}\nBEGIN SELECT RAISE(ABORT, '{msg}'); END")
+        out.append(f"CREATE TRIGGER {t}_notnull_u BEFORE UPDATE OF {', '.join(nn)} ON {t}\nWHEN {cond}\nBEGIN SELECT RAISE(ABORT, '{msg}'); END")
+    mem.close()
+    return out
+
+# ================================================================ v2.3.5 (review: mọi bảng × I/U/D có cổng hoặc miễn có lý do): {t}_writer_d MẶC ĐỊNH — sinh cho mọi bảng
+# MVP có workspace_id mà CHƯA có cổng DELETE riêng ({t}_writer_d viết tay) hay chặn-trừ-bảo-trì (append-only {t}_no_delete): xoá cứng ngoài bảo trì chỉ owner /
+# admin còn là thành viên hoặc actor system của workspace của hàng (OLD.workspace_id). Tạo NGAY SAU cổng người ghi viết tay ⇒ chạy SAU guard DELETE nghiệp vụ.
+_MAINT_ONLY_D = re.compile(r"CREATE TRIGGER \w+ BEFORE DELETE ON (\w+)\nWHEN app_maint\(\) = 0\nBEGIN SELECT RAISE\(ABORT, '[^']*'\); END$")
+def default_delete_triggers(trig):
+    have = set()
+    for s in trig:
+        m = re.match(r"CREATE TRIGGER (\w+) BEFORE DELETE ON (\w+)\n", s)
+        if m and (m.group(1) == f'{m.group(2)}_writer_d' or _MAINT_ONLY_D.match(s)):
+            have.add(m.group(2))
+    return [_writer_d(t) for t in MVP_TABLES if t not in have and 'workspace_id' in cols_of(t)]
+
+# ================================================================ v2.3.5 (meta-test mọi bảng × I/U/D): {t}_ws_actor_i/_u — guard chung cho bảng CÓ workspace_id mà KHÔNG có cột người
+# ghi (created_by) và chưa có cổng viết tay (dẫn xuất / hàng con / bộ cấp số: change_set_items, compiled_prompt_segments, id_counters, knowledge_chunks,
+# search_documents, skill_engine_support, skill_files, usage_daily): ghi ngoài bảo trì cần app_actor() là actor của CHÍNH workspace của hàng (trước v2.3.5: ghi
+# vô danh được). Mức người ghi (như {t}_actor_i/_u), KHÔNG phải cổng vai trò — meta-test WRITER-all liệt kê kèm lý do.
+MSG_TENANT = ('{t} (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor '
+              'hoặc actor workspace khác ⇒ từ chối)')
+def ws_actor_triggers():
+    hand = {m.group(1) for s in V235_WRITER_TRIGGERS for m in [re.match(r"CREATE TRIGGER (\w+)_writer_i BEFORE INSERT ON \1\n", s)] if m}
+    out = []
+    for t in MVP_TABLES:
+        cols = cols_of(t)
+        if 'workspace_id' not in cols or 'created_by' in cols or t in hand:
+            continue
+        msg = MSG_TENANT.format(t=t)
+        out.append(f"CREATE TRIGGER {t}_ws_actor_i BEFORE INSERT ON {t}\nWHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = {ACTOR} "
+                   f"AND ta.workspace_id = NEW.workspace_id)\nBEGIN SELECT RAISE(ABORT, '{msg}'); END")
+        if (T[t]['rules'] or {}).get('mode') == 'append':
+            continue                      # append-only: {t}_no_update chặn MỌI UPDATE ngoài bảo trì (guard này không bao giờ tới lượt)
+        out.append(f"CREATE TRIGGER {t}_ws_actor_u BEFORE UPDATE ON {t}\nWHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = {ACTOR} "
+                   f"AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)\nBEGIN SELECT RAISE(ABORT, '{msg}'); END")
+    return out
+
+# ================================================================ v2.3.5 (review MEDIUM — rowid phụ thuộc parser): {t}_rowid_lock — sinh cho MỌI bảng MVP. "BEFORE UPDATE OF
+# rowid" KHÔNG bắt SET _rowid_ = … / SET oid = … / SET <cột INTEGER PRIMARY KEY> = … (đo trên SQLite 3.45) ⇒ trigger KHÔNG phụ thuộc tên cột: NEW.rowid IS NOT
+# OLD.rowid. Ngoài bảo trì: rowid bất biến; trong bảo trì: không đổi sang rowid của hàng đang có (UPDATE OR REPLACE xoá hàng đó — thay khoá rowid cũ của
+# {t}_no_replace_u). Tạo SAU CÙNG ⇒ chạy TRƯỚC mọi BEFORE UPDATE khác.
+MSG_ROWID = ('rowid (v2.3.5): {t} — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid '
+             'của hàng đang có (REPLACE xoá hàng đó)')
+def rowid_lock_triggers():
+    return [f"CREATE TRIGGER {t}_rowid_lock BEFORE UPDATE ON {t}\n"
+            f"WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM {t} x WHERE x.rowid = NEW.rowid))\n"
+            f"BEGIN SELECT RAISE(ABORT, '{MSG_ROWID.format(t=t)}'); END" for t in MVP_TABLES]
 
 
 BUSINESS_TRIGGERS = [
@@ -3054,15 +3347,20 @@ BEGIN
 END""",
 # v2.2.13 (review bảo mật HIGH): TRỞ THÀNH owner active — INSERT hàng owner active; UPDATE is_owner 0 → 1, status removed → active, deleted_at → NULL (kích hoạt lại),
 # added_via / bot_id (đổi điều kiện) — chỉ khi capture VÀ (owner của workspace HOẶC bot chưa có owner active nào); bảo trì được miễn.
+# v2.3.5 (review hợp đồng API, a): nhánh bootstrap (bot chưa có owner active) từng cho MỌI actor (admin / tác tử chiếm ghế owner trước) ⇒ nay chỉ actor system
+# ('system') của CHÍNH workspace (dịch vụ app — actor system workspace hệ thống / tenant khác không ghi được allowlist của tenant: telegram_allowlist_writer_i);
+# owner của workspace thì lúc nào cũng được; bảo trì miễn.
 f"""CREATE TRIGGER telegram_allowlist_owner_new_i BEFORE INSERT ON telegram_allowlist
 WHEN {AL_OWNER_ACTIVE.format(a='NEW')} AND app_maint() = 0
  AND NOT (NEW.added_via = 'capture' AND ({OWNER_ONLY(ACTOR)}
-          OR NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND {AL_OWNER_ACTIVE.format(a='na')})))
+          OR ({SYS_ACTOR(ACTOR)}
+              AND NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND {AL_OWNER_ACTIVE.format(a='na')}))))
 BEGIN SELECT RAISE(ABORT, '{MSG_AL_OWNER_NEW}'); END""",
 f"""CREATE TRIGGER telegram_allowlist_owner_new_u BEFORE UPDATE OF is_owner, status, deleted_at, added_via, bot_id ON telegram_allowlist
 WHEN {AL_OWNER_ACTIVE.format(a='NEW')} AND NOT ({AL_OWNER_ACTIVE.format(a='OLD')}) AND app_maint() = 0
  AND NOT (NEW.added_via = 'capture' AND ({OWNER_ONLY(ACTOR)}
-          OR NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND na.id <> OLD.id AND {AL_OWNER_ACTIVE.format(a='na')})))
+          OR ({SYS_ACTOR(ACTOR)}
+              AND NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND na.id <> OLD.id AND {AL_OWNER_ACTIVE.format(a='na')}))))
 BEGIN SELECT RAISE(ABORT, '{MSG_AL_OWNER_NEW}'); END""",
 # §E (CNS-123): mốc login_started_at do DB ghi — vào 'in_progress' (INSERT; UPDATE login_status kể cả ghi lại 'in_progress' = owner mở lại PTY ⇒ đếm lại) ⇒ NOW_TS;
 # rời 'in_progress' ⇒ NULL. Bỏ trigger ⇒ mốc NULL ⇒ LOGIN_STALLED fail-closed (báo động ngay) — test bắt được.
@@ -3132,10 +3430,16 @@ def build(policy='v2', include_views=True):
     # v2.2.13: chống REPLACE (sinh từ DDL) — tạo TRƯỚC mọi trigger khác ⇒ chạy SAU CÙNG trong các BEFORE trigger cùng sự kiện (SQLite chạy trigger tạo sau
     # trước; test REPLACE-guard khoá thứ tự này) ⇒ guard nghiệp vụ giữ thông điệp riêng, guard này chỉ bắt phần còn lại — vẫn trước bước giải xung đột
     trig = no_replace_triggers(stmts + idx)
+    trig += V235_WRITER_TRIGGERS      # v2.3.5: cổng người ghi bảng gốc / định tuyến — tạo sớm ⇒ chạy SAU guard chung và guard nghiệp vụ (thông điệp riêng giữ nguyên)
+    at_default_d = len(trig)
     trig += actor_triggers()          # v2.3.3: guard chung người ghi — tạo sau chống REPLACE, trước mọi guard khác
+    trig += ws_actor_triggers()       # v2.3.5: guard chung cho bảng không có cột người ghi
     for n in MVP_TABLES:
         trig += guard_triggers(n)
     trig += BUSINESS_TRIGGERS
+    trig[at_default_d:at_default_d] = default_delete_triggers(trig)   # v2.3.5: {t}_writer_d mặc định — ngay sau cổng viết tay
+    trig += notnull_triggers(stmts)   # v2.3.5: tạo gần cuối ⇒ chạy trước mọi BEFORE trigger cùng sự kiện (sau {t}_rowid_lock)
+    trig += rowid_lock_triggers()     # v2.3.5: tạo SAU CÙNG ⇒ chạy TRƯỚC mọi BEFORE UPDATE
     out = stmts + idx + FTS + trig
     if include_views:
         out.append(read_views())

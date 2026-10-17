@@ -4,6 +4,7 @@ export type * from './avatar.ts';
 export type * from './engines.ts';
 export * from './errors.ts';
 export type * from './roles.ts';
+export * from './scope.ts';
 export type * from './sessions.ts';
 export { type Dml, dml, type WriteResult } from './sql.ts';
 export type * from './store.ts';

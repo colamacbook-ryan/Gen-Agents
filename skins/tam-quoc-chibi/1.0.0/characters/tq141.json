@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "id": "tq141",
+  "name": "Tôn Thượng Hương",
+  "han": "孫尚香",
+  "role": "Nữ tướng",
+  "faction": "Ngô",
+  "kind": "vo",
+  "gender": "nu",
+  "own": "#3F6FD8",
+  "crop": [0, 0, 200],
+  "anim": {
+    "phase": "-0.4s",
+    "breath": "3.2s",
+    "blink": "4.3s",
+    "bdelay": "-1.9s"
+  },
+  "note": "quát chỉ tay, cằm hếch, kiếm tua đỏ đung đưa (gag giật mình thuộc về người khác, không phải \"mẹ cọp\"); thưởng / lỗi múa kiếm; dáng vuông chân rộng",
+  "p": {
+    "face": "oval",
+    "skin": "#F8DCC2",
+    "blush": "#F2A596",
+    "hair": "#2B1D1F",
+    "liner": true,
+    "glow": "#8A4A3A",
+    "iris": "#2E2224",
+    "robe": "#2D5BC4",
+    "trim": "#E3C878",
+    "sash": "#E3C878",
+    "inner": "#F4EFE2",
+    "buckle": "#F2D06B",
+    "sleeve": 24,
+    "crownY": 2,
+    "cap": "bunband",
+    "capColor": "#2D5BC4",
+    "capAccent": "#F4EFE2",
+    "brow": "swept",
+    "eyes": "sharp",
+    "mouth": "smirk",
+    "tassel": "#C8363B",
+    "beard": "none",
+    "prop": "swordT",
+    "stance": "wide",
+    "armL": [22, 40],
+    "armR": [24, 20]
+  },
+  "identity": {
+    "p1": "prop-sword",
+    "must": [
+      {
+        "p": 1,
+        "label": "Một bảo kiếm có tua đỏ, dựng dọc bên người (đường dọc sáng ở 32 px)",
+        "check": {
+          "all": [
+            {
+              "part": "prop-sword"
+            },
+            {
+              "part": "sword-tassel"
+            }
+          ]
+        }
+      },
+      {
+        "p": 2,
+        "label": "Búi tóc cao + băng trán lam/trắng (KHÔNG đỏ, đỏ là của Tôn Sách) + trâm nhỏ",
+        "check": {
+          "all": [
+            {
+              "part": "cap-bunband"
+            },
+            {
+              "not": {
+                "band": "cap-bunband",
+                "is": "red"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "p": 3,
+        "label": "Dáng vuông, chân rộng + áo gọn lam cobalt (không tay áo nước)",
+        "check": {
+          "all": [
+            {
+              "part": "stance-wide"
+            },
+            {
+              "fill": "robe",
+              "is": "cobalt"
+            },
+            {
+              "not": {
+                "part": "water-sleeve"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Lam cobalt + vàng nhạt + trắng ngà; tránh hồng / tím (Điêu Thuyền), đỏ (Tôn Sách), tím thẫm (Tôn Quyền)",
+        "check": {
+          "all": [
+            {
+              "fill": "robe",
+              "is": "cobalt"
+            },
+            {
+              "trim": "robe",
+              "is": "paleGold"
+            }
+          ]
+        }
+      },
+      {
+        "label": "Không cung (research §4.5: không có nguồn); không mắt anime long lanh; không gợi cảm hoá",
+        "check": {
+          "all": [
+            {
+              "not": {
+                "part": "prop-bow"
+              }
+            },
+            {
+              "param": "eyes",
+              "is": "sharp"
+            }
+          ]
+        }
+      },
+      {
+        "label": "Gag: quát chỉ tay + cằm hếch (normal); dậm chân bốc khói + múa kiếm (error)",
+        "check": {
+          "all": [
+            {
+              "token": {
+                "state": "normal",
+                "has": "pointScold"
+              }
+            },
+            {
+              "token": {
+                "state": "error",
+                "has": "stomp"
+              }
+            },
+            {
+              "token": {
+                "state": "error",
+                "has": "propSwing"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "colors": [
+      "#2D5BC4 lam cobalt (áo)",
+      "#E3C878 vàng nhạt (viền, đai)",
+      "#F4EFE2 trắng ngà (băng trán, áo trong)",
+      "#C8363B đỏ (chỉ tua kiếm)"
+    ],
+    "props": ["bảo kiếm có tua đỏ"],
+    "face": "thanh y [K: kinh kịch bjnews]; mặt thường, mày thẳng hơi xếch, cằm hếch, không anime",
+    "source": "TQDN-054, TQDN-055, TQDN-061; TQC-37; tranh 古今百美圖之孫夫人 (research §4.5 #31, Gen chọn phương án A)"
+  }
+}
