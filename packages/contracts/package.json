@@ -1,0 +1,17 @@
+{
+  "name": "@ga/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Hợp đồng giữa các module (zod + TS) — đóng băng ở M0, đổi qua PR \"contract\" (BUILD-PLAN §D.3).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}

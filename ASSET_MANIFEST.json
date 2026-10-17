@@ -1,0 +1,5 @@
+{
+  "$comment": "Mọi asset (ảnh, font, âm thanh, tham số nhân vật trong skins/) phải có mục ở đây: nguồn + license + sha256 (STD-04 §6). Cổng: pnpm license:check. M0 chưa có asset; gói tam-quoc-chibi 1.0.0 vào ở M3 (L-CHIBI, BUILD-PLAN §D.5).",
+  "version": 1,
+  "assets": []
+}

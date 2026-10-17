@@ -1,0 +1,87 @@
+# CI cho mọi PR + push main (BUILD-PLAN §A.1 CI, §E.1 DoD, Phụ lục DoD chung).
+# Lệnh chạy giống hệt máy dev (README / BUILD-PLAN §C.8). E2E / IT theo nhãn + hằng đêm: it-e2e.yml, nightly.yml (M1+).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Chuỗi cung ứng (review tay M0, LOW): action ghim SHA commit (tag ở chú thích, lấy bằng
+# `git ls-remote https://github.com/<owner>/<action> refs/tags/<tag>`), checkout không lưu token
+# (persist-credentials: false), không nội suy ${{ }} vào `run:` (dùng env:). Test scripts/test/ci-pinning.test.mjs ép.
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: lint · typecheck · test · license
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm lint:rules --selftest
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm license:check
+      - run: pnpm license:check --selftest
+
+  db:
+    name: DB · bộ test Python + parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: python + sqlite của runner
+        run: python3 -c "import sys, sqlite3; print(sys.version.split()[0], 'sqlite', sqlite3.sqlite_version)"
+      # db/spec khớp SYNC.json, migration + kiểu khớp db/spec, TỔNG N/N PASS, parity runner TS ≡ Python
+      - run: pnpm db:test
+
+  # Tách job riêng: bộ test DB hiện chưa phủ mọi trigger (mẫu M0: nhiều trigger *_no_replace_u, *_no_delete sống) ⇒ job này
+  # đỏ cho tới khi lane DB thêm ca âm. Gen quyết có đặt nó là check bắt buộc không (hoặc dùng --baseline bánh cóc).
+  db-mutation:
+    name: DB · mutation (--changed, đỏ thật chỉ qua dòng FAIL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # trigger có SQL khác nhánh đích; nhánh đích chưa có schema ⇒ coi mọi trigger là mới, giới hạn 40 (đêm chạy --all)
+      # base_ref đi qua env (không nội suy ${{ }} vào script — chống template injection)
+      - env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: python3 -B -I db/spec/mutate.py --changed --base "origin/${BASE_REF}" --max 40
+
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: bash scripts/sec-scan.sh

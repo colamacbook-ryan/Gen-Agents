@@ -1,0 +1,19 @@
+{
+  "$comment": "Chính sách license (STD-04 §6): sản phẩm đóng nguồn, có thể bán. Kiểm license từ CHÍNH tệp LICENSE, không đoán. Sửa = PR có lý do.",
+  "allow": [
+    "MIT",
+    "ISC",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "BlueOak-1.0.0",
+    "CC0-1.0",
+    "Unlicense",
+    "Python-2.0"
+  ],
+  "allowDevOnly": ["MPL-2.0", "CC-BY-4.0"],
+  "deny": ["GPL", "AGPL", "LGPL", "SSPL", "EUPL", "CC-BY-NC", "CC-BY-ND", "UNLICENSED", "BUSL", "Commons-Clause"],
+  "assetLicenses": ["Proprietary — Afi Labs", "OFL-1.1", "CC0-1.0", "CC-BY-4.0", "MIT", "ISC", "Apache-2.0"],
+  "exceptions": {}
+}

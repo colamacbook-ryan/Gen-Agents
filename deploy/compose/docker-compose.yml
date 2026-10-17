@@ -1,0 +1,12 @@
+# Compose sản phẩm — KHUNG (M0). Dịch vụ do lane sở hữu thêm vào: ga-app, ga-supervisor, ga-egress (L-RT, M1),
+# ga-edge / ga-socket-proxy / ga-updater + secrets dạng tệp (L-OPS, M2). Xem BUILD-PLAN §B.1–§B.3.
+# Mạng cố định ở đây để mọi lane dùng chung tên; hình dạng đã kiểm trên Docker của máy cloud bằng compose.netcheck.yml.
+name: gen-agents
+services: {}
+networks:
+  edge: {} #   trình duyệt → ga-edge (Caddy, :7400)
+  core: {} #   ga-edge ↔ ga-app ↔ ga-supervisor ↔ ga-updater
+  roles: #     container Role / hệ thống ↔ gateway :7410 + ga-egress; KHÔNG ra Internet
+    internal: true
+  docker: #    ga-supervisor ↔ ga-socket-proxy; không ai khác
+    internal: true

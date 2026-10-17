@@ -1,0 +1,1 @@
+-- Ryan duyệt (bản sinh từ DB spec: chỉ cảnh báo)

@@ -1,0 +1,5 @@
+services:
+  x:
+    environment:
+      - VENDOR_OAUTH_TOKEN=${X}
+      APP_SESSION: abc

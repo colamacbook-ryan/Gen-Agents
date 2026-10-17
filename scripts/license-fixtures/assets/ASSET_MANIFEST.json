@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "path": "apps/web/public/ok-icon.png",
+      "source": "Afi Labs",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "b8200eab1500804687144df20d209aeea41c86e4e08b32d3032f0904bd3bdf75"
+    },
+    {
+      "path": "apps/web/public/bait-nc.png",
+      "source": "web",
+      "license": "CC-BY-NC-4.0",
+      "sha256": "ce128449c1a03ad0d652745faa3d3e548620558ff49999afa057914ae8a992f9"
+    },
+    {
+      "path": "packages/ui/src/bait-sha.svg",
+      "source": "Afi Labs",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "path": "skins/ok-pack/1.0.0/characters/ok-x.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "156474ce8fdcc15e06f55191ef6e3f6813305df84c1ddbf62248df5efe12dbfe"
+    }
+  ]
+}
