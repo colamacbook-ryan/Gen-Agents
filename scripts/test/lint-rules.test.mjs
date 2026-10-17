@@ -27,6 +27,8 @@ describe('lint-rules', () => {
         'db-privileged-api-paths',
         'db-actor-columns-from-context',
         'no-invisible-chars',
+        'no-chibi-testing-import',
+        'no-raw-normalize',
       ]),
     );
   });
