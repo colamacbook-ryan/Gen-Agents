@@ -33,24 +33,25 @@ export const TENANT_ACTOR = '01JWS00000000000000000ACT0';
 
 /** Workspace hệ thống + một tenant + actor hệ thống mỗi bên (tối thiểu để ghi các bảng có created_by). */
 export function seedMinimal(conn: AppConnection): void {
-  const db = conn.db;
-  db.prepare(
-    "INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, 'system', 'system', 'System', 'SYS0')",
-  ).run(SYS_WS);
-  db.prepare(
-    "INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, 'tenant', 'afi', 'Afi', '7K2Q')",
-  ).run(TENANT_WS);
-  // DB v2.3.5: actors có cổng người ghi — actor system đầu tiên của workspace tự đăng ký trong conn.bootstrap (app_actor() = chính nó)
-  for (const [ws, actor] of [
-    [SYS_WS, SYS_ACTOR],
-    [TENANT_WS, TENANT_ACTOR],
+  // DB v2.3.5: workspaces / actors có cổng người ghi — workspace + actor system đầu tiên chỉ tạo được trong conn.bootstrap
+  // của CHÍNH workspace đó (app_bootstrap() = id workspace, app_actor() = actor system tự đăng ký)
+  for (const [ws, actor, kind, slug, name, code] of [
+    [SYS_WS, SYS_ACTOR, 'system', 'system', 'System', 'SYS0'],
+    [TENANT_WS, TENANT_ACTOR, 'tenant', 'afi', 'Afi', '7K2Q'],
   ] as const) {
-    conn.bootstrap({ workspaceId: ws, systemActorId: actor }, (w) =>
+    conn.bootstrap({ workspaceId: ws, systemActorId: actor }, (w) => {
+      w.run('INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, ?, ?, ?, ?)', [
+        ws,
+        kind,
+        slug,
+        name,
+        code,
+      ]);
       w.run(
         "INSERT INTO actors (id, workspace_id, kind, system_key, label) VALUES (?, ?, 'system', 'system', 'System')",
         [actor, ws],
-      ),
-    );
+      );
+    });
   }
 }
 

@@ -1,7 +1,7 @@
 -- repeatable: triggers
 -- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v2.3.5) — KHÔNG SỬA TAY.
 -- Thứ tự tạo = thứ tự chạy ngược (SQLite chạy trigger tạo sau trước): giữ nguyên thứ tự này.
--- 748 trigger. Runner DROP mọi trigger rồi tạo lại sau mỗi lượt migration (DATABASE §10.1).
+-- 905 trigger. Runner DROP mọi trigger rồi tạo lại sau mỗi lượt migration (DATABASE §10.1).
 
 -- @ga:object trigger search_documents_ai
 CREATE TRIGGER search_documents_ai AFTER INSERT ON search_documents BEGIN
@@ -30,13 +30,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): workspaces — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger workspaces_no_replace_u
-CREATE TRIGGER workspaces_no_replace_u BEFORE UPDATE OF id, kind, slug, short_code, rowid ON workspaces
+CREATE TRIGGER workspaces_no_replace_u BEFORE UPDATE OF id, kind, slug, short_code ON workspaces
 WHEN (
   (EXISTS (SELECT 1 FROM workspaces x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM workspaces x WHERE x.slug = NEW.slug AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM workspaces x WHERE x.short_code = NEW.short_code AND x.rowid <> OLD.rowid))
-  OR ((NEW.kind = 'system') AND EXISTS (SELECT 1 FROM workspaces x WHERE x.kind = NEW.kind AND (x.kind = 'system') AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM workspaces x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.kind = 'system') AND EXISTS (SELECT 1 FROM workspaces x WHERE x.kind = NEW.kind AND (x.kind = 'system') AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): workspaces — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger users_no_replace_i
@@ -50,13 +49,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): users — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger users_no_replace_u
-CREATE TRIGGER users_no_replace_u BEFORE UPDATE OF id, display_seq, username, email, rowid ON users
+CREATE TRIGGER users_no_replace_u BEFORE UPDATE OF id, display_seq, username, email ON users
 WHEN (
   (EXISTS (SELECT 1 FROM users x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM users x WHERE x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM users x WHERE x.username = NEW.username AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM users x WHERE x.email = NEW.email AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM users x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM users x WHERE x.email = NEW.email AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): users — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger workspace_members_no_replace_i
@@ -67,10 +65,9 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): workspace_members — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger workspace_members_no_replace_u
-CREATE TRIGGER workspace_members_no_replace_u BEFORE UPDATE OF workspace_id, user_id, rowid ON workspace_members
+CREATE TRIGGER workspace_members_no_replace_u BEFORE UPDATE OF workspace_id, user_id ON workspace_members
 WHEN (
-  (EXISTS (SELECT 1 FROM workspace_members x WHERE x.workspace_id = NEW.workspace_id AND x.user_id = NEW.user_id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM workspace_members x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  (EXISTS (SELECT 1 FROM workspace_members x WHERE x.workspace_id = NEW.workspace_id AND x.user_id = NEW.user_id AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): workspace_members — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger auth_sessions_no_replace_i
@@ -82,11 +79,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): auth_sessions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger auth_sessions_no_replace_u
-CREATE TRIGGER auth_sessions_no_replace_u BEFORE UPDATE OF id, token_hash, rowid ON auth_sessions
+CREATE TRIGGER auth_sessions_no_replace_u BEFORE UPDATE OF id, token_hash ON auth_sessions
 WHEN (
   (EXISTS (SELECT 1 FROM auth_sessions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM auth_sessions x WHERE x.token_hash = NEW.token_hash AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM auth_sessions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM auth_sessions x WHERE x.token_hash = NEW.token_hash AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): auth_sessions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger actors_no_replace_i
@@ -100,13 +96,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): actors — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger actors_no_replace_u
-CREATE TRIGGER actors_no_replace_u BEFORE UPDATE OF id, workspace_id, user_id, role_id, system_key, rowid ON actors
+CREATE TRIGGER actors_no_replace_u BEFORE UPDATE OF id, workspace_id, user_id, role_id, system_key ON actors
 WHEN (
   (EXISTS (SELECT 1 FROM actors x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM actors x WHERE x.workspace_id = NEW.workspace_id AND x.user_id = NEW.user_id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM actors x WHERE x.role_id = NEW.role_id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM actors x WHERE x.workspace_id = NEW.workspace_id AND x.system_key = NEW.system_key AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM actors x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM actors x WHERE x.workspace_id = NEW.workspace_id AND x.system_key = NEW.system_key AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): actors — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger id_aliases_no_replace_i
@@ -118,11 +113,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): id_aliases — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger id_aliases_no_replace_u
-CREATE TRIGGER id_aliases_no_replace_u BEFORE UPDATE OF id, workspace_id, old_display_id, source_code, rowid ON id_aliases
+CREATE TRIGGER id_aliases_no_replace_u BEFORE UPDATE OF id, workspace_id, old_display_id, source_code ON id_aliases
 WHEN (
   (EXISTS (SELECT 1 FROM id_aliases x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM id_aliases x WHERE x.workspace_id = NEW.workspace_id AND x.source_code = NEW.source_code AND x.old_display_id = NEW.old_display_id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM id_aliases x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM id_aliases x WHERE x.workspace_id = NEW.workspace_id AND x.source_code = NEW.source_code AND x.old_display_id = NEW.old_display_id AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): id_aliases — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger roles_no_replace_i
@@ -136,13 +130,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): roles — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger roles_no_replace_u
-CREATE TRIGGER roles_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, name_norm, registry_no, rowid ON roles
+CREATE TRIGGER roles_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, name_norm, registry_no ON roles
 WHEN (
   (EXISTS (SELECT 1 FROM roles x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM roles x WHERE x.workspace_id = NEW.workspace_id AND x.registry_no = NEW.registry_no AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM roles x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM roles x WHERE x.workspace_id = NEW.workspace_id AND x.name_norm = NEW.name_norm AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM roles x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM roles x WHERE x.workspace_id = NEW.workspace_id AND x.name_norm = NEW.name_norm AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): roles — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger avatars_no_replace_i
@@ -154,11 +147,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): avatars — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger avatars_no_replace_u
-CREATE TRIGGER avatars_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON avatars
+CREATE TRIGGER avatars_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON avatars
 WHEN (
   (EXISTS (SELECT 1 FROM avatars x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM avatars x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM avatars x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM avatars x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): avatars — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skin_assets_no_replace_i
@@ -171,12 +163,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skin_assets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skin_assets_no_replace_u
-CREATE TRIGGER skin_assets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, pack_slug, asset_code, rowid ON skin_assets
+CREATE TRIGGER skin_assets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, pack_slug, asset_code ON skin_assets
 WHEN (
   (EXISTS (SELECT 1 FROM skin_assets x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM skin_assets x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM skin_assets x WHERE x.workspace_id = NEW.workspace_id AND x.pack_slug = NEW.pack_slug AND x.asset_code = NEW.asset_code AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skin_assets x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM skin_assets x WHERE x.workspace_id = NEW.workspace_id AND x.pack_slug = NEW.pack_slug AND x.asset_code = NEW.asset_code AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skin_assets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger dna_field_defs_no_replace_i
@@ -188,11 +179,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): dna_field_defs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger dna_field_defs_no_replace_u
-CREATE TRIGGER dna_field_defs_no_replace_u BEFORE UPDATE OF id, workspace_id, key, rowid ON dna_field_defs
+CREATE TRIGGER dna_field_defs_no_replace_u BEFORE UPDATE OF id, workspace_id, key ON dna_field_defs
 WHEN (
   (EXISTS (SELECT 1 FROM dna_field_defs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM dna_field_defs x WHERE x.workspace_id = NEW.workspace_id AND x.key = NEW.key AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM dna_field_defs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM dna_field_defs x WHERE x.workspace_id = NEW.workspace_id AND x.key = NEW.key AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): dna_field_defs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger dna_fields_no_replace_i
@@ -205,12 +195,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): dna_fields — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger dna_fields_no_replace_u
-CREATE TRIGGER dna_fields_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, def_id, item_index, rowid ON dna_fields
+CREATE TRIGGER dna_fields_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, def_id, item_index ON dna_fields
 WHEN (
   (EXISTS (SELECT 1 FROM dna_fields x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM dna_fields x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM dna_fields x WHERE x.role_id = NEW.role_id AND x.def_id = NEW.def_id AND x.item_index = NEW.item_index AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM dna_fields x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM dna_fields x WHERE x.role_id = NEW.role_id AND x.def_id = NEW.def_id AND x.item_index = NEW.item_index AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): dna_fields — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger dna_field_versions_no_replace_i
@@ -222,11 +211,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): dna_field_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger dna_field_versions_no_replace_u
-CREATE TRIGGER dna_field_versions_no_replace_u BEFORE UPDATE OF id, dna_field_id, version, rowid ON dna_field_versions
+CREATE TRIGGER dna_field_versions_no_replace_u BEFORE UPDATE OF id, dna_field_id, version ON dna_field_versions
 WHEN (
   (EXISTS (SELECT 1 FROM dna_field_versions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM dna_field_versions x WHERE x.dna_field_id = NEW.dna_field_id AND x.version = NEW.version AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM dna_field_versions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM dna_field_versions x WHERE x.dna_field_id = NEW.dna_field_id AND x.version = NEW.version AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): dna_field_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger revisions_no_replace_i
@@ -242,15 +230,14 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): revisions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger revisions_no_replace_u
-CREATE TRIGGER revisions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, scope, role_id, position_id, seq, major, minor, rowid ON revisions
+CREATE TRIGGER revisions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, scope, role_id, position_id, seq, major, minor ON revisions
 WHEN (
   (EXISTS (SELECT 1 FROM revisions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM revisions x WHERE x.role_id = NEW.role_id AND x.seq = NEW.seq AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM revisions x WHERE x.position_id = NEW.position_id AND x.seq = NEW.seq AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM revisions x WHERE x.role_id = NEW.role_id AND x.major = NEW.major AND x.minor = NEW.minor AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM revisions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.scope = 'workspace') AND EXISTS (SELECT 1 FROM revisions x WHERE x.workspace_id = NEW.workspace_id AND x.seq = NEW.seq AND (x.scope = 'workspace') AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM revisions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.scope = 'workspace') AND EXISTS (SELECT 1 FROM revisions x WHERE x.workspace_id = NEW.workspace_id AND x.seq = NEW.seq AND (x.scope = 'workspace') AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): revisions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger change_sets_no_replace_i
@@ -262,11 +249,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): change_sets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger change_sets_no_replace_u
-CREATE TRIGGER change_sets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON change_sets
+CREATE TRIGGER change_sets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON change_sets
 WHEN (
   (EXISTS (SELECT 1 FROM change_sets x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM change_sets x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM change_sets x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM change_sets x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): change_sets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger change_set_items_no_replace_i
@@ -277,10 +263,9 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): change_set_items — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger change_set_items_no_replace_u
-CREATE TRIGGER change_set_items_no_replace_u BEFORE UPDATE OF id, rowid ON change_set_items
+CREATE TRIGGER change_set_items_no_replace_u BEFORE UPDATE OF id ON change_set_items
 WHEN (
-  (EXISTS (SELECT 1 FROM change_set_items x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM change_set_items x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  (EXISTS (SELECT 1 FROM change_set_items x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): change_set_items — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger instructions_no_replace_i
@@ -292,11 +277,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): instructions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger instructions_no_replace_u
-CREATE TRIGGER instructions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON instructions
+CREATE TRIGGER instructions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON instructions
 WHEN (
   (EXISTS (SELECT 1 FROM instructions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM instructions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM instructions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM instructions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): instructions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger instruction_versions_no_replace_i
@@ -308,11 +292,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): instruction_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger instruction_versions_no_replace_u
-CREATE TRIGGER instruction_versions_no_replace_u BEFORE UPDATE OF id, instruction_id, version, rowid ON instruction_versions
+CREATE TRIGGER instruction_versions_no_replace_u BEFORE UPDATE OF id, instruction_id, version ON instruction_versions
 WHEN (
   (EXISTS (SELECT 1 FROM instruction_versions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM instruction_versions x WHERE x.instruction_id = NEW.instruction_id AND x.version = NEW.version AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM instruction_versions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM instruction_versions x WHERE x.instruction_id = NEW.instruction_id AND x.version = NEW.version AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): instruction_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger taxonomy_nodes_no_replace_i
@@ -325,12 +308,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): taxonomy_nodes — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger taxonomy_nodes_no_replace_u
-CREATE TRIGGER taxonomy_nodes_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, domain, parent_id, name_norm, rowid ON taxonomy_nodes
+CREATE TRIGGER taxonomy_nodes_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, domain, parent_id, name_norm ON taxonomy_nodes
 WHEN (
   (EXISTS (SELECT 1 FROM taxonomy_nodes x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM taxonomy_nodes x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM taxonomy_nodes x WHERE x.workspace_id = NEW.workspace_id AND x.domain = NEW.domain AND COALESCE(x.parent_id, '') = COALESCE(NEW.parent_id, '') AND x.name_norm = NEW.name_norm AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM taxonomy_nodes x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM taxonomy_nodes x WHERE x.workspace_id = NEW.workspace_id AND x.domain = NEW.domain AND COALESCE(x.parent_id, '') = COALESCE(NEW.parent_id, '') AND x.name_norm = NEW.name_norm AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): taxonomy_nodes — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skills_no_replace_i
@@ -343,12 +325,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skills — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skills_no_replace_u
-CREATE TRIGGER skills_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, slug, rowid ON skills
+CREATE TRIGGER skills_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, slug ON skills
 WHEN (
   (EXISTS (SELECT 1 FROM skills x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM skills x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM skills x WHERE x.workspace_id = NEW.workspace_id AND x.slug = NEW.slug AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skills x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM skills x WHERE x.workspace_id = NEW.workspace_id AND x.slug = NEW.slug AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skills — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_versions_no_replace_i
@@ -360,11 +341,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_versions_no_replace_u
-CREATE TRIGGER skill_versions_no_replace_u BEFORE UPDATE OF id, skill_id, version, rowid ON skill_versions
+CREATE TRIGGER skill_versions_no_replace_u BEFORE UPDATE OF id, skill_id, version ON skill_versions
 WHEN (
   (EXISTS (SELECT 1 FROM skill_versions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skill_versions x WHERE x.skill_id = NEW.skill_id AND x.version = NEW.version AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skill_versions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM skill_versions x WHERE x.skill_id = NEW.skill_id AND x.version = NEW.version AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_prereqs_no_replace_i
@@ -377,12 +357,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_prereqs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_prereqs_no_replace_u
-CREATE TRIGGER skill_prereqs_no_replace_u BEFORE UPDATE OF id, deleted_at, skill_id, requires_skill_id, kind, status, rowid ON skill_prereqs
+CREATE TRIGGER skill_prereqs_no_replace_u BEFORE UPDATE OF id, deleted_at, skill_id, requires_skill_id, kind, status ON skill_prereqs
 WHEN (
   (EXISTS (SELECT 1 FROM skill_prereqs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM skill_prereqs x WHERE x.skill_id = NEW.skill_id AND x.requires_skill_id = NEW.requires_skill_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.kind = 'upgrade' AND NEW.status <> 'obsolete' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM skill_prereqs x WHERE x.skill_id = NEW.skill_id AND (x.kind = 'upgrade' AND x.status <> 'obsolete' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skill_prereqs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.kind = 'upgrade' AND NEW.status <> 'obsolete' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM skill_prereqs x WHERE x.skill_id = NEW.skill_id AND (x.kind = 'upgrade' AND x.status <> 'obsolete' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_prereqs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_engine_support_no_replace_i
@@ -393,10 +372,9 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_engine_support — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_engine_support_no_replace_u
-CREATE TRIGGER skill_engine_support_no_replace_u BEFORE UPDATE OF skill_version_id, engine_slug, rowid ON skill_engine_support
+CREATE TRIGGER skill_engine_support_no_replace_u BEFORE UPDATE OF skill_version_id, engine_slug ON skill_engine_support
 WHEN (
-  (EXISTS (SELECT 1 FROM skill_engine_support x WHERE x.skill_version_id = NEW.skill_version_id AND x.engine_slug = NEW.engine_slug AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skill_engine_support x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  (EXISTS (SELECT 1 FROM skill_engine_support x WHERE x.skill_version_id = NEW.skill_version_id AND x.engine_slug = NEW.engine_slug AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_engine_support — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_files_no_replace_i
@@ -408,11 +386,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_files — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger skill_files_no_replace_u
-CREATE TRIGGER skill_files_no_replace_u BEFORE UPDATE OF id, skill_version_id, path, rowid ON skill_files
+CREATE TRIGGER skill_files_no_replace_u BEFORE UPDATE OF id, skill_version_id, path ON skill_files
 WHEN (
   (EXISTS (SELECT 1 FROM skill_files x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skill_files x WHERE x.skill_version_id = NEW.skill_version_id AND x.path = NEW.path AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM skill_files x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM skill_files x WHERE x.skill_version_id = NEW.skill_version_id AND x.path = NEW.path AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): skill_files — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger role_skills_no_replace_i
@@ -424,11 +401,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): role_skills — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger role_skills_no_replace_u
-CREATE TRIGGER role_skills_no_replace_u BEFORE UPDATE OF id, deleted_at, role_id, skill_id, rowid ON role_skills
+CREATE TRIGGER role_skills_no_replace_u BEFORE UPDATE OF id, deleted_at, role_id, skill_id ON role_skills
 WHEN (
   (EXISTS (SELECT 1 FROM role_skills x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM role_skills x WHERE x.role_id = NEW.role_id AND x.skill_id = NEW.skill_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM role_skills x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM role_skills x WHERE x.role_id = NEW.role_id AND x.skill_id = NEW.skill_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): role_skills — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger blobs_no_replace_i
@@ -440,11 +416,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): blobs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger blobs_no_replace_u
-CREATE TRIGGER blobs_no_replace_u BEFORE UPDATE OF id, workspace_id, sha256, rowid ON blobs
+CREATE TRIGGER blobs_no_replace_u BEFORE UPDATE OF id, workspace_id, sha256 ON blobs
 WHEN (
   (EXISTS (SELECT 1 FROM blobs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM blobs x WHERE x.workspace_id = NEW.workspace_id AND x.sha256 = NEW.sha256 AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM blobs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM blobs x WHERE x.workspace_id = NEW.workspace_id AND x.sha256 = NEW.sha256 AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): blobs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger knowledge_items_no_replace_i
@@ -459,14 +434,13 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): knowledge_items — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger knowledge_items_no_replace_u
-CREATE TRIGGER knowledge_items_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, scope, role_id, position_id, sha256, status, rowid ON knowledge_items
+CREATE TRIGGER knowledge_items_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, scope, role_id, position_id, sha256, status ON knowledge_items
 WHEN (
   (EXISTS (SELECT 1 FROM knowledge_items x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM knowledge_items x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.scope = 'personal' AND NEW.deleted_at IS NULL AND NEW.status <> 'superseded') AND EXISTS (SELECT 1 FROM knowledge_items x WHERE x.role_id = NEW.role_id AND x.sha256 = NEW.sha256 AND (x.scope = 'personal' AND x.deleted_at IS NULL AND x.status <> 'superseded') AND x.rowid <> OLD.rowid))
   OR ((NEW.scope = 'position' AND NEW.deleted_at IS NULL AND NEW.status <> 'superseded') AND EXISTS (SELECT 1 FROM knowledge_items x WHERE x.position_id = NEW.position_id AND x.sha256 = NEW.sha256 AND (x.scope = 'position' AND x.deleted_at IS NULL AND x.status <> 'superseded') AND x.rowid <> OLD.rowid))
-  OR ((NEW.scope = 'workspace' AND NEW.deleted_at IS NULL AND NEW.status <> 'superseded') AND EXISTS (SELECT 1 FROM knowledge_items x WHERE x.workspace_id = NEW.workspace_id AND x.sha256 = NEW.sha256 AND (x.scope = 'workspace' AND x.deleted_at IS NULL AND x.status <> 'superseded') AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM knowledge_items x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.scope = 'workspace' AND NEW.deleted_at IS NULL AND NEW.status <> 'superseded') AND EXISTS (SELECT 1 FROM knowledge_items x WHERE x.workspace_id = NEW.workspace_id AND x.sha256 = NEW.sha256 AND (x.scope = 'workspace' AND x.deleted_at IS NULL AND x.status <> 'superseded') AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): knowledge_items — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger knowledge_chunks_no_replace_i
@@ -478,11 +452,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): knowledge_chunks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger knowledge_chunks_no_replace_u
-CREATE TRIGGER knowledge_chunks_no_replace_u BEFORE UPDATE OF id, knowledge_item_id, ordinal, rowid ON knowledge_chunks
+CREATE TRIGGER knowledge_chunks_no_replace_u BEFORE UPDATE OF id, knowledge_item_id, ordinal ON knowledge_chunks
 WHEN (
   (EXISTS (SELECT 1 FROM knowledge_chunks x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM knowledge_chunks x WHERE x.knowledge_item_id = NEW.knowledge_item_id AND x.ordinal = NEW.ordinal AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM knowledge_chunks x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM knowledge_chunks x WHERE x.knowledge_item_id = NEW.knowledge_item_id AND x.ordinal = NEW.ordinal AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): knowledge_chunks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger memories_no_replace_i
@@ -494,11 +467,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): memories — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger memories_no_replace_u
-CREATE TRIGGER memories_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON memories
+CREATE TRIGGER memories_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON memories
 WHEN (
   (EXISTS (SELECT 1 FROM memories x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM memories x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM memories x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM memories x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): memories — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger recall_hits_no_replace_i
@@ -509,10 +481,9 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): recall_hits — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger recall_hits_no_replace_u
-CREATE TRIGGER recall_hits_no_replace_u BEFORE UPDATE OF id, rowid ON recall_hits
+CREATE TRIGGER recall_hits_no_replace_u BEFORE UPDATE OF id ON recall_hits
 WHEN (
-  (EXISTS (SELECT 1 FROM recall_hits x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM recall_hits x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  (EXISTS (SELECT 1 FROM recall_hits x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): recall_hits — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger positions_no_replace_i
@@ -525,12 +496,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): positions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger positions_no_replace_u
-CREATE TRIGGER positions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, is_default, rowid ON positions
+CREATE TRIGGER positions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, is_default ON positions
 WHEN (
   (EXISTS (SELECT 1 FROM positions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM positions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.is_default = 1 AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM positions x WHERE x.workspace_id = NEW.workspace_id AND (x.is_default = 1 AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM positions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.is_default = 1 AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM positions x WHERE x.workspace_id = NEW.workspace_id AND (x.is_default = 1 AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): positions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger assignments_no_replace_i
@@ -544,13 +514,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): assignments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger assignments_no_replace_u
-CREATE TRIGGER assignments_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, position_id, status, rowid ON assignments
+CREATE TRIGGER assignments_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, position_id, status ON assignments
 WHEN (
   (EXISTS (SELECT 1 FROM assignments x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM assignments x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.status = 'active' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM assignments x WHERE x.position_id = NEW.position_id AND (x.status = 'active' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.status = 'active' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM assignments x WHERE x.role_id = NEW.role_id AND (x.status = 'active' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM assignments x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.status = 'active' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM assignments x WHERE x.role_id = NEW.role_id AND (x.status = 'active' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): assignments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger trust_tier_changes_no_replace_i
@@ -562,11 +531,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): trust_tier_changes — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger trust_tier_changes_no_replace_u
-CREATE TRIGGER trust_tier_changes_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON trust_tier_changes
+CREATE TRIGGER trust_tier_changes_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON trust_tier_changes
 WHEN (
   (EXISTS (SELECT 1 FROM trust_tier_changes x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM trust_tier_changes x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM trust_tier_changes x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM trust_tier_changes x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): trust_tier_changes — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger tasks_no_replace_i
@@ -578,11 +546,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): tasks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger tasks_no_replace_u
-CREATE TRIGGER tasks_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON tasks
+CREATE TRIGGER tasks_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON tasks
 WHEN (
   (EXISTS (SELECT 1 FROM tasks x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM tasks x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM tasks x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM tasks x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): tasks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger commitments_no_replace_i
@@ -594,11 +561,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): commitments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger commitments_no_replace_u
-CREATE TRIGGER commitments_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON commitments
+CREATE TRIGGER commitments_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON commitments
 WHEN (
   (EXISTS (SELECT 1 FROM commitments x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM commitments x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM commitments x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM commitments x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): commitments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger sessions_no_replace_i
@@ -610,11 +576,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): sessions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger sessions_no_replace_u
-CREATE TRIGGER sessions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON sessions
+CREATE TRIGGER sessions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON sessions
 WHEN (
   (EXISTS (SELECT 1 FROM sessions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM sessions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM sessions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM sessions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): sessions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger wallets_no_replace_i
@@ -628,13 +593,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): wallets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger wallets_no_replace_u
-CREATE TRIGGER wallets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, owner_kind, role_id, rowid ON wallets
+CREATE TRIGGER wallets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, owner_kind, role_id ON wallets
 WHEN (
   (EXISTS (SELECT 1 FROM wallets x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM wallets x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.role_id IS NOT NULL) AND EXISTS (SELECT 1 FROM wallets x WHERE x.role_id = NEW.role_id AND (x.role_id IS NOT NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.owner_kind IN ('treasury', 'sink')) AND EXISTS (SELECT 1 FROM wallets x WHERE x.workspace_id = NEW.workspace_id AND x.owner_kind = NEW.owner_kind AND (x.owner_kind IN ('treasury', 'sink')) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM wallets x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.owner_kind IN ('treasury', 'sink')) AND EXISTS (SELECT 1 FROM wallets x WHERE x.workspace_id = NEW.workspace_id AND x.owner_kind = NEW.owner_kind AND (x.owner_kind IN ('treasury', 'sink')) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): wallets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger ledger_entries_no_replace_i
@@ -648,13 +612,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): ledger_entries — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger ledger_entries_no_replace_u
-CREATE TRIGGER ledger_entries_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, reverses_entry_id, idempotency_key, rowid ON ledger_entries
+CREATE TRIGGER ledger_entries_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, reverses_entry_id, idempotency_key ON ledger_entries
 WHEN (
   (EXISTS (SELECT 1 FROM ledger_entries x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM ledger_entries x WHERE x.reverses_entry_id = NEW.reverses_entry_id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM ledger_entries x WHERE x.workspace_id = NEW.workspace_id AND x.idempotency_key = NEW.idempotency_key AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM ledger_entries x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM ledger_entries x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM ledger_entries x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): ledger_entries — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger role_wounds_no_replace_i
@@ -668,13 +631,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): role_wounds — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger role_wounds_no_replace_u
-CREATE TRIGGER role_wounds_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, role_id, cause_entry_id, ended_at, rowid ON role_wounds
+CREATE TRIGGER role_wounds_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, role_id, cause_entry_id, ended_at ON role_wounds
 WHEN (
   (EXISTS (SELECT 1 FROM role_wounds x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM role_wounds x WHERE x.cause_entry_id = NEW.cause_entry_id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM role_wounds x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.ended_at IS NULL) AND EXISTS (SELECT 1 FROM role_wounds x WHERE x.role_id = NEW.role_id AND (x.ended_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM role_wounds x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.ended_at IS NULL) AND EXISTS (SELECT 1 FROM role_wounds x WHERE x.role_id = NEW.role_id AND (x.ended_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): role_wounds — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger usage_daily_no_replace_i
@@ -686,11 +648,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): usage_daily — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger usage_daily_no_replace_u
-CREATE TRIGGER usage_daily_no_replace_u BEFORE UPDATE OF id, workspace_id, day_local, role_id, engine_account_id, agent_kind, rowid ON usage_daily
+CREATE TRIGGER usage_daily_no_replace_u BEFORE UPDATE OF id, workspace_id, day_local, role_id, engine_account_id, agent_kind ON usage_daily
 WHEN (
   (EXISTS (SELECT 1 FROM usage_daily x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM usage_daily x WHERE x.workspace_id = NEW.workspace_id AND x.day_local = NEW.day_local AND COALESCE(x.role_id, '') = COALESCE(NEW.role_id, '') AND COALESCE(x.engine_account_id, '') = COALESCE(NEW.engine_account_id, '') AND x.agent_kind = NEW.agent_kind AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM usage_daily x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM usage_daily x WHERE x.workspace_id = NEW.workspace_id AND x.day_local = NEW.day_local AND COALESCE(x.role_id, '') = COALESCE(NEW.role_id, '') AND COALESCE(x.engine_account_id, '') = COALESCE(NEW.engine_account_id, '') AND x.agent_kind = NEW.agent_kind AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): usage_daily — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engines_no_replace_i
@@ -701,10 +662,9 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engines — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engines_no_replace_u
-CREATE TRIGGER engines_no_replace_u BEFORE UPDATE OF slug, rowid ON engines
+CREATE TRIGGER engines_no_replace_u BEFORE UPDATE OF slug ON engines
 WHEN (
-  (EXISTS (SELECT 1 FROM engines x WHERE x.slug = NEW.slug AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM engines x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  (EXISTS (SELECT 1 FROM engines x WHERE x.slug = NEW.slug AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engines — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engine_installs_no_replace_i
@@ -716,11 +676,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engine_installs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engine_installs_no_replace_u
-CREATE TRIGGER engine_installs_no_replace_u BEFORE UPDATE OF id, workspace_id, deleted_at, engine_slug, rowid ON engine_installs
+CREATE TRIGGER engine_installs_no_replace_u BEFORE UPDATE OF id, workspace_id, deleted_at, engine_slug ON engine_installs
 WHEN (
   (EXISTS (SELECT 1 FROM engine_installs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM engine_installs x WHERE x.workspace_id = NEW.workspace_id AND x.engine_slug = NEW.engine_slug AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM engine_installs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM engine_installs x WHERE x.workspace_id = NEW.workspace_id AND x.engine_slug = NEW.engine_slug AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engine_installs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engine_accounts_no_replace_i
@@ -734,13 +693,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engine_accounts — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engine_accounts_no_replace_u
-CREATE TRIGGER engine_accounts_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, engine_slug, label, auth_volume, rowid ON engine_accounts
+CREATE TRIGGER engine_accounts_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, engine_slug, label, auth_volume ON engine_accounts
 WHEN (
   (EXISTS (SELECT 1 FROM engine_accounts x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM engine_accounts x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM engine_accounts x WHERE x.workspace_id = NEW.workspace_id AND x.engine_slug = NEW.engine_slug AND x.label = NEW.label AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.auth_volume IS NOT NULL) AND EXISTS (SELECT 1 FROM engine_accounts x WHERE x.auth_volume = NEW.auth_volume AND (x.auth_volume IS NOT NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM engine_accounts x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.auth_volume IS NOT NULL) AND EXISTS (SELECT 1 FROM engine_accounts x WHERE x.auth_volume = NEW.auth_volume AND (x.auth_volume IS NOT NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engine_accounts — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engine_bindings_no_replace_i
@@ -755,14 +713,13 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engine_bindings — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger engine_bindings_no_replace_u
-CREATE TRIGGER engine_bindings_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, consumer_kind, role_id, engine_account_id, priority, rowid ON engine_bindings
+CREATE TRIGGER engine_bindings_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, consumer_kind, role_id, engine_account_id, priority ON engine_bindings
 WHEN (
   (EXISTS (SELECT 1 FROM engine_bindings x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM engine_bindings x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM engine_bindings x WHERE x.engine_account_id = NEW.engine_account_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
   OR ((NEW.role_id IS NOT NULL AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM engine_bindings x WHERE x.role_id = NEW.role_id AND x.priority = NEW.priority AND (x.role_id IS NOT NULL AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.consumer_kind = 'system' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM engine_bindings x WHERE x.workspace_id = NEW.workspace_id AND x.priority = NEW.priority AND (x.consumer_kind = 'system' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM engine_bindings x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.consumer_kind = 'system' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM engine_bindings x WHERE x.workspace_id = NEW.workspace_id AND x.priority = NEW.priority AND (x.consumer_kind = 'system' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): engine_bindings — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger system_agents_no_replace_i
@@ -775,12 +732,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): system_agents — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger system_agents_no_replace_u
-CREATE TRIGGER system_agents_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, system_key, rowid ON system_agents
+CREATE TRIGGER system_agents_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, system_key ON system_agents
 WHEN (
   (EXISTS (SELECT 1 FROM system_agents x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM system_agents x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM system_agents x WHERE x.workspace_id = NEW.workspace_id AND x.system_key = NEW.system_key AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM system_agents x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM system_agents x WHERE x.workspace_id = NEW.workspace_id AND x.system_key = NEW.system_key AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): system_agents — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger probe_runs_no_replace_i
@@ -792,11 +748,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): probe_runs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger probe_runs_no_replace_u
-CREATE TRIGGER probe_runs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON probe_runs
+CREATE TRIGGER probe_runs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON probe_runs
 WHEN (
   (EXISTS (SELECT 1 FROM probe_runs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM probe_runs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM probe_runs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM probe_runs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): probe_runs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger capabilities_no_replace_i
@@ -809,12 +764,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): capabilities — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger capabilities_no_replace_u
-CREATE TRIGGER capabilities_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, engine_account_id, kind, item_key, rowid ON capabilities
+CREATE TRIGGER capabilities_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, engine_account_id, kind, item_key ON capabilities
 WHEN (
   (EXISTS (SELECT 1 FROM capabilities x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM capabilities x WHERE x.engine_account_id = NEW.engine_account_id AND x.kind = NEW.kind AND x.item_key = NEW.item_key AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM capabilities x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM capabilities x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM capabilities x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): capabilities — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger quota_snapshots_no_replace_i
@@ -825,10 +779,9 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): quota_snapshots — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger quota_snapshots_no_replace_u
-CREATE TRIGGER quota_snapshots_no_replace_u BEFORE UPDATE OF id, rowid ON quota_snapshots
+CREATE TRIGGER quota_snapshots_no_replace_u BEFORE UPDATE OF id ON quota_snapshots
 WHEN (
-  (EXISTS (SELECT 1 FROM quota_snapshots x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM quota_snapshots x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  (EXISTS (SELECT 1 FROM quota_snapshots x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): quota_snapshots — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger model_ranks_no_replace_i
@@ -841,12 +794,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): model_ranks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger model_ranks_no_replace_u
-CREATE TRIGGER model_ranks_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, engine_slug, model_key, rowid ON model_ranks
+CREATE TRIGGER model_ranks_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, engine_slug, model_key ON model_ranks
 WHEN (
   (EXISTS (SELECT 1 FROM model_ranks x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM model_ranks x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM model_ranks x WHERE x.workspace_id = NEW.workspace_id AND x.engine_slug = NEW.engine_slug AND x.model_key = NEW.model_key AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM model_ranks x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM model_ranks x WHERE x.workspace_id = NEW.workspace_id AND x.engine_slug = NEW.engine_slug AND x.model_key = NEW.model_key AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): model_ranks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger compiled_prompts_no_replace_i
@@ -859,12 +811,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): compiled_prompts — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger compiled_prompts_no_replace_u
-CREATE TRIGGER compiled_prompts_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, revision_id, position_revision_id, rules_revision_id, engine_slug, context_key, polaris_params_hash, rowid ON compiled_prompts
+CREATE TRIGGER compiled_prompts_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, revision_id, position_revision_id, rules_revision_id, engine_slug, context_key, polaris_params_hash ON compiled_prompts
 WHEN (
   (EXISTS (SELECT 1 FROM compiled_prompts x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM compiled_prompts x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM compiled_prompts x WHERE x.revision_id = NEW.revision_id AND COALESCE(x.position_revision_id, '') = COALESCE(NEW.position_revision_id, '') AND COALESCE(x.rules_revision_id, '') = COALESCE(NEW.rules_revision_id, '') AND COALESCE(x.engine_slug, '') = COALESCE(NEW.engine_slug, '') AND x.context_key = NEW.context_key AND COALESCE(x.polaris_params_hash, '') = COALESCE(NEW.polaris_params_hash, '') AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM compiled_prompts x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM compiled_prompts x WHERE x.revision_id = NEW.revision_id AND COALESCE(x.position_revision_id, '') = COALESCE(NEW.position_revision_id, '') AND COALESCE(x.rules_revision_id, '') = COALESCE(NEW.rules_revision_id, '') AND COALESCE(x.engine_slug, '') = COALESCE(NEW.engine_slug, '') AND x.context_key = NEW.context_key AND COALESCE(x.polaris_params_hash, '') = COALESCE(NEW.polaris_params_hash, '') AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): compiled_prompts — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger compiled_prompt_segments_no_replace_i
@@ -876,11 +827,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): compiled_prompt_segments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger compiled_prompt_segments_no_replace_u
-CREATE TRIGGER compiled_prompt_segments_no_replace_u BEFORE UPDATE OF id, compiled_prompt_id, ordinal, rowid ON compiled_prompt_segments
+CREATE TRIGGER compiled_prompt_segments_no_replace_u BEFORE UPDATE OF id, compiled_prompt_id, ordinal ON compiled_prompt_segments
 WHEN (
   (EXISTS (SELECT 1 FROM compiled_prompt_segments x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM compiled_prompt_segments x WHERE x.compiled_prompt_id = NEW.compiled_prompt_id AND x.ordinal = NEW.ordinal AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM compiled_prompt_segments x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM compiled_prompt_segments x WHERE x.compiled_prompt_id = NEW.compiled_prompt_id AND x.ordinal = NEW.ordinal AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): compiled_prompt_segments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger containers_no_replace_i
@@ -895,14 +845,13 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): containers — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger containers_no_replace_u
-CREATE TRIGGER containers_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, kind, role_id, container_name, rowid ON containers
+CREATE TRIGGER containers_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, kind, role_id, container_name ON containers
 WHEN (
   (EXISTS (SELECT 1 FROM containers x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM containers x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM containers x WHERE x.container_name = NEW.container_name AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
   OR ((NEW.role_id IS NOT NULL AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM containers x WHERE x.role_id = NEW.role_id AND (x.role_id IS NOT NULL AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.kind = 'system' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM containers x WHERE x.workspace_id = NEW.workspace_id AND (x.kind = 'system' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM containers x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.kind = 'system' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM containers x WHERE x.workspace_id = NEW.workspace_id AND (x.kind = 'system' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): containers — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger telegram_bots_no_replace_i
@@ -916,13 +865,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): telegram_bots — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger telegram_bots_no_replace_u
-CREATE TRIGGER telegram_bots_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, bot_tg_id, rowid ON telegram_bots
+CREATE TRIGGER telegram_bots_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, bot_tg_id ON telegram_bots
 WHEN (
   (EXISTS (SELECT 1 FROM telegram_bots x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM telegram_bots x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM telegram_bots x WHERE x.workspace_id = NEW.workspace_id AND x.bot_tg_id = NEW.bot_tg_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM telegram_bots x WHERE x.role_id = NEW.role_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM telegram_bots x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM telegram_bots x WHERE x.role_id = NEW.role_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): telegram_bots — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger telegram_allowlist_no_replace_i
@@ -935,12 +883,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): telegram_allowlist — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger telegram_allowlist_no_replace_u
-CREATE TRIGGER telegram_allowlist_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, bot_id, tg_user_id, rowid ON telegram_allowlist
+CREATE TRIGGER telegram_allowlist_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, bot_id, tg_user_id ON telegram_allowlist
 WHEN (
   (EXISTS (SELECT 1 FROM telegram_allowlist x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM telegram_allowlist x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM telegram_allowlist x WHERE x.bot_id = NEW.bot_id AND x.tg_user_id = NEW.tg_user_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM telegram_allowlist x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM telegram_allowlist x WHERE x.bot_id = NEW.bot_id AND x.tg_user_id = NEW.tg_user_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): telegram_allowlist — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger proactive_policies_no_replace_i
@@ -953,12 +900,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): proactive_policies — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger proactive_policies_no_replace_u
-CREATE TRIGGER proactive_policies_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, rowid ON proactive_policies
+CREATE TRIGGER proactive_policies_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id ON proactive_policies
 WHEN (
   (EXISTS (SELECT 1 FROM proactive_policies x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM proactive_policies x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM proactive_policies x WHERE x.role_id = NEW.role_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM proactive_policies x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM proactive_policies x WHERE x.role_id = NEW.role_id AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): proactive_policies — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger proactive_jobs_no_replace_i
@@ -970,11 +916,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): proactive_jobs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger proactive_jobs_no_replace_u
-CREATE TRIGGER proactive_jobs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON proactive_jobs
+CREATE TRIGGER proactive_jobs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON proactive_jobs
 WHEN (
   (EXISTS (SELECT 1 FROM proactive_jobs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM proactive_jobs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM proactive_jobs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM proactive_jobs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): proactive_jobs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger proactive_sends_no_replace_i
@@ -987,12 +932,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): proactive_sends — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger proactive_sends_no_replace_u
-CREATE TRIGGER proactive_sends_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, idempotency_key, rowid ON proactive_sends
+CREATE TRIGGER proactive_sends_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, idempotency_key ON proactive_sends
 WHEN (
   (EXISTS (SELECT 1 FROM proactive_sends x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM proactive_sends x WHERE x.workspace_id = NEW.workspace_id AND x.idempotency_key = NEW.idempotency_key AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM proactive_sends x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM proactive_sends x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM proactive_sends x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): proactive_sends — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger tools_no_replace_i
@@ -1005,12 +949,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): tools — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger tools_no_replace_u
-CREATE TRIGGER tools_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, slug, rowid ON tools
+CREATE TRIGGER tools_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, slug ON tools
 WHEN (
   (EXISTS (SELECT 1 FROM tools x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM tools x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM tools x WHERE x.workspace_id = NEW.workspace_id AND x.slug = NEW.slug AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM tools x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM tools x WHERE x.workspace_id = NEW.workspace_id AND x.slug = NEW.slug AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): tools — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger tool_grants_no_replace_i
@@ -1024,13 +967,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): tool_grants — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger tool_grants_no_replace_u
-CREATE TRIGGER tool_grants_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, tool_id, role_id, position_id, rowid ON tool_grants
+CREATE TRIGGER tool_grants_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, tool_id, role_id, position_id ON tool_grants
 WHEN (
   (EXISTS (SELECT 1 FROM tool_grants x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM tool_grants x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
   OR ((NEW.position_id IS NOT NULL AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM tool_grants x WHERE x.tool_id = NEW.tool_id AND x.position_id = NEW.position_id AND (x.position_id IS NOT NULL AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR ((NEW.role_id IS NOT NULL AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM tool_grants x WHERE x.tool_id = NEW.tool_id AND x.role_id = NEW.role_id AND (x.role_id IS NOT NULL AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM tool_grants x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.role_id IS NOT NULL AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM tool_grants x WHERE x.tool_id = NEW.tool_id AND x.role_id = NEW.role_id AND (x.role_id IS NOT NULL AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): tool_grants — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger permission_requests_no_replace_i
@@ -1042,11 +984,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): permission_requests — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger permission_requests_no_replace_u
-CREATE TRIGGER permission_requests_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON permission_requests
+CREATE TRIGGER permission_requests_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON permission_requests
 WHEN (
   (EXISTS (SELECT 1 FROM permission_requests x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM permission_requests x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM permission_requests x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM permission_requests x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): permission_requests — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger egress_rules_no_replace_i
@@ -1059,12 +1000,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): egress_rules — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger egress_rules_no_replace_u
-CREATE TRIGGER egress_rules_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, domain_pattern, applies_to, role_id, position_id, tool_id, rowid ON egress_rules
+CREATE TRIGGER egress_rules_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, domain_pattern, applies_to, role_id, position_id, tool_id ON egress_rules
 WHEN (
   (EXISTS (SELECT 1 FROM egress_rules x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM egress_rules x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM egress_rules x WHERE x.workspace_id = NEW.workspace_id AND x.domain_pattern = NEW.domain_pattern AND x.applies_to = NEW.applies_to AND COALESCE(x.role_id, '') = COALESCE(NEW.role_id, '') AND COALESCE(x.position_id, '') = COALESCE(NEW.position_id, '') AND COALESCE(x.tool_id, '') = COALESCE(NEW.tool_id, '') AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM egress_rules x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM egress_rules x WHERE x.workspace_id = NEW.workspace_id AND x.domain_pattern = NEW.domain_pattern AND x.applies_to = NEW.applies_to AND COALESCE(x.role_id, '') = COALESCE(NEW.role_id, '') AND COALESCE(x.position_id, '') = COALESCE(NEW.position_id, '') AND COALESCE(x.tool_id, '') = COALESCE(NEW.tool_id, '') AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): egress_rules — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger polaris_checks_no_replace_i
@@ -1076,11 +1016,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): polaris_checks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger polaris_checks_no_replace_u
-CREATE TRIGGER polaris_checks_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON polaris_checks
+CREATE TRIGGER polaris_checks_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON polaris_checks
 WHEN (
   (EXISTS (SELECT 1 FROM polaris_checks x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM polaris_checks x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM polaris_checks x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM polaris_checks x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): polaris_checks — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger employee_cards_no_replace_i
@@ -1093,12 +1032,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): employee_cards — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger employee_cards_no_replace_u
-CREATE TRIGGER employee_cards_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, status, rowid ON employee_cards
+CREATE TRIGGER employee_cards_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, role_id, status ON employee_cards
 WHEN (
   (EXISTS (SELECT 1 FROM employee_cards x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM employee_cards x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.status IN ('issued', 'suspended') AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM employee_cards x WHERE x.role_id = NEW.role_id AND (x.status IN ('issued', 'suspended') AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM employee_cards x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.status IN ('issued', 'suspended') AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM employee_cards x WHERE x.role_id = NEW.role_id AND (x.status IN ('issued', 'suspended') AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): employee_cards — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger trial_runs_no_replace_i
@@ -1110,11 +1048,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): trial_runs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger trial_runs_no_replace_u
-CREATE TRIGGER trial_runs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON trial_runs
+CREATE TRIGGER trial_runs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON trial_runs
 WHEN (
   (EXISTS (SELECT 1 FROM trial_runs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM trial_runs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM trial_runs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM trial_runs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): trial_runs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger chat_threads_no_replace_i
@@ -1127,12 +1064,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): chat_threads — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger chat_threads_no_replace_u
-CREATE TRIGGER chat_threads_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, kind, telegram_bot_id, tg_chat_id, rowid ON chat_threads
+CREATE TRIGGER chat_threads_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, kind, telegram_bot_id, tg_chat_id ON chat_threads
 WHEN (
   (EXISTS (SELECT 1 FROM chat_threads x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM chat_threads x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.kind = 'telegram' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM chat_threads x WHERE x.telegram_bot_id = NEW.telegram_bot_id AND x.tg_chat_id = NEW.tg_chat_id AND (x.kind = 'telegram' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM chat_threads x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.kind = 'telegram' AND NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM chat_threads x WHERE x.telegram_bot_id = NEW.telegram_bot_id AND x.tg_chat_id = NEW.tg_chat_id AND (x.kind = 'telegram' AND x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): chat_threads — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger chat_messages_no_replace_i
@@ -1145,12 +1081,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): chat_messages — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger chat_messages_no_replace_u
-CREATE TRIGGER chat_messages_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, thread_id, external_id, rowid ON chat_messages
+CREATE TRIGGER chat_messages_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, thread_id, external_id ON chat_messages
 WHEN (
   (EXISTS (SELECT 1 FROM chat_messages x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM chat_messages x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.external_id IS NOT NULL) AND EXISTS (SELECT 1 FROM chat_messages x WHERE x.thread_id = NEW.thread_id AND x.external_id = NEW.external_id AND (x.external_id IS NOT NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM chat_messages x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.external_id IS NOT NULL) AND EXISTS (SELECT 1 FROM chat_messages x WHERE x.thread_id = NEW.thread_id AND x.external_id = NEW.external_id AND (x.external_id IS NOT NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): chat_messages — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger message_attachments_no_replace_i
@@ -1162,11 +1097,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): message_attachments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger message_attachments_no_replace_u
-CREATE TRIGGER message_attachments_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON message_attachments
+CREATE TRIGGER message_attachments_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON message_attachments
 WHEN (
   (EXISTS (SELECT 1 FROM message_attachments x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM message_attachments x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM message_attachments x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM message_attachments x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): message_attachments — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger message_anchors_no_replace_i
@@ -1178,11 +1112,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): message_anchors — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger message_anchors_no_replace_u
-CREATE TRIGGER message_anchors_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON message_anchors
+CREATE TRIGGER message_anchors_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON message_anchors
 WHEN (
   (EXISTS (SELECT 1 FROM message_anchors x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM message_anchors x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM message_anchors x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM message_anchors x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): message_anchors — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger ui_actions_no_replace_i
@@ -1194,11 +1127,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): ui_actions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger ui_actions_no_replace_u
-CREATE TRIGGER ui_actions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON ui_actions
+CREATE TRIGGER ui_actions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON ui_actions
 WHEN (
   (EXISTS (SELECT 1 FROM ui_actions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM ui_actions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM ui_actions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM ui_actions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): ui_actions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger audit_log_no_replace_i
@@ -1210,11 +1142,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): audit_log — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger audit_log_no_replace_u
-CREATE TRIGGER audit_log_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON audit_log
+CREATE TRIGGER audit_log_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON audit_log
 WHEN (
   (EXISTS (SELECT 1 FROM audit_log x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM audit_log x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM audit_log x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM audit_log x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): audit_log — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger events_no_replace_i
@@ -1226,11 +1157,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): events — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger events_no_replace_u
-CREATE TRIGGER events_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON events
+CREATE TRIGGER events_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON events
 WHEN (
   (EXISTS (SELECT 1 FROM events x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM events x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM events x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM events x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): events — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger notifications_no_replace_i
@@ -1243,12 +1173,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): notifications — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger notifications_no_replace_u
-CREATE TRIGGER notifications_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, user_id, dedupe_key, resolved_at, rowid ON notifications
+CREATE TRIGGER notifications_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, user_id, dedupe_key, resolved_at ON notifications
 WHEN (
   (EXISTS (SELECT 1 FROM notifications x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM notifications x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.resolved_at IS NULL AND NEW.dedupe_key IS NOT NULL) AND EXISTS (SELECT 1 FROM notifications x WHERE x.user_id = NEW.user_id AND x.dedupe_key = NEW.dedupe_key AND (x.resolved_at IS NULL AND x.dedupe_key IS NOT NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM notifications x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.resolved_at IS NULL AND NEW.dedupe_key IS NOT NULL) AND EXISTS (SELECT 1 FROM notifications x WHERE x.user_id = NEW.user_id AND x.dedupe_key = NEW.dedupe_key AND (x.resolved_at IS NULL AND x.dedupe_key IS NOT NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): notifications — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger app_versions_no_replace_i
@@ -1262,13 +1191,12 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): app_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger app_versions_no_replace_u
-CREATE TRIGGER app_versions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, semver, status, rowid ON app_versions
+CREATE TRIGGER app_versions_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, semver, status ON app_versions
 WHEN (
   (EXISTS (SELECT 1 FROM app_versions x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM app_versions x WHERE x.semver = NEW.semver AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM app_versions x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.status = 'current') AND EXISTS (SELECT 1 FROM app_versions x WHERE x.status = NEW.status AND (x.status = 'current') AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM app_versions x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.status = 'current') AND EXISTS (SELECT 1 FROM app_versions x WHERE x.status = NEW.status AND (x.status = 'current') AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): app_versions — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger backups_no_replace_i
@@ -1280,11 +1208,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): backups — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger backups_no_replace_u
-CREATE TRIGGER backups_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON backups
+CREATE TRIGGER backups_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON backups
 WHEN (
   (EXISTS (SELECT 1 FROM backups x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM backups x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM backups x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM backups x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): backups — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger update_runs_no_replace_i
@@ -1296,23 +1223,16 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): update_runs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger update_runs_no_replace_u
-CREATE TRIGGER update_runs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON update_runs
+CREATE TRIGGER update_runs_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON update_runs
 WHEN (
   (EXISTS (SELECT 1 FROM update_runs x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM update_runs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM update_runs x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM update_runs x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): update_runs — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger schema_migrations_no_replace_i
 CREATE TRIGGER schema_migrations_no_replace_i BEFORE INSERT ON schema_migrations
 WHEN (
   (EXISTS (SELECT 1 FROM schema_migrations x WHERE x.version = NEW.version)))
-BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): schema_migrations — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
-
--- @ga:object trigger schema_migrations_no_replace_u
-CREATE TRIGGER schema_migrations_no_replace_u BEFORE UPDATE OF version ON schema_migrations
-WHEN (
-  (EXISTS (SELECT 1 FROM schema_migrations x WHERE x.version = NEW.version AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): schema_migrations — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger settings_no_replace_i
@@ -1325,12 +1245,11 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): settings — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger settings_no_replace_u
-CREATE TRIGGER settings_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, key, rowid ON settings
+CREATE TRIGGER settings_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, deleted_at, key ON settings
 WHEN (
   (EXISTS (SELECT 1 FROM settings x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
   OR (EXISTS (SELECT 1 FROM settings x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM settings x WHERE x.workspace_id = NEW.workspace_id AND x.key = NEW.key AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM settings x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR ((NEW.deleted_at IS NULL) AND EXISTS (SELECT 1 FROM settings x WHERE x.workspace_id = NEW.workspace_id AND x.key = NEW.key AND (x.deleted_at IS NULL) AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): settings — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger secrets_no_replace_i
@@ -1342,11 +1261,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): secrets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger secrets_no_replace_u
-CREATE TRIGGER secrets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON secrets
+CREATE TRIGGER secrets_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON secrets
 WHEN (
   (EXISTS (SELECT 1 FROM secrets x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM secrets x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM secrets x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM secrets x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): secrets — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger consents_no_replace_i
@@ -1358,11 +1276,10 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): consents — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger consents_no_replace_u
-CREATE TRIGGER consents_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq, rowid ON consents
+CREATE TRIGGER consents_no_replace_u BEFORE UPDATE OF id, workspace_id, display_seq ON consents
 WHEN (
   (EXISTS (SELECT 1 FROM consents x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM consents x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM consents x WHERE x.rowid = NEW.rowid AND x.rowid <> OLD.rowid)))
+  OR (EXISTS (SELECT 1 FROM consents x WHERE x.workspace_id = NEW.workspace_id AND x.display_seq = NEW.display_seq AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): consents — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger search_documents_no_replace_i
@@ -1373,22 +1290,31 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): search_documents — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger search_documents_no_replace_u
-CREATE TRIGGER search_documents_no_replace_u BEFORE UPDATE OF id, entity_type, entity_id, chunk_id ON search_documents
+CREATE TRIGGER search_documents_no_replace_u BEFORE UPDATE OF entity_type, entity_id, chunk_id ON search_documents
 WHEN (
-  (EXISTS (SELECT 1 FROM search_documents x WHERE x.id = NEW.id AND x.rowid <> OLD.rowid))
-  OR (EXISTS (SELECT 1 FROM search_documents x WHERE x.entity_type = NEW.entity_type AND x.entity_id = NEW.entity_id AND COALESCE(x.chunk_id, '') = COALESCE(NEW.chunk_id, '') AND x.rowid <> OLD.rowid)))
+  (EXISTS (SELECT 1 FROM search_documents x WHERE x.entity_type = NEW.entity_type AND x.entity_id = NEW.entity_id AND COALESCE(x.chunk_id, '') = COALESCE(NEW.chunk_id, '') AND x.rowid <> OLD.rowid)))
 BEGIN SELECT RAISE(ABORT, 'UNIQUE (chống REPLACE, v2.2.13): search_documents — ghi trùng khoá unique với một hàng đang có; cấm OR REPLACE / REPLACE INTO / UPDATE OR REPLACE (REPLACE xoá hàng mà không qua guard) — mọi kết nối bật PRAGMA recursive_triggers = ON (§2.2)'); END;
 
 -- @ga:object trigger workspace_members_writer_i
 CREATE TRIGGER workspace_members_writer_i BEFORE INSERT ON workspace_members
-WHEN NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR CASE WHEN NEW.access_level = 'owner' THEN EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = NEW.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') ELSE EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin')) END)
+WHEN NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR CASE WHEN NEW.access_level = 'owner' THEN EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = NEW.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') ELSE EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin')) END)
 BEGIN SELECT RAISE(ABORT, 'workspace_members (v2.3.5): phân quyền chỉ owner / admin còn là thành viên hoặc actor system của workspace ghi; cấp / gỡ / sửa hàng mức owner chỉ owner (hoặc actor system — dựng / khôi phục); workspace_id / user_id bất biến ngoài bảo trì'); END;
 
 -- @ga:object trigger workspace_members_writer_u
 CREATE TRIGGER workspace_members_writer_u BEFORE UPDATE ON workspace_members
 WHEN (app_maint() = 0 AND (NEW.workspace_id IS NOT OLD.workspace_id OR NEW.user_id IS NOT OLD.user_id))
-  OR NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR CASE WHEN 'owner' IN (OLD.access_level, NEW.access_level) THEN EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = NEW.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') ELSE EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin')) END)
+  OR NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR CASE WHEN 'owner' IN (OLD.access_level, NEW.access_level) THEN EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = NEW.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') ELSE EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin')) END)
 BEGIN SELECT RAISE(ABORT, 'workspace_members (v2.3.5): phân quyền chỉ owner / admin còn là thành viên hoặc actor system của workspace ghi; cấp / gỡ / sửa hàng mức owner chỉ owner (hoặc actor system — dựng / khôi phục); workspace_id / user_id bất biến ngoài bảo trì'); END;
+
+-- @ga:object trigger workspace_members_cross_i
+CREATE TRIGGER workspace_members_cross_i BEFORE INSERT ON workspace_members
+WHEN EXISTS (SELECT 1 FROM workspace_members ox WHERE ox.user_id = NEW.user_id AND ox.workspace_id <> NEW.workspace_id AND ox.removed_at IS NULL) AND NOT EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system')
+BEGIN SELECT RAISE(ABORT, 'workspace_members (v2.3.5): user đang là thành viên active của workspace khác — chỉ actor system của workspace hệ thống thêm / kích hoạt lại (luồng mời qua dịch vụ app); owner / admin chỉ thêm user chưa thuộc workspace nào khác'); END;
+
+-- @ga:object trigger workspace_members_cross_u
+CREATE TRIGGER workspace_members_cross_u BEFORE UPDATE OF removed_at ON workspace_members
+WHEN OLD.removed_at IS NOT NULL AND NEW.removed_at IS NULL AND EXISTS (SELECT 1 FROM workspace_members ox WHERE ox.user_id = NEW.user_id AND ox.workspace_id <> NEW.workspace_id AND ox.removed_at IS NULL) AND NOT EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system')
+BEGIN SELECT RAISE(ABORT, 'workspace_members (v2.3.5): user đang là thành viên active của workspace khác — chỉ actor system của workspace hệ thống thêm / kích hoạt lại (luồng mời qua dịch vụ app); owner / admin chỉ thêm user chưa thuộc workspace nào khác'); END;
 
 -- @ga:object trigger workspace_members_owner_last_u
 CREATE TRIGGER workspace_members_owner_last_u BEFORE UPDATE ON workspace_members
@@ -1408,6 +1334,7 @@ BEGIN SELECT RAISE(ABORT, 'workspace_members (v2.3.5): xoá cứng thành viên 
 CREATE TRIGGER actors_writer_i BEFORE INSERT ON actors
 WHEN NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system')
           OR (NEW.kind = 'system' AND NEW.system_key = 'system' AND COALESCE(NEW.id = app_actor(), 0)          -- B2: không bao giờ NULL (app_actor() NULL ⇒ chặn)
+              AND COALESCE(NEW.workspace_id = app_bootstrap(), 0)                                        -- chỉ trong conn.bootstrap của CHÍNH workspace đó
               AND NOT EXISTS (SELECT 1 FROM actors s0 WHERE s0.workspace_id = NEW.workspace_id AND s0.system_key = 'system'))
           OR (NEW.kind <> 'system' AND EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'actors (v2.3.5): actor chỉ actor system hoặc owner / admin còn là thành viên của workspace tạo / sửa; actor system chỉ actor system tạo (actor system đầu tiên tự đăng ký lúc dựng workspace)'); END;
@@ -1417,6 +1344,11 @@ CREATE TRIGGER actors_writer_u BEFORE UPDATE ON actors
 WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin')))
 BEGIN SELECT RAISE(ABORT, 'actors (v2.3.5): actor chỉ actor system hoặc owner / admin còn là thành viên của workspace tạo / sửa; actor system chỉ actor system tạo (actor system đầu tiên tự đăng ký lúc dựng workspace)'); END;
 
+-- @ga:object trigger actors_writer_d
+CREATE TRIGGER actors_writer_d BEFORE DELETE ON actors
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = OLD.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner')))
+BEGIN SELECT RAISE(ABORT, 'actors (v2.3.5): xoá cứng actor chỉ owner hoặc actor system của workspace (hoặc bảo trì)'); END;
+
 -- @ga:object trigger actors_lock_u
 CREATE TRIGGER actors_lock_u BEFORE UPDATE ON actors
 WHEN app_maint() = 0 AND NOT (NEW.id IS OLD.id AND NEW.kind IS OLD.kind AND NEW.user_id IS OLD.user_id AND NEW.role_id IS OLD.role_id
@@ -1425,19 +1357,64 @@ BEGIN SELECT RAISE(ABORT, 'actors (v2.3.5): kind / user_id / role_id / system_ke
 
 -- @ga:object trigger users_writer_i
 CREATE TRIGGER users_writer_i BEFORE INSERT ON users
-WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors us WHERE us.id = app_actor() AND us.system_key = 'system') OR EXISTS (SELECT 1 FROM actors ua JOIN workspace_members um ON um.workspace_id = ua.workspace_id AND um.user_id = ua.user_id WHERE ua.id = app_actor() AND ua.kind = 'user' AND um.removed_at IS NULL AND um.access_level IN ('owner', 'admin')))
-BEGIN SELECT RAISE(ABORT, 'users (v2.3.5): tài khoản người dùng — tạo: actor system hoặc owner / admin đang hoạt động; sửa: actor system, chính người đó, hoặc owner của workspace có người đó (actor Role / viewer / operator / admin không sửa tài khoản người khác)'); END;
+WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors ua JOIN workspace_members um ON um.workspace_id = ua.workspace_id AND um.user_id = ua.user_id WHERE ua.id = app_actor() AND ua.kind = 'user' AND um.removed_at IS NULL AND um.access_level IN ('owner', 'admin')))
+BEGIN SELECT RAISE(ABORT, 'users (v2.3.5): tài khoản người dùng (bảng toàn cục) — tạo: actor system của workspace hệ thống hoặc owner / admin đang hoạt động; sửa: chỉ chính người đó (hồ sơ / mật khẩu / định danh — không đụng khoá đăng nhập, vô hiệu, số thứ tự) hoặc actor system của workspace hệ thống (owner đặt lại mật khẩu thành viên = dịch vụ app chạy bằng actor system sau khi app kiểm quyền); xoá: actor system của workspace hệ thống / bảo trì'); END;
 
 -- @ga:object trigger users_writer_u
 CREATE TRIGGER users_writer_u BEFORE UPDATE ON users
-WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors us WHERE us.id = app_actor() AND us.system_key = 'system') OR (NEW.id IS OLD.id AND EXISTS (SELECT 1 FROM actors uf WHERE uf.id = app_actor() AND uf.kind = 'user' AND uf.user_id = OLD.id)) OR (NEW.id IS OLD.id AND EXISTS (SELECT 1 FROM actors uo JOIN workspace_members om ON om.workspace_id = uo.workspace_id AND om.user_id = uo.user_id AND om.removed_at IS NULL AND om.access_level = 'owner' JOIN workspace_members tm ON tm.workspace_id = uo.workspace_id AND tm.user_id = OLD.id WHERE uo.id = app_actor() AND uo.kind = 'user')))
-BEGIN SELECT RAISE(ABORT, 'users (v2.3.5): tài khoản người dùng — tạo: actor system hoặc owner / admin đang hoạt động; sửa: actor system, chính người đó, hoặc owner của workspace có người đó (actor Role / viewer / operator / admin không sửa tài khoản người khác)'); END;
+WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system') OR (OLD.disabled_at IS NULL AND NEW.id IS OLD.id AND NEW.display_id IS OLD.display_id AND NEW.display_seq IS OLD.display_seq AND NEW.created_at IS OLD.created_at AND NEW.disabled_at IS OLD.disabled_at AND NEW.failed_login_count IS OLD.failed_login_count AND NEW.locked_until IS OLD.locked_until AND NEW.last_login_at IS OLD.last_login_at AND EXISTS (SELECT 1 FROM actors uf WHERE uf.id = app_actor() AND uf.kind = 'user' AND uf.user_id = OLD.id)))
+BEGIN SELECT RAISE(ABORT, 'users (v2.3.5): tài khoản người dùng (bảng toàn cục) — tạo: actor system của workspace hệ thống hoặc owner / admin đang hoạt động; sửa: chỉ chính người đó (hồ sơ / mật khẩu / định danh — không đụng khoá đăng nhập, vô hiệu, số thứ tự) hoặc actor system của workspace hệ thống (owner đặt lại mật khẩu thành viên = dịch vụ app chạy bằng actor system sau khi app kiểm quyền); xoá: actor system của workspace hệ thống / bảo trì'); END;
+
+-- @ga:object trigger users_writer_d
+CREATE TRIGGER users_writer_d BEFORE DELETE ON users
+WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system'))
+BEGIN SELECT RAISE(ABORT, 'users (v2.3.5): tài khoản người dùng (bảng toàn cục) — tạo: actor system của workspace hệ thống hoặc owner / admin đang hoạt động; sửa: chỉ chính người đó (hồ sơ / mật khẩu / định danh — không đụng khoá đăng nhập, vô hiệu, số thứ tự) hoặc actor system của workspace hệ thống (owner đặt lại mật khẩu thành viên = dịch vụ app chạy bằng actor system sau khi app kiểm quyền); xoá: actor system của workspace hệ thống / bảo trì'); END;
+
+-- @ga:object trigger auth_sessions_writer_i
+CREATE TRIGGER auth_sessions_writer_i BEFORE INSERT ON auth_sessions
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system')
+BEGIN SELECT RAISE(ABORT, 'auth_sessions (v2.3.5): phiên đăng nhập (bảng toàn cục) — tạo / sửa / xoá: actor system của workspace hệ thống (dịch vụ đăng nhập) hoặc bảo trì; chính người đó chỉ thu hồi (revoked_at) hoặc xoá phiên của mình'); END;
+
+-- @ga:object trigger auth_sessions_writer_u
+CREATE TRIGGER auth_sessions_writer_u BEFORE UPDATE ON auth_sessions
+WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system') OR (OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL AND NEW.id IS OLD.id AND NEW.user_id IS OLD.user_id AND NEW.token_hash IS OLD.token_hash AND NEW.created_at IS OLD.created_at AND NEW.expires_at IS OLD.expires_at AND NEW.last_seen_at IS OLD.last_seen_at AND NEW.ip IS OLD.ip AND NEW.user_agent IS OLD.user_agent AND EXISTS (SELECT 1 FROM actors uf WHERE uf.id = app_actor() AND uf.kind = 'user' AND uf.user_id = OLD.user_id)))
+BEGIN SELECT RAISE(ABORT, 'auth_sessions (v2.3.5): phiên đăng nhập (bảng toàn cục) — tạo / sửa / xoá: actor system của workspace hệ thống (dịch vụ đăng nhập) hoặc bảo trì; chính người đó chỉ thu hồi (revoked_at) hoặc xoá phiên của mình'); END;
+
+-- @ga:object trigger auth_sessions_writer_d
+CREATE TRIGGER auth_sessions_writer_d BEFORE DELETE ON auth_sessions
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors uf WHERE uf.id = app_actor() AND uf.kind = 'user' AND uf.user_id = OLD.user_id)))
+BEGIN SELECT RAISE(ABORT, 'auth_sessions (v2.3.5): phiên đăng nhập (bảng toàn cục) — tạo / sửa / xoá: actor system của workspace hệ thống (dịch vụ đăng nhập) hoặc bảo trì; chính người đó chỉ thu hồi (revoked_at) hoặc xoá phiên của mình'); END;
+
+-- @ga:object trigger schema_migrations_maint_i
+CREATE TRIGGER schema_migrations_maint_i BEFORE INSERT ON schema_migrations
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, 'schema_migrations (v2.3.5): lịch sử migration chỉ ghi / sửa / xoá trong bảo trì (runner — conn.maintenance)'); END;
+
+-- @ga:object trigger schema_migrations_maint_u
+CREATE TRIGGER schema_migrations_maint_u BEFORE UPDATE ON schema_migrations
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, 'schema_migrations (v2.3.5): lịch sử migration chỉ ghi / sửa / xoá trong bảo trì (runner — conn.maintenance)'); END;
+
+-- @ga:object trigger schema_migrations_maint_d
+CREATE TRIGGER schema_migrations_maint_d BEFORE DELETE ON schema_migrations
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, 'schema_migrations (v2.3.5): lịch sử migration chỉ ghi / sửa / xoá trong bảo trì (runner — conn.maintenance)'); END;
 
 -- @ga:object trigger workspaces_writer_u
 CREATE TRIGGER workspaces_writer_u BEFORE UPDATE OF id, kind, slug, name, owner_user_id, short_code, locale, timezone, currency_code, currency_symbol,
   status, created_at, updated_at, archived_at, restored_at ON workspaces
 WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin')))
 BEGIN SELECT RAISE(ABORT, 'workspaces (v2.3.5): sửa workspace chỉ owner / admin còn là thành viên hoặc actor system của chính workspace đó'); END;
+
+-- @ga:object trigger workspaces_writer_i
+CREATE TRIGGER workspaces_writer_i BEFORE INSERT ON workspaces
+WHEN app_maint() = 0 AND NOT (COALESCE(NEW.id = app_bootstrap(), 0) OR EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system'))
+BEGIN SELECT RAISE(ABORT, 'workspaces (v2.3.5): tạo workspace chỉ trong conn.bootstrap của chính workspace đó (app_bootstrap() = id), bảo trì, hoặc actor system của workspace hệ thống'); END;
+
+-- @ga:object trigger workspaces_writer_d
+CREATE TRIGGER workspaces_writer_d BEFORE DELETE ON workspaces
+WHEN app_maint() = 0
+BEGIN SELECT RAISE(ABORT, 'workspaces (v2.3.5): xoá cứng workspace chỉ trong bảo trì (purge)'); END;
 
 -- @ga:object trigger containers_writer_i
 CREATE TRIGGER containers_writer_i BEFORE INSERT ON containers
@@ -1453,6 +1430,11 @@ BEGIN SELECT RAISE(ABORT, 'containers (v2.3.5): container chỉ owner / admin ho
 CREATE TRIGGER containers_sys_u BEFORE UPDATE OF image_ref, image_digest, cli_bundle, cpu_limit, mem_limit_mb, session_timeout_s ON containers
 WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system')
 BEGIN SELECT RAISE(ABORT, 'containers (v2.3.5): container chỉ owner / admin hoặc actor system của workspace ghi; cột cấu hình (image / CLI / tài nguyên) chỉ actor system'); END;
+
+-- @ga:object trigger containers_writer_d
+CREATE TRIGGER containers_writer_d BEFORE DELETE ON containers
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'containers (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
 
 -- @ga:object trigger engines_writer_i
 CREATE TRIGGER engines_writer_i BEFORE INSERT ON engines
@@ -1480,6 +1462,11 @@ WHEN app_maint() = 0 AND (OLD.key IN ('audit.retention_days', 'log.retention_day
  AND NOT (EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = NEW.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') AND NEW.key IS OLD.key AND (NEW.deleted_at IS NOT NULL OR (json_type(NEW.value_json) = 'integer' AND CAST(NEW.value_json AS INTEGER) BETWEEN 1 AND CASE NEW.key WHEN 'audit.retention_days' THEN 36500 WHEN 'log.retention_days' THEN 3650 WHEN 'purge.grace_days' THEN 3650 ELSE 0 END)))
 BEGIN SELECT RAISE(ABORT, 'settings (v2.3.5): audit.retention_days (1–36500) / log.retention_days (1–3650) / purge.grace_days (1–3650) là số nguyên trong khoảng, chỉ owner ghi'); END;
 
+-- @ga:object trigger settings_retention_d
+CREATE TRIGGER settings_retention_d BEFORE DELETE ON settings
+WHEN app_maint() = 0 AND OLD.key IN ('audit.retention_days', 'log.retention_days', 'purge.grace_days') AND NOT EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = OLD.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner')
+BEGIN SELECT RAISE(ABORT, 'settings (v2.3.5): audit.retention_days (1–36500) / log.retention_days (1–3650) / purge.grace_days (1–3650) là số nguyên trong khoảng, chỉ owner ghi'); END;
+
 -- @ga:object trigger settings_writer_i
 CREATE TRIGGER settings_writer_i BEFORE INSERT ON settings
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
@@ -1488,6 +1475,11 @@ BEGIN SELECT RAISE(ABORT, 'settings (v2.3.5): mặc định từ chối — kho�
 -- @ga:object trigger settings_writer_u
 CREATE TRIGGER settings_writer_u BEFORE UPDATE ON settings
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'settings (v2.3.5): mặc định từ chối — khoá nào cũng chỉ owner / admin còn là thành viên hoặc actor system ghi'); END;
+
+-- @ga:object trigger settings_writer_d
+CREATE TRIGGER settings_writer_d BEFORE DELETE ON settings
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'settings (v2.3.5): mặc định từ chối — khoá nào cũng chỉ owner / admin còn là thành viên hoặc actor system ghi'); END;
 
 -- @ga:object trigger telegram_allowlist_writer_i
@@ -1500,6 +1492,11 @@ CREATE TRIGGER telegram_allowlist_writer_u BEFORE UPDATE ON telegram_allowlist
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'telegram_allowlist (v2.3.5): danh sách người được nhắn bot chỉ owner / admin còn là thành viên hoặc actor system ghi; tác tử Telegram chỉ thêm hàng capture (người nhắn /start — luật owner ở telegram_allowlist_owner_new_i)'); END;
 
+-- @ga:object trigger telegram_allowlist_writer_d
+CREATE TRIGGER telegram_allowlist_writer_d BEFORE DELETE ON telegram_allowlist
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'telegram_allowlist (v2.3.5): danh sách người được nhắn bot chỉ owner / admin còn là thành viên hoặc actor system ghi; tác tử Telegram chỉ thêm hàng capture (người nhắn /start — luật owner ở telegram_allowlist_owner_new_i)'); END;
+
 -- @ga:object trigger tool_grants_writer_i
 CREATE TRIGGER tool_grants_writer_i BEFORE INSERT ON tool_grants
 WHEN NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
@@ -1509,6 +1506,11 @@ BEGIN SELECT RAISE(ABORT, 'tool_grants (v2.3.5): cấp quyền tool chỉ owner 
 CREATE TRIGGER tool_grants_writer_u BEFORE UPDATE ON tool_grants
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'tool_grants (v2.3.5): cấp quyền tool chỉ owner / admin còn là thành viên hoặc actor system ghi (Role không tự cấp)'); END;
+
+-- @ga:object trigger tool_grants_writer_d
+CREATE TRIGGER tool_grants_writer_d BEFORE DELETE ON tool_grants
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = OLD.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') OR EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system')))
+BEGIN SELECT RAISE(ABORT, 'tool_grants (v2.3.5): xoá cứng cấp quyền tool chỉ owner còn là thành viên hoặc actor system của workspace (hoặc bảo trì) — admin / Role không'); END;
 
 -- @ga:object trigger egress_rules_writer_i
 CREATE TRIGGER egress_rules_writer_i BEFORE INSERT ON egress_rules
@@ -1520,6 +1522,11 @@ CREATE TRIGGER egress_rules_writer_u BEFORE UPDATE ON egress_rules
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'egress_rules (v2.3.5): luật mạng ra chỉ owner / admin còn là thành viên hoặc actor system ghi (Role không tự mở)'); END;
 
+-- @ga:object trigger egress_rules_writer_d
+CREATE TRIGGER egress_rules_writer_d BEFORE DELETE ON egress_rules
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = OLD.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') OR EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system')))
+BEGIN SELECT RAISE(ABORT, 'egress_rules (v2.3.5): xoá cứng luật mạng ra chỉ owner còn là thành viên hoặc actor system của workspace (hoặc bảo trì) — admin / Role không'); END;
+
 -- @ga:object trigger proactive_policies_writer_i
 CREATE TRIGGER proactive_policies_writer_i BEFORE INSERT ON proactive_policies
 WHEN NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
@@ -1529,6 +1536,226 @@ BEGIN SELECT RAISE(ABORT, 'proactive_policies (v2.3.5): chính sách tin chủ �
 CREATE TRIGGER proactive_policies_writer_u BEFORE UPDATE ON proactive_policies
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = NEW.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'proactive_policies (v2.3.5): chính sách tin chủ động chỉ owner / admin còn là thành viên hoặc actor system ghi (Role không tự nới trần / giờ yên tĩnh)'); END;
+
+-- @ga:object trigger proactive_policies_writer_d
+CREATE TRIGGER proactive_policies_writer_d BEFORE DELETE ON proactive_policies
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'proactive_policies (v2.3.5): chính sách tin chủ động chỉ owner / admin còn là thành viên hoặc actor system ghi (Role không tự nới trần / giờ yên tĩnh)'); END;
+
+-- @ga:object trigger id_counters_writer_d
+CREATE TRIGGER id_counters_writer_d BEFORE DELETE ON id_counters
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'id_counters (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger roles_writer_d
+CREATE TRIGGER roles_writer_d BEFORE DELETE ON roles
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'roles (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger skin_assets_writer_d
+CREATE TRIGGER skin_assets_writer_d BEFORE DELETE ON skin_assets
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'skin_assets (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger dna_field_defs_writer_d
+CREATE TRIGGER dna_field_defs_writer_d BEFORE DELETE ON dna_field_defs
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'dna_field_defs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger dna_fields_writer_d
+CREATE TRIGGER dna_fields_writer_d BEFORE DELETE ON dna_fields
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'dna_fields (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger change_sets_writer_d
+CREATE TRIGGER change_sets_writer_d BEFORE DELETE ON change_sets
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'change_sets (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger change_set_items_writer_d
+CREATE TRIGGER change_set_items_writer_d BEFORE DELETE ON change_set_items
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'change_set_items (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger instructions_writer_d
+CREATE TRIGGER instructions_writer_d BEFORE DELETE ON instructions
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'instructions (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger taxonomy_nodes_writer_d
+CREATE TRIGGER taxonomy_nodes_writer_d BEFORE DELETE ON taxonomy_nodes
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'taxonomy_nodes (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger skills_writer_d
+CREATE TRIGGER skills_writer_d BEFORE DELETE ON skills
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'skills (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger skill_prereqs_writer_d
+CREATE TRIGGER skill_prereqs_writer_d BEFORE DELETE ON skill_prereqs
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'skill_prereqs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger skill_engine_support_writer_d
+CREATE TRIGGER skill_engine_support_writer_d BEFORE DELETE ON skill_engine_support
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'skill_engine_support (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger skill_files_writer_d
+CREATE TRIGGER skill_files_writer_d BEFORE DELETE ON skill_files
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'skill_files (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger role_skills_writer_d
+CREATE TRIGGER role_skills_writer_d BEFORE DELETE ON role_skills
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'role_skills (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger knowledge_items_writer_d
+CREATE TRIGGER knowledge_items_writer_d BEFORE DELETE ON knowledge_items
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'knowledge_items (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger knowledge_chunks_writer_d
+CREATE TRIGGER knowledge_chunks_writer_d BEFORE DELETE ON knowledge_chunks
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'knowledge_chunks (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger memories_writer_d
+CREATE TRIGGER memories_writer_d BEFORE DELETE ON memories
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'memories (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger positions_writer_d
+CREATE TRIGGER positions_writer_d BEFORE DELETE ON positions
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'positions (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger assignments_writer_d
+CREATE TRIGGER assignments_writer_d BEFORE DELETE ON assignments
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'assignments (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger tasks_writer_d
+CREATE TRIGGER tasks_writer_d BEFORE DELETE ON tasks
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'tasks (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger commitments_writer_d
+CREATE TRIGGER commitments_writer_d BEFORE DELETE ON commitments
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'commitments (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger wallets_writer_d
+CREATE TRIGGER wallets_writer_d BEFORE DELETE ON wallets
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'wallets (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger usage_daily_writer_d
+CREATE TRIGGER usage_daily_writer_d BEFORE DELETE ON usage_daily
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'usage_daily (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger engine_installs_writer_d
+CREATE TRIGGER engine_installs_writer_d BEFORE DELETE ON engine_installs
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'engine_installs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger engine_accounts_writer_d
+CREATE TRIGGER engine_accounts_writer_d BEFORE DELETE ON engine_accounts
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'engine_accounts (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger engine_bindings_writer_d
+CREATE TRIGGER engine_bindings_writer_d BEFORE DELETE ON engine_bindings
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'engine_bindings (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger system_agents_writer_d
+CREATE TRIGGER system_agents_writer_d BEFORE DELETE ON system_agents
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'system_agents (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger capabilities_writer_d
+CREATE TRIGGER capabilities_writer_d BEFORE DELETE ON capabilities
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'capabilities (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger model_ranks_writer_d
+CREATE TRIGGER model_ranks_writer_d BEFORE DELETE ON model_ranks
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'model_ranks (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger telegram_bots_writer_d
+CREATE TRIGGER telegram_bots_writer_d BEFORE DELETE ON telegram_bots
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'telegram_bots (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger proactive_jobs_writer_d
+CREATE TRIGGER proactive_jobs_writer_d BEFORE DELETE ON proactive_jobs
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'proactive_jobs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger tools_writer_d
+CREATE TRIGGER tools_writer_d BEFORE DELETE ON tools
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'tools (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger permission_requests_writer_d
+CREATE TRIGGER permission_requests_writer_d BEFORE DELETE ON permission_requests
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'permission_requests (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger employee_cards_writer_d
+CREATE TRIGGER employee_cards_writer_d BEFORE DELETE ON employee_cards
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'employee_cards (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger chat_threads_writer_d
+CREATE TRIGGER chat_threads_writer_d BEFORE DELETE ON chat_threads
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'chat_threads (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger message_attachments_writer_d
+CREATE TRIGGER message_attachments_writer_d BEFORE DELETE ON message_attachments
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'message_attachments (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger notifications_writer_d
+CREATE TRIGGER notifications_writer_d BEFORE DELETE ON notifications
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'notifications (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger jobs_writer_d
+CREATE TRIGGER jobs_writer_d BEFORE DELETE ON jobs
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'jobs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger app_versions_writer_d
+CREATE TRIGGER app_versions_writer_d BEFORE DELETE ON app_versions
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'app_versions (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger backups_writer_d
+CREATE TRIGGER backups_writer_d BEFORE DELETE ON backups
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'backups (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger update_runs_writer_d
+CREATE TRIGGER update_runs_writer_d BEFORE DELETE ON update_runs
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'update_runs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger secrets_writer_d
+CREATE TRIGGER secrets_writer_d BEFORE DELETE ON secrets
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'secrets (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
+
+-- @ga:object trigger search_documents_writer_d
+CREATE TRIGGER search_documents_writer_d BEFORE DELETE ON search_documents
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
+BEGIN SELECT RAISE(ABORT, 'search_documents (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
 
 -- @ga:object trigger id_aliases_actor_i
 CREATE TRIGGER id_aliases_actor_i BEFORE INSERT ON id_aliases
@@ -2476,6 +2703,81 @@ BEGIN SELECT RAISE(ABORT, 'consents: người ghi (v2.3.3) — created_by phải
 CREATE TRIGGER consents_actor_u BEFORE UPDATE ON consents
 WHEN app_maint() = 0 AND app_actor() IS NULL
 BEGIN SELECT RAISE(ABORT, 'consents: người ghi (v2.3.3) — UPDATE cần app_actor() của giao dịch ghi'); END;
+
+-- @ga:object trigger id_counters_ws_actor_i
+CREATE TRIGGER id_counters_ws_actor_i BEFORE INSERT ON id_counters
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'id_counters (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger id_counters_ws_actor_u
+CREATE TRIGGER id_counters_ws_actor_u BEFORE UPDATE ON id_counters
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'id_counters (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger change_set_items_ws_actor_i
+CREATE TRIGGER change_set_items_ws_actor_i BEFORE INSERT ON change_set_items
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'change_set_items (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger change_set_items_ws_actor_u
+CREATE TRIGGER change_set_items_ws_actor_u BEFORE UPDATE ON change_set_items
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'change_set_items (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger skill_engine_support_ws_actor_i
+CREATE TRIGGER skill_engine_support_ws_actor_i BEFORE INSERT ON skill_engine_support
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'skill_engine_support (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger skill_engine_support_ws_actor_u
+CREATE TRIGGER skill_engine_support_ws_actor_u BEFORE UPDATE ON skill_engine_support
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'skill_engine_support (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger skill_files_ws_actor_i
+CREATE TRIGGER skill_files_ws_actor_i BEFORE INSERT ON skill_files
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'skill_files (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger skill_files_ws_actor_u
+CREATE TRIGGER skill_files_ws_actor_u BEFORE UPDATE ON skill_files
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'skill_files (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger knowledge_chunks_ws_actor_i
+CREATE TRIGGER knowledge_chunks_ws_actor_i BEFORE INSERT ON knowledge_chunks
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'knowledge_chunks (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger knowledge_chunks_ws_actor_u
+CREATE TRIGGER knowledge_chunks_ws_actor_u BEFORE UPDATE ON knowledge_chunks
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'knowledge_chunks (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger usage_daily_ws_actor_i
+CREATE TRIGGER usage_daily_ws_actor_i BEFORE INSERT ON usage_daily
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'usage_daily (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger usage_daily_ws_actor_u
+CREATE TRIGGER usage_daily_ws_actor_u BEFORE UPDATE ON usage_daily
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'usage_daily (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger compiled_prompt_segments_ws_actor_i
+CREATE TRIGGER compiled_prompt_segments_ws_actor_i BEFORE INSERT ON compiled_prompt_segments
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'compiled_prompt_segments (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger search_documents_ws_actor_i
+CREATE TRIGGER search_documents_ws_actor_i BEFORE INSERT ON search_documents
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'search_documents (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
+
+-- @ga:object trigger search_documents_ws_actor_u
+CREATE TRIGGER search_documents_ws_actor_u BEFORE UPDATE ON search_documents
+WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors ta WHERE ta.id = app_actor() AND ta.workspace_id = NEW.workspace_id AND ta.workspace_id = OLD.workspace_id)
+BEGIN SELECT RAISE(ABORT, 'search_documents (v2.3.5): bảng không có cột người ghi — ghi ngoài bảo trì cần app_actor() là actor của chính workspace của hàng (guard chung; thiếu actor hoặc actor workspace khác ⇒ từ chối)'); END;
 
 -- @ga:object trigger id_aliases_no_update
 CREATE TRIGGER id_aliases_no_update BEFORE UPDATE ON id_aliases
@@ -4333,15 +4635,17 @@ END;
 CREATE TRIGGER telegram_allowlist_owner_new_i BEFORE INSERT ON telegram_allowlist
 WHEN NEW.is_owner = 1 AND NEW.status = 'active' AND NEW.deleted_at IS NULL AND app_maint() = 0
  AND NOT (NEW.added_via = 'capture' AND (EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = NEW.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner')
-          OR NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND na.is_owner = 1 AND na.status = 'active' AND na.deleted_at IS NULL)))
-BEGIN SELECT RAISE(ABORT, 'v2.2.13 (review bảo mật, HIGH): hàng allowlist chỉ thành chủ sở hữu active khi owner của workspace thêm qua capture (user ID đã xác minh), hoặc bot chưa có hàng chủ sở hữu active nào (bootstrap qua capture) — admin, tác tử, nhập tay không tạo được chủ sở hữu'); END;
+          OR (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system')
+              AND NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND na.is_owner = 1 AND na.status = 'active' AND na.deleted_at IS NULL))))
+BEGIN SELECT RAISE(ABORT, 'v2.2.13 (review bảo mật, HIGH): hàng allowlist chỉ thành chủ sở hữu active khi owner của workspace thêm qua capture (user ID đã xác minh), hoặc bot chưa có hàng chủ sở hữu active nào (bootstrap qua capture — v2.3.5: chỉ actor system của chính workspace) — admin, tác tử, nhập tay không tạo được chủ sở hữu'); END;
 
 -- @ga:object trigger telegram_allowlist_owner_new_u
 CREATE TRIGGER telegram_allowlist_owner_new_u BEFORE UPDATE OF is_owner, status, deleted_at, added_via, bot_id ON telegram_allowlist
 WHEN NEW.is_owner = 1 AND NEW.status = 'active' AND NEW.deleted_at IS NULL AND NOT (OLD.is_owner = 1 AND OLD.status = 'active' AND OLD.deleted_at IS NULL) AND app_maint() = 0
  AND NOT (NEW.added_via = 'capture' AND (EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = NEW.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner')
-          OR NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND na.id <> OLD.id AND na.is_owner = 1 AND na.status = 'active' AND na.deleted_at IS NULL)))
-BEGIN SELECT RAISE(ABORT, 'v2.2.13 (review bảo mật, HIGH): hàng allowlist chỉ thành chủ sở hữu active khi owner của workspace thêm qua capture (user ID đã xác minh), hoặc bot chưa có hàng chủ sở hữu active nào (bootstrap qua capture) — admin, tác tử, nhập tay không tạo được chủ sở hữu'); END;
+          OR (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = NEW.workspace_id AND sy.system_key = 'system')
+              AND NOT EXISTS (SELECT 1 FROM telegram_allowlist na WHERE na.bot_id = NEW.bot_id AND na.id <> OLD.id AND na.is_owner = 1 AND na.status = 'active' AND na.deleted_at IS NULL))))
+BEGIN SELECT RAISE(ABORT, 'v2.2.13 (review bảo mật, HIGH): hàng allowlist chỉ thành chủ sở hữu active khi owner của workspace thêm qua capture (user ID đã xác minh), hoặc bot chưa có hàng chủ sở hữu active nào (bootstrap qua capture — v2.3.5: chỉ actor system của chính workspace) — admin, tác tử, nhập tay không tạo được chủ sở hữu'); END;
 
 -- @ga:object trigger engine_accounts_login_started_ai
 CREATE TRIGGER engine_accounts_login_started_ai AFTER INSERT ON engine_accounts
@@ -5348,3 +5652,408 @@ BEGIN SELECT RAISE(ABORT, 'NOT NULL (v2.3.5, chống REPLACE): search_documents 
 CREATE TRIGGER search_documents_notnull_u BEFORE UPDATE OF is_live, weight ON search_documents
 WHEN NEW.is_live IS NULL OR NEW.weight IS NULL
 BEGIN SELECT RAISE(ABORT, 'NOT NULL (v2.3.5, chống REPLACE): search_documents — cột NOT NULL có DEFAULT không nhận NULL (OR REPLACE thay NULL bằng DEFAULT sau khi guard đã đọc NULL)'); END;
+
+-- @ga:object trigger workspaces_rowid_lock
+CREATE TRIGGER workspaces_rowid_lock BEFORE UPDATE ON workspaces
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM workspaces x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): workspaces — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger users_rowid_lock
+CREATE TRIGGER users_rowid_lock BEFORE UPDATE ON users
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM users x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): users — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger workspace_members_rowid_lock
+CREATE TRIGGER workspace_members_rowid_lock BEFORE UPDATE ON workspace_members
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM workspace_members x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): workspace_members — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger auth_sessions_rowid_lock
+CREATE TRIGGER auth_sessions_rowid_lock BEFORE UPDATE ON auth_sessions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM auth_sessions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): auth_sessions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger actors_rowid_lock
+CREATE TRIGGER actors_rowid_lock BEFORE UPDATE ON actors
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM actors x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): actors — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger id_counters_rowid_lock
+CREATE TRIGGER id_counters_rowid_lock BEFORE UPDATE ON id_counters
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM id_counters x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): id_counters — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger id_aliases_rowid_lock
+CREATE TRIGGER id_aliases_rowid_lock BEFORE UPDATE ON id_aliases
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM id_aliases x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): id_aliases — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger roles_rowid_lock
+CREATE TRIGGER roles_rowid_lock BEFORE UPDATE ON roles
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM roles x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): roles — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger avatars_rowid_lock
+CREATE TRIGGER avatars_rowid_lock BEFORE UPDATE ON avatars
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM avatars x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): avatars — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger skin_assets_rowid_lock
+CREATE TRIGGER skin_assets_rowid_lock BEFORE UPDATE ON skin_assets
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM skin_assets x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): skin_assets — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger dna_field_defs_rowid_lock
+CREATE TRIGGER dna_field_defs_rowid_lock BEFORE UPDATE ON dna_field_defs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM dna_field_defs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): dna_field_defs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger dna_fields_rowid_lock
+CREATE TRIGGER dna_fields_rowid_lock BEFORE UPDATE ON dna_fields
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM dna_fields x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): dna_fields — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger dna_field_versions_rowid_lock
+CREATE TRIGGER dna_field_versions_rowid_lock BEFORE UPDATE ON dna_field_versions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM dna_field_versions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): dna_field_versions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger revisions_rowid_lock
+CREATE TRIGGER revisions_rowid_lock BEFORE UPDATE ON revisions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM revisions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): revisions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger change_sets_rowid_lock
+CREATE TRIGGER change_sets_rowid_lock BEFORE UPDATE ON change_sets
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM change_sets x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): change_sets — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger change_set_items_rowid_lock
+CREATE TRIGGER change_set_items_rowid_lock BEFORE UPDATE ON change_set_items
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM change_set_items x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): change_set_items — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger instructions_rowid_lock
+CREATE TRIGGER instructions_rowid_lock BEFORE UPDATE ON instructions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM instructions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): instructions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger instruction_versions_rowid_lock
+CREATE TRIGGER instruction_versions_rowid_lock BEFORE UPDATE ON instruction_versions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM instruction_versions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): instruction_versions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger taxonomy_nodes_rowid_lock
+CREATE TRIGGER taxonomy_nodes_rowid_lock BEFORE UPDATE ON taxonomy_nodes
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM taxonomy_nodes x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): taxonomy_nodes — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger skills_rowid_lock
+CREATE TRIGGER skills_rowid_lock BEFORE UPDATE ON skills
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM skills x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): skills — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger skill_versions_rowid_lock
+CREATE TRIGGER skill_versions_rowid_lock BEFORE UPDATE ON skill_versions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM skill_versions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): skill_versions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger skill_prereqs_rowid_lock
+CREATE TRIGGER skill_prereqs_rowid_lock BEFORE UPDATE ON skill_prereqs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM skill_prereqs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): skill_prereqs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger skill_engine_support_rowid_lock
+CREATE TRIGGER skill_engine_support_rowid_lock BEFORE UPDATE ON skill_engine_support
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM skill_engine_support x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): skill_engine_support — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger skill_files_rowid_lock
+CREATE TRIGGER skill_files_rowid_lock BEFORE UPDATE ON skill_files
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM skill_files x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): skill_files — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger role_skills_rowid_lock
+CREATE TRIGGER role_skills_rowid_lock BEFORE UPDATE ON role_skills
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM role_skills x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): role_skills — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger blobs_rowid_lock
+CREATE TRIGGER blobs_rowid_lock BEFORE UPDATE ON blobs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM blobs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): blobs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger knowledge_items_rowid_lock
+CREATE TRIGGER knowledge_items_rowid_lock BEFORE UPDATE ON knowledge_items
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM knowledge_items x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): knowledge_items — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger knowledge_chunks_rowid_lock
+CREATE TRIGGER knowledge_chunks_rowid_lock BEFORE UPDATE ON knowledge_chunks
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM knowledge_chunks x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): knowledge_chunks — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger memories_rowid_lock
+CREATE TRIGGER memories_rowid_lock BEFORE UPDATE ON memories
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM memories x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): memories — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger recall_hits_rowid_lock
+CREATE TRIGGER recall_hits_rowid_lock BEFORE UPDATE ON recall_hits
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM recall_hits x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): recall_hits — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger positions_rowid_lock
+CREATE TRIGGER positions_rowid_lock BEFORE UPDATE ON positions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM positions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): positions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger assignments_rowid_lock
+CREATE TRIGGER assignments_rowid_lock BEFORE UPDATE ON assignments
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM assignments x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): assignments — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger trust_tier_changes_rowid_lock
+CREATE TRIGGER trust_tier_changes_rowid_lock BEFORE UPDATE ON trust_tier_changes
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM trust_tier_changes x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): trust_tier_changes — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger tasks_rowid_lock
+CREATE TRIGGER tasks_rowid_lock BEFORE UPDATE ON tasks
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM tasks x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): tasks — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger commitments_rowid_lock
+CREATE TRIGGER commitments_rowid_lock BEFORE UPDATE ON commitments
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM commitments x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): commitments — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger sessions_rowid_lock
+CREATE TRIGGER sessions_rowid_lock BEFORE UPDATE ON sessions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM sessions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): sessions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger wallets_rowid_lock
+CREATE TRIGGER wallets_rowid_lock BEFORE UPDATE ON wallets
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM wallets x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): wallets — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger ledger_entries_rowid_lock
+CREATE TRIGGER ledger_entries_rowid_lock BEFORE UPDATE ON ledger_entries
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM ledger_entries x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): ledger_entries — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger role_wounds_rowid_lock
+CREATE TRIGGER role_wounds_rowid_lock BEFORE UPDATE ON role_wounds
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM role_wounds x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): role_wounds — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger usage_daily_rowid_lock
+CREATE TRIGGER usage_daily_rowid_lock BEFORE UPDATE ON usage_daily
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM usage_daily x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): usage_daily — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger engines_rowid_lock
+CREATE TRIGGER engines_rowid_lock BEFORE UPDATE ON engines
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM engines x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): engines — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger engine_installs_rowid_lock
+CREATE TRIGGER engine_installs_rowid_lock BEFORE UPDATE ON engine_installs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM engine_installs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): engine_installs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger engine_accounts_rowid_lock
+CREATE TRIGGER engine_accounts_rowid_lock BEFORE UPDATE ON engine_accounts
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM engine_accounts x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): engine_accounts — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger engine_bindings_rowid_lock
+CREATE TRIGGER engine_bindings_rowid_lock BEFORE UPDATE ON engine_bindings
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM engine_bindings x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): engine_bindings — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger system_agents_rowid_lock
+CREATE TRIGGER system_agents_rowid_lock BEFORE UPDATE ON system_agents
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM system_agents x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): system_agents — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger probe_runs_rowid_lock
+CREATE TRIGGER probe_runs_rowid_lock BEFORE UPDATE ON probe_runs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM probe_runs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): probe_runs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger capabilities_rowid_lock
+CREATE TRIGGER capabilities_rowid_lock BEFORE UPDATE ON capabilities
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM capabilities x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): capabilities — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger quota_snapshots_rowid_lock
+CREATE TRIGGER quota_snapshots_rowid_lock BEFORE UPDATE ON quota_snapshots
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM quota_snapshots x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): quota_snapshots — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger model_ranks_rowid_lock
+CREATE TRIGGER model_ranks_rowid_lock BEFORE UPDATE ON model_ranks
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM model_ranks x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): model_ranks — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger compiled_prompts_rowid_lock
+CREATE TRIGGER compiled_prompts_rowid_lock BEFORE UPDATE ON compiled_prompts
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM compiled_prompts x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): compiled_prompts — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger compiled_prompt_segments_rowid_lock
+CREATE TRIGGER compiled_prompt_segments_rowid_lock BEFORE UPDATE ON compiled_prompt_segments
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM compiled_prompt_segments x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): compiled_prompt_segments — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger containers_rowid_lock
+CREATE TRIGGER containers_rowid_lock BEFORE UPDATE ON containers
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM containers x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): containers — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger telegram_bots_rowid_lock
+CREATE TRIGGER telegram_bots_rowid_lock BEFORE UPDATE ON telegram_bots
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM telegram_bots x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): telegram_bots — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger telegram_allowlist_rowid_lock
+CREATE TRIGGER telegram_allowlist_rowid_lock BEFORE UPDATE ON telegram_allowlist
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM telegram_allowlist x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): telegram_allowlist — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger proactive_policies_rowid_lock
+CREATE TRIGGER proactive_policies_rowid_lock BEFORE UPDATE ON proactive_policies
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM proactive_policies x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): proactive_policies — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger proactive_jobs_rowid_lock
+CREATE TRIGGER proactive_jobs_rowid_lock BEFORE UPDATE ON proactive_jobs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM proactive_jobs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): proactive_jobs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger proactive_sends_rowid_lock
+CREATE TRIGGER proactive_sends_rowid_lock BEFORE UPDATE ON proactive_sends
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM proactive_sends x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): proactive_sends — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger tools_rowid_lock
+CREATE TRIGGER tools_rowid_lock BEFORE UPDATE ON tools
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM tools x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): tools — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger tool_grants_rowid_lock
+CREATE TRIGGER tool_grants_rowid_lock BEFORE UPDATE ON tool_grants
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM tool_grants x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): tool_grants — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger permission_requests_rowid_lock
+CREATE TRIGGER permission_requests_rowid_lock BEFORE UPDATE ON permission_requests
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM permission_requests x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): permission_requests — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger egress_rules_rowid_lock
+CREATE TRIGGER egress_rules_rowid_lock BEFORE UPDATE ON egress_rules
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM egress_rules x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): egress_rules — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger polaris_checks_rowid_lock
+CREATE TRIGGER polaris_checks_rowid_lock BEFORE UPDATE ON polaris_checks
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM polaris_checks x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): polaris_checks — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger employee_cards_rowid_lock
+CREATE TRIGGER employee_cards_rowid_lock BEFORE UPDATE ON employee_cards
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM employee_cards x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): employee_cards — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger trial_runs_rowid_lock
+CREATE TRIGGER trial_runs_rowid_lock BEFORE UPDATE ON trial_runs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM trial_runs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): trial_runs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger chat_threads_rowid_lock
+CREATE TRIGGER chat_threads_rowid_lock BEFORE UPDATE ON chat_threads
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM chat_threads x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): chat_threads — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger chat_messages_rowid_lock
+CREATE TRIGGER chat_messages_rowid_lock BEFORE UPDATE ON chat_messages
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM chat_messages x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): chat_messages — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger message_attachments_rowid_lock
+CREATE TRIGGER message_attachments_rowid_lock BEFORE UPDATE ON message_attachments
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM message_attachments x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): message_attachments — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger message_anchors_rowid_lock
+CREATE TRIGGER message_anchors_rowid_lock BEFORE UPDATE ON message_anchors
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM message_anchors x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): message_anchors — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger ui_actions_rowid_lock
+CREATE TRIGGER ui_actions_rowid_lock BEFORE UPDATE ON ui_actions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM ui_actions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): ui_actions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger audit_log_rowid_lock
+CREATE TRIGGER audit_log_rowid_lock BEFORE UPDATE ON audit_log
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM audit_log x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): audit_log — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger events_rowid_lock
+CREATE TRIGGER events_rowid_lock BEFORE UPDATE ON events
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM events x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): events — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger notifications_rowid_lock
+CREATE TRIGGER notifications_rowid_lock BEFORE UPDATE ON notifications
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM notifications x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): notifications — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger jobs_rowid_lock
+CREATE TRIGGER jobs_rowid_lock BEFORE UPDATE ON jobs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM jobs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): jobs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger app_versions_rowid_lock
+CREATE TRIGGER app_versions_rowid_lock BEFORE UPDATE ON app_versions
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM app_versions x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): app_versions — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger backups_rowid_lock
+CREATE TRIGGER backups_rowid_lock BEFORE UPDATE ON backups
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM backups x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): backups — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger update_runs_rowid_lock
+CREATE TRIGGER update_runs_rowid_lock BEFORE UPDATE ON update_runs
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM update_runs x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): update_runs — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger schema_migrations_rowid_lock
+CREATE TRIGGER schema_migrations_rowid_lock BEFORE UPDATE ON schema_migrations
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM schema_migrations x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): schema_migrations — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger settings_rowid_lock
+CREATE TRIGGER settings_rowid_lock BEFORE UPDATE ON settings
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM settings x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): settings — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger secrets_rowid_lock
+CREATE TRIGGER secrets_rowid_lock BEFORE UPDATE ON secrets
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM secrets x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): secrets — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger consents_rowid_lock
+CREATE TRIGGER consents_rowid_lock BEFORE UPDATE ON consents
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM consents x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): consents — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;
+
+-- @ga:object trigger search_documents_rowid_lock
+CREATE TRIGGER search_documents_rowid_lock BEFORE UPDATE ON search_documents
+WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (SELECT 1 FROM search_documents x WHERE x.rowid = NEW.rowid))
+BEGIN SELECT RAISE(ABORT, 'rowid (v2.3.5): search_documents — rowid (kể cả bí danh _rowid_ / oid / cột INTEGER PRIMARY KEY) bất biến ngoài bảo trì; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó)'); END;

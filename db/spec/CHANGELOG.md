@@ -6,9 +6,112 @@ Từ v2.3.4, `db/spec/` của repo code là **nguồn duy nhất** của schema 
 Quy trình: sửa `schema_v2_2.py` / `views_v2_2.sql` / `tests_v2_2.py` → `pnpm db:sync` (sinh lại SQL + manifest `SYNC.json`) → `pnpm db:gen` → `pnpm db:test`
 → `pnpm db:mutation -- --all` (mỗi lượt DROP một trigger; đỏ chỉ qua dòng FAIL).
 
-## v2.3.5 — (đang làm)
+## v2.3.5 — 2026-10-17
 
-(xem cuối mục khi xong)
+Nguồn: review bảo mật tay trên `2bbd12b` (chặn merge M0, probe pA…pI) + 3 lượt auto-review trên các commit v2.3.5 + review hợp đồng API (mục a).
+Trigger 564 → 905 (+342 / −1 `schema_migrations_no_replace_u`); bộ test Python 117 → 124; hàm SQL mới `app_bootstrap()`.
+
+### Vá bảo mật
+- **HIGH (pA) — bảng gốc phân quyền không có cổng người ghi** (`workspace_members`, `actors`, `users`): admin tự nâng owner rồi đi qua mọi cổng owner-only.
+  - `workspace_members_writer_i/_u`: hàng mức owner (cũ hoặc mới) chỉ owner; còn lại owner / admin; actor system của workspace hoặc của workspace hệ thống
+    (`SYS_SYS`); `workspace_id` / `user_id` bất biến ngoài bảo trì. `workspace_members_owner_last_u`: tenant luôn còn ≥ 1 owner active.
+    `workspace_members_delete_d`: xoá cứng chỉ bảo trì (gỡ = `removed_at`).
+  - **Membership chéo workspace** (`workspace_members_cross_i`, `_cross_u` — kích hoạt lại): user đang active ở workspace khác ⇒ chỉ `SYS_SYS` (luồng mời qua
+    dịch vụ app). Owner / admin / actor system tenant chỉ thêm user chưa thuộc workspace nào khác (chặn kéo user tenant B vào A để thành "owner của user đó").
+  - `actors_writer_i/_u`, `actors_lock_u` (kind / user_id / role_id / system_key / workspace_id bất biến ngoài bảo trì), `actors_writer_d` (owner / actor system).
+    Actor system đầu tiên tự đăng ký CHỈ trong `conn.bootstrap` của chính workspace đó (`app_bootstrap()` = workspace_id) và `NEW.id = app_actor()`.
+  - `users_writer_i` (`SYS_SYS` / owner / admin đang hoạt động), `users_writer_u` (**chỉ chính người đó hoặc `SYS_SYS`** — auto-review HIGH: bỏ nhánh "owner của
+    workspace có người đó" = chiếm tài khoản chéo tenant; chính người đó không đụng `id`, `display_id`, `display_seq`, `created_at`, `disabled_at`,
+    `failed_login_count`, `locked_until`, `last_login_at`, tài khoản bị vô hiệu không tự sửa), `users_writer_d` (`SYS_SYS`).
+  - `auth_sessions_writer_i/_u/_d`: dịch vụ đăng nhập = `SYS_SYS`; chính người đó chỉ thu hồi (`revoked_at`, mọi cột khác giữ nguyên) hoặc xoá phiên của mình.
+- **HIGH (auto-review) — actor system không giới hạn tenant**: `USR_SYS` cũ nhận actor system của BẤT KỲ workspace ⇒ nay `SYS_SYS = _sys_of('<SYS>')` cho bảng
+  toàn cục (users, auth_sessions, engines, workspaces mới, membership chéo). Quét toàn bộ SQL sinh ra: mọi `system_key = 'system'` đều nằm trong truy vấn con
+  có `workspace_id` (0 chỗ thiếu).
+- **workspaces** — `workspaces_writer_i`: tạo chỉ trong `conn.bootstrap` của chính workspace đó (`app_bootstrap()`), bảo trì, hoặc `SYS_SYS`;
+  `workspaces_writer_u` (owner / admin / system của chính workspace; trừ `core_agent_locked_at` — guard riêng); `workspaces_writer_d` (bảo trì).
+- **MEDIUM (pC / pD / pH / pI + proactive_policies)**: `containers_writer_i/_u/_d` + `containers_sys_u` (image / CLI / tài nguyên chỉ actor system);
+  `engines_writer_i/_u/_d` (bảo trì / `SYS_SYS`); `settings_writer_*` mặc định từ chối (owner / admin / system), `settings_retention_i/_u/_d`
+  (`audit.retention_days` 1–36500, `log.retention_days` 1–3650, `purge.grace_days` 1–3650, số nguyên, chỉ owner); `telegram_allowlist_writer_*` (tác tử
+  Telegram chỉ INSERT hàng capture); `tool_grants_writer_*`, `egress_rules_writer_*` (xoá cứng: chỉ owner / system — admin / Role không);
+  `proactive_policies_writer_*`, `max_per_day` số nguyên 0–20 (giữ trần 20 đã có trong DDL), giờ yên tĩnh số nguyên.
+- **`_writer_pair` ⇒ `_writer_gates`** (ba cổng I / U / D; D = điều kiện U đổi `NEW.*` ⇒ `OLD.*`, bảng nhạy cảm truyền `cond_d` chặt hơn).
+- **DELETE mặc định** (`{t}_writer_d`, sinh từ DDL): mọi bảng có `workspace_id` chưa có cổng xoá riêng / append-only ⇒ xoá cứng ngoài bảo trì chỉ owner / admin
+  còn là thành viên hoặc actor system (`system`) của `OLD.workspace_id` (43 bảng).
+- **Bảng không có cột người ghi** (`{t}_ws_actor_i/_u`, sinh từ DDL): `change_set_items`, `compiled_prompt_segments` (chỉ I — append-only), `id_counters`,
+  `knowledge_chunks`, `search_documents`, `skill_engine_support`, `skill_files`, `usage_daily` — ghi ngoài bảo trì cần actor của CHÍNH workspace (trước: ghi vô danh).
+- **`schema_migrations_maint_i/_u/_d`**: lịch sử migration chỉ ghi trong bảo trì (runner).
+- **MEDIUM (pB) — NOT NULL DEFAULT + OR REPLACE** (`{t}_notnull_i/_u`, sinh từ DDL, 78 + 78): SQLite thay NULL bằng DEFAULT SAU khi guard BEFORE đã đọc NULL ⇒ chặn
+  NULL ở mọi cột NOT NULL có DEFAULT; tạo gần cuối ⇒ chạy trước mọi BEFORE trigger cùng sự kiện.
+- **MEDIUM (review rowid) — `OF rowid` phụ thuộc parser** (đo trên SQLite 3.45: `SET _rowid_` / `SET oid` / `SET <cột INTEGER PK>` KHÔNG kích `BEFORE UPDATE OF
+  rowid`): `{t}_rowid_lock` cho MỌI bảng MVP (81), `BEFORE UPDATE` không danh sách cột, `WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR EXISTS (hàng
+  có rowid mới))` — ngoài bảo trì rowid bất biến; trong bảo trì không đổi sang rowid của hàng đang có (REPLACE xoá hàng đó). `{t}_no_replace_u` bỏ khoá rowid và
+  khoá cột INTEGER PRIMARY KEY (đã thuộc `_rowid_lock`); `{t}_no_replace_i` giữ khoá rowid ẩn (LOW pF: `x.rowid = NEW.rowid`).
+- **LOW (pE) — CHECK so byte bị lách bằng BLOB**: `typeof(col) = 'text'` cho `short_code`, `slug` (skills, taxonomy_nodes), `skin_assets.sha256`, `auth_volume`,
+  `allowed_host`.
+- **Review hợp đồng API (a) — `telegram_allowlist_owner_new_i/_u`**: nhánh bootstrap (bot chưa có owner active) từng cho MỌI actor ⇒ admin / tác tử chiếm ghế
+  owner trước. Nay bootstrap chỉ actor system (`system`) của CHÍNH workspace; owner của workspace thì luôn được; bảo trì miễn. (Actor system của workspace hệ
+  thống không ghi được allowlist tenant — `telegram_allowlist_writer_i` — nên "SYS system actor" của review hiểu là actor system của workspace.)
+
+### HMAC chuỗi audit (MEDIUM pG) — cho L-DB `audit-writer`
+- `row_hash = HMAC-SHA256(audit_key(workspace_id), UTF-8(JCS(hàng)))`; hàng = **MỌI cột của `audit_log` trừ `row_hash`**, tên cột = khoá JSON, NULL ghi `null`,
+  số nguyên là số; JCS = khoá sắp theo code unit, không khoảng trắng (= `canonicalJson` của contracts) ⇒ thứ tự cột không ảnh hưởng. 29 cột (PRAGMA order):
+  `id, workspace_id, display_id, display_seq, created_at, created_by, actor_id, actor_label, actor_kind, action, result, role_id, entity_type, entity_id,
+  entity_display_id, before_json, after_json, detail_json, reason, tool, session_id, task_id, channel, request_id, ip_hash, tokens_total, cost_micro_usd,
+  hash_key_id, prev_hash`. Chuỗi nối bằng `prev_hash` (nằm trong hàng đã băm). Bên ghi phải ghi TƯỜNG MINH mọi cột (giá trị đã băm = giá trị đã lưu); cột mới
+  của `audit_log` tự vào HMAC (danh sách đọc từ PRAGMA). Verify: so MAC + `prev_hash` = `row_hash` hàng trước.
+
+### Nghĩa vụ app (L-SYS / L-HR / L-DB repos / L-API)
+- `app_bootstrap()`: hàm SQL mới — `conn.bootstrap({workspaceId, systemActorId})` đặt = `workspaceId` trong đúng giao dịch đó (`packages/db/src/connection.ts`);
+  ngoài bootstrap NULL. Kết nối đọc không có hàm này (như `app_actor()`).
+- Tạo workspace: trong `conn.bootstrap` của chính nó (ghi hàng `workspaces` + actor system đầu tiên cùng giao dịch), hoặc `conn.write(<actor system workspace hệ
+  thống>)` (Onboarding tenant), hoặc bảo trì.
+- **Owner đặt lại mật khẩu / mở khoá thành viên** = dịch vụ app chạy bằng `SYS_SYS` SAU khi app kiểm quyền (owner của workspace có người đó và người đó không thuộc
+  workspace nào owner kia không làm owner) — DB không còn nhánh owner. Dịch vụ đăng nhập (`failed_login_count`, `locked_until`, `last_login_at`, phiên) = `SYS_SYS`.
+- Mời user đang thuộc workspace khác = dịch vụ app chạy bằng `SYS_SYS`.
+- Xoá cứng (ngoài bảo trì) cần owner / admin / actor `system` của workspace — job dọn chạy bằng actor `system`, không phải `scheduler`.
+- Bảng dẫn xuất (`search_documents`, `usage_daily`, `knowledge_chunks`, …) ghi bằng actor của chính workspace (job hệ thống).
+- **Lệch contracts**: `SETTINGS['audit.retention_days' | 'log.retention_days' | 'purge.grace_days'].writers = OWNER_ADMIN` nhưng DB (review pI) = chỉ owner ⇒ L-API
+  sửa `writers` sang owner-only (v2.3.6 mở rộng danh sách khoá nới an ninh).
+
+### Quét cổng mọi bảng × lối (test `WRITER-all`, đọc `sqlite_master`)
+- 86 bảng × 4 lối. INSERT: authz 25 / actor 55 / maint 1 / miễn 5; UPDATE: authz 19 / frozen 25 / actor 36 / maint 1 / miễn 5; DELETE: authz 53 / maint 28 /
+  miễn 5; rowid: `_rowid_lock` 81 / miễn 5.
+- **Cổng phân quyền đủ I + U + D (20)**: actors, auth_sessions, containers, egress_rules, engine_accounts, engine_bindings, engine_installs, engines,
+  proactive_policies, schema_migrations, secrets, settings, skin_assets, telegram_allowlist, telegram_bots, tool_grants, tools, users, workspace_members,
+  workspaces.
+- **Chỉ guard chung người ghi ở I / U (khai lý do trong `WRITER_ALL_ACTOR_ONLY`; DELETE vẫn có cổng)** — nợ cổng vai trò, Gen quyết từng bảng:
+  - [flow — owner / admin / Role / tác tử ghi theo luồng, phân quyền ở tầng app] assignments, change_sets, chat_threads, commitments, dna_field_defs, dna_fields,
+    employee_cards, instructions, jobs, knowledge_items, memories, message_attachments, notifications, permission_requests, positions, proactive_jobs,
+    role_skills, roles, skill_prereqs, skills, tasks, taxonomy_nodes, wallets;
+  - [runtime — kết quả vận hành do app ghi] app_versions, backups, capabilities, model_ranks, system_agents, update_runs;
+  - [log — append-only: UPDATE đóng băng, DELETE chỉ bảo trì] audit_log, avatars, blobs, chat_messages, compiled_prompts, consents, dna_field_versions,
+    id_aliases, instruction_versions, message_anchors, polaris_checks, proactive_sends, probe_runs, quota_snapshots, recall_hits, revisions, role_wounds,
+    sessions, skill_versions, trial_runs, trust_tier_changes, ui_actions;
+  - [derived — không có cột người ghi, `{t}_ws_actor_*`] change_set_items, compiled_prompt_segments, id_counters, knowledge_chunks, search_documents,
+    skill_engine_support, skill_files, usage_daily.
+- **Miễn**: FTS5 `search_fts`, `search_fts_config`, `search_fts_data`, `search_fts_docsize`, `search_fts_idx` (bảng ảo + bóng nội bộ; chỉ FTS5 ghi qua trigger
+  đồng bộ của `search_documents`); cột `workspaces.core_agent_locked_at` (trigger `probe_runs_core_lock_*` ghi; guard riêng ghi một lần).
+
+### Trigger mới (tên — cho L-DB)
+- Viết tay (47): `workspace_members_writer_i/_u`, `workspace_members_cross_i/_u`, `workspace_members_owner_last_u`, `workspace_members_delete_d`,
+  `actors_writer_i/_u/_d`, `actors_lock_u`, `users_writer_i/_u/_d`, `auth_sessions_writer_i/_u/_d`, `schema_migrations_maint_i/_u/_d`,
+  `workspaces_writer_i/_u/_d`, `containers_writer_i/_u/_d`, `containers_sys_u`, `engines_writer_i/_u/_d`, `settings_retention_i/_u/_d`,
+  `{settings, telegram_allowlist, tool_grants, egress_rules, proactive_policies}_writer_i/_u/_d`.
+- Sinh từ DDL: `{t}_notnull_i` 78, `{t}_notnull_u` 78, `{t}_rowid_lock` 81, `{t}_writer_d` mặc định 43, `{t}_ws_actor_i` 8, `{t}_ws_actor_u` 7.
+- Sửa: `telegram_allowlist_owner_new_i/_u` (bootstrap), `{t}_no_replace_i` (+ khoá rowid ẩn), `{t}_no_replace_u` (bỏ khoá rowid / INTEGER PK).
+
+### Test (bộ Python 117 → 124)
+- Mới: `ROOT-authz` (77 ca âm / 45 thuận), `REPLACE-notnull`, `ROUTE-writers` (44 / 14), `ROWID-lock` (rowid / "rowid" / ROWID / _rowid_ / oid / INTEGER PK ×2,
+  bảo trì REPLACE ON / OFF), `BLOB-check`, `AUDIT-hmac` (sửa 8 cột kể cả `prev_hash`, NULL ↔ giá trị), `WRITER-all` (meta-test + 12 đối chứng âm).
+- `GEN-guards` + `_notnull_i/_u`, `_rowid_lock`, `_writer_d` (mặc định + viết tay), `_ws_actor_i/_u`: 554/554 guard sinh / cổng xoá có ca âm tự dựng.
+- `AL-owner-create` + bootstrap bởi admin / viewer / tác tử Telegram / actor system tenant khác / tác tử + actor system workspace hệ thống ⇒ chặn.
+- Probe pA…pI của review (`scratchpad/m1/review-db/probe`) chạy lại trên schema v2.3.5 (dựng người thử bằng actor system + bảo trì): mọi bước khai thác `ERR`;
+  pG: sửa audit ⇒ `verify_chain` báo hàng bị sửa.
+- Fixture: repository giả lập đặt `app_bootstrap()` khi dựng workspace, `SYS_SYS` cho bảng toàn cục / membership chéo, actor system cho DELETE và bảng không có
+  `created_by`; TS: `seedMinimal` tạo workspace trong `conn.bootstrap`; runner test ghi `schema_migrations` trong `conn.maintenance`.
+
+### Mutation
+- (đang chạy — ghi kết quả ở commit sau)
 
 ## v2.3.4 — 2026-10-17
 

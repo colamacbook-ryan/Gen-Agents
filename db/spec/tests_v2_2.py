@@ -51,6 +51,7 @@ class Ctx:
     def __init__(self):
         self.maint = 0
         self.actor = None      # v2.3.3: app_actor() — người ghi của giao dịch (app đặt cho từng giao dịch ghi; kết nối đọc: None)
+        self.boot = None       # v2.3.5: app_bootstrap() — id workspace đang dựng trong conn.bootstrap (ngoài bootstrap: None)
 
 def connect(ctx, with_fn=True):
     db = sqlite3.connect(":memory:", isolation_level=None)
@@ -61,6 +62,7 @@ def connect(ctx, with_fn=True):
         db.create_function("app_now", 0, app_now, deterministic=False)                    # v2.2.11 (CONTRACT-r8d §E)
         db.create_function("app_local_time", 2, app_local_time, deterministic=True)       # v2.3.0 (CONTRACT-r9 §C)
         db.create_function("app_actor", 0, lambda: ctx.actor, deterministic=False)        # v2.3.3: người ghi của giao dịch
+        db.create_function("app_bootstrap", 0, lambda: ctx.boot, deterministic=False)     # v2.3.5: workspace đang dựng (conn.bootstrap)
     return db
 
 def load_schema(db):
@@ -97,7 +99,7 @@ SYS_COL_DEFAULTS = {'engine_accounts': {'login_status': ('unknown', 'in_progress
                     'tools': {'is_builtin': (0,), 'definition_tokens': (0,)}}
 # cột "người" mà trigger tra và buộc = app_actor() (v2.3.3): có trong bước ⇒ chính người đó là người ghi của bước
 CLAIM_COLS = ('proposed_by', 'recorded_by', 'confirmed_by')
-ROOT_NO_CB = {'workspaces', 'users', 'workspace_members', 'actors', 'engines'}   # v2.3.5: bảng gốc có cổng người ghi nhưng không có created_by
+ROOT_NO_CB = {'workspaces', 'users', 'workspace_members', 'actors', 'engines', 'auth_sessions'}   # v2.3.5: bảng gốc có cổng người ghi nhưng không có created_by
 _SAME = object()
 
 def _top_split(s, sep=','):
@@ -197,12 +199,21 @@ class RepoConn:
         r = self.raw.execute("SELECT id FROM actors WHERE workspace_id=? AND system_key='system'", (ws,)).fetchone()
         return r[0] if r else None
 
+    def _with_ctx(self, ab, fn):
+        prev = (self.ctx.actor, self.ctx.boot)
+        self.ctx.actor, self.ctx.boot = ab
+        try:
+            return fn()
+        finally:
+            self.ctx.actor, self.ctx.boot = prev
+
     def _root_actor(self, t, sql, params):
-        """v2.3.5: bước ghi bảng gốc (không có created_by) mà fixture không đặt actor ⇒ actor system (dựng workspace / khôi phục — đúng người app dùng):
-        workspace_members / actors ⇒ system của workspace của hàng (actor system đầu tiên tự đăng ký: chính id của hàng); workspaces ⇒ system của chính
-        workspace; users / engines ⇒ system của workspace hệ thống. Không đoán được ⇒ giữ ctx.actor (ca âm truyền actor tường minh qua D.raw)."""
-        if t in ('users', 'engines'):
-            return self._sys_of(SYS)
+        """v2.3.5: bước ghi bảng gốc (không có created_by) / DELETE mà fixture không đặt actor ⇒ (actor, app_bootstrap()) đúng người app dùng:
+        workspaces INSERT ⇒ conn.bootstrap của chính workspace đó; actor system đầu tiên ⇒ tự đăng ký (chính id của hàng) trong bootstrap; workspace_members
+        của user đang active ở workspace khác ⇒ actor system của workspace hệ thống (luồng mời); còn lại ⇒ system của workspace của hàng; users / engines /
+        auth_sessions ⇒ system của workspace hệ thống. Không đoán được ⇒ giữ ctx (ca âm truyền actor tường minh qua D.raw)."""
+        if t in ('users', 'engines', 'auth_sessions'):
+            return self._sys_of(SYS), None
         mi = self._INS.match(sql)
         if mi and not isinstance(params, dict):
             cols = [c.strip() for c in mi.group(2).split(',')]
@@ -221,11 +232,16 @@ class RepoConn:
                     row[c] = params[sum(_qcount(x) for x in vals[:k])]
                 elif v.startswith("'") and v.endswith("'"):
                     row[c] = v[1:-1]
-            ws = row.get('id') if t == 'workspaces' else row.get('workspace_id')
+            if t == 'workspaces':
+                return None, row.get('id')
+            ws = row.get('workspace_id')
             sa = self._sys_of(ws)
             if sa is None and t == 'actors' and row.get('system_key') == 'system':
-                return row.get('id')
-            return sa if sa is not None else _SAME
+                return row.get('id'), ws
+            if t == 'workspace_members' and self.raw.execute("SELECT 1 FROM workspace_members WHERE user_id=? AND workspace_id<>? AND removed_at IS NULL",
+                                                             (row.get('user_id'), ws)).fetchone():
+                return self._sys_of(SYS), None
+            return (sa, None) if sa is not None else _SAME
         md = self._DML.match(sql)
         rest = sql[md.end():]
         w = _top_kw(rest, 'WHERE')
@@ -234,8 +250,10 @@ class RepoConn:
         params = tuple(params)
         k = _qcount(rest[:w])
         col = 'id' if t == 'workspaces' else 'workspace_id'
-        wss = [x[0] for x in self.raw.execute(f"SELECT DISTINCT {col} FROM {t} WHERE {rest[w + 5:]}", params[k:]).fetchall()]
-        return self._sys_of(wss[0]) if len(wss) == 1 and self._sys_of(wss[0]) else _SAME
+        r = _top_kw(rest, 'RETURNING')
+        cond = rest[w + 5:(r if r > w else len(rest))]
+        wss = [x[0] for x in self.raw.execute(f"SELECT DISTINCT {col} FROM {t} WHERE {cond}", params[k:]).fetchall()]
+        return (self._sys_of(wss[0]), None) if len(wss) == 1 and self._sys_of(wss[0]) else _SAME
 
     def execute(self, sql, params=()):
         m = self._UPD.match(sql)
@@ -246,10 +264,12 @@ class RepoConn:
             if a is not _SAME:
                 return self._with_actor(a, lambda: self.raw.execute(sql, params))
         md = self._DML.match(sql)
-        if md and md.group(1) in ROOT_NO_CB and self.ctx.actor is None:
+        if md and self.ctx.actor is None and (md.group(1) in ROOT_NO_CB or (               # v2.3.5: DELETE ngoài bảo trì có cổng {t}_writer_d,
+                not self.ctx.maint and 'workspace_id' in self.cols(md.group(1))                # bảng không có created_by có {t}_ws_actor_i/_u ⇒
+                and (sql.lstrip().upper().startswith('DELETE') or 'created_by' not in self.cols(md.group(1))))):   # actor system của ws (job hệ thống)
             a = self._root_actor(md.group(1), sql, params)
             if a is not _SAME:
-                return self._with_actor(a, lambda: self.raw.execute(sql, params))
+                return self._with_ctx(a, lambda: self.raw.execute(sql, params))
         return self.raw.execute(sql, params)
 
     def executemany(self, sql, seq):
@@ -358,8 +378,13 @@ class DB:
             claim = next((kw[c] for c in CLAIM_COLS if kw.get(c) is not None), None)
             kw['created_by'] = claim or (self.db._sys_actor(kw.get('workspace_id')) if sys_step else None) or self.owner_actor(kw.get('workspace_id'))
         keys = list(kw)
+        if _actor is _SAME and 'created_by' not in cols and t in ROOT_NO_CB:      # v2.3.5: bảng gốc không có created_by ⇒ hook của repository giả lập
+            self.db.execute(f"INSERT INTO {t}({','.join(keys)}) VALUES({','.join('?' * len(keys))})", [kw[k] for k in keys])
+            return kw.get('id')
         # v2.3.3: repository đặt app_actor() = người làm bước = created_by của hàng (ca âm truyền _actor khác để thử guard chung)
         actor = kw.get('created_by') if _actor is _SAME else _actor
+        if _actor is _SAME and 'created_by' not in cols and 'workspace_id' in kw:   # v2.3.5: bảng không có created_by ({t}_ws_actor_i) ⇒ người đang
+            actor = self.ctx.actor or self.db._sys_actor(kw['workspace_id'])        # làm bước, không có ⇒ actor system của ws (job dẫn xuất)
         self.db._with_actor(actor, lambda: self.raw.execute(f"INSERT INTO {t}({','.join(keys)}) VALUES({','.join('?' * len(keys))})",
                                                             [kw[k] for k in keys]))
         return kw.get('id')
@@ -5163,9 +5188,9 @@ def t_v2213_no_replace():
     case("pragma ON: INSERT thường trùng khoá (thông điệp vẫn có UNIQUE)", put('INSERT', uid('dup'), 96, 999), 'UNIQUE')
     case("pragma ON: UPDATE OR REPLACE tên container Lan = container Mai (bảng khác, ux_ct_name)", lambda: db.execute(
         "UPDATE OR REPLACE containers SET container_name='ga-role-mai' WHERE id=?", (CT['Lan'],)), MSG_NR_T)
-    case("pragma ON: INSERT OR REPLACE search_documents trùng id (PK rowid alias), khác entity", lambda: db.execute(
+    case("pragma ON: INSERT OR REPLACE search_documents trùng id (PK rowid alias), khác entity", lambda: D.db._with_actor(D.db._sys_actor(W), lambda: db.execute(
         "INSERT OR REPLACE INTO search_documents(id, workspace_id, entity_type, entity_id) SELECT id, workspace_id, entity_type, entity_id || ':x' "
-        "FROM search_documents ORDER BY id LIMIT 1"), MSG_NR_T)
+        "FROM search_documents ORDER BY id LIMIT 1")), MSG_NR_T)            # v2.3.5: indexer = actor system (search_documents_ws_actor_i)
     db.execute("PRAGMA recursive_triggers=OFF")
     rec_off = D.one("PRAGMA recursive_triggers")
     for name, fn in REP:
@@ -5243,7 +5268,13 @@ def t_v2213_owner_create():
                 kek_id='kek1', fingerprint='fp')
     tb = D.ins('telegram_bots', workspace_id=W, role_id=lan, bot_username='lan_office02_bot', bot_tg_id=222, secret_id=sec, status='active')
     case("bootstrap qua nhập tay (manual)", add(tb, 999, 'manual', tele), MSG_AL_NEW_T)
-    boot = _try(add(tb, 999, 'capture', tele))
+    # v2.3.5 (review hợp đồng API, a): bootstrap (bot chưa có owner) — admin / viewer / tác tử / actor system tenant khác chiếm ghế owner trước ⇒ chặn
+    _vu, vw = _mk_member(D, W, 'oc-view', 'viewer', 39)
+    for nm, who in (('admin', adm), ('viewer', vw), ('tác tử Telegram', tele), ('actor system tenant khác', X['A'][(X['W2'], 'system')]),
+                    ('tác tử Trainer của workspace hệ thống', X['A'][(X['SYS'], 'trainer')]), ('actor system của workspace hệ thống', X['A'][(X['SYS'], 'system')])):
+        case(f"bootstrap qua capture bởi {nm}", lambda who=who: D.ins('telegram_allowlist', workspace_id=W, bot_id=tb, tg_user_id=999, display_name='Owner mới',
+                                                                     is_owner=1, added_via='capture', created_by=who, _actor=who), MSG_AL_NEW_T)
+    boot = _try(add(tb, 999, 'capture', X['A'][(W, 'system')]))                 # dịch vụ app (actor system của chính workspace) — bootstrap
     case("sau bootstrap: tác tử thêm owner thứ hai qua capture", add(tb, 1001, 'capture', tele), MSG_AL_NEW_T)
     # --- khôi phục bot đã xoá mềm: chỉ owner của workspace
     db.execute("UPDATE telegram_bots SET deleted_at=?, updated_by=? WHERE id=?", (now(), own, tb))
@@ -5264,7 +5295,8 @@ def t_v2213_owner_create():
            f"(kể cả tự đổi added_via), owner nâng hàng nhập tay, tác tử nâng hàng capture, admin gỡ owner thật, admin kích hoạt lại owner đã gỡ, bootstrap qua "
            f"nhập tay, tác tử thêm owner thứ hai sau bootstrap, admin khôi phục bot, actor system khôi phục bot; thuận: A3.T owner thêm qua capture rồi gỡ hàng cũ ⇒ {own_a3t}, owner kích "
            f"hoạt lại ({'được' if re_own else 'BỊ CHẶN'}), owner nâng hàng capture ({'được' if up_own else 'BỊ CHẶN'}), bootstrap bot mới qua capture "
-           f"({'được' if boot else 'BỊ CHẶN'}), owner khôi phục bot ({'được' if rest_ok else 'BỊ CHẶN'}), bảo trì ({'được' if maint_ok else 'BỊ CHẶN'}) ⇒ "
+           f"bởi actor system của chính workspace ({'được' if boot else 'BỊ CHẶN'}) — v2.3.5: admin / viewer / tác tử Telegram / actor system tenant khác / "
+           f"tác tử + actor system của workspace hệ thống bootstrap bị chặn, owner khôi phục bot ({'được' if rest_ok else 'BỊ CHẶN'}), bảo trì ({'được' if maint_ok else 'BỊ CHẶN'}) ⇒ "
            f"owner TG-0003 {owners(tg)}, bot mới {owners(tb)}")
     _show(c)
 
@@ -6379,7 +6411,7 @@ def t_v233_actor_meta():
     D, X = seed()
     db = D.raw
     n0, bad0 = _actor_violations(db)
-    ng = db.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name GLOB '*_actor_[iu]'").fetchone()[0]
+    ng = db.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name GLOB '*_actor_[iu]' AND name NOT GLOB '*_ws_actor_[iu]'").fetchone()[0]
     db.execute("DROP TRIGGER IF EXISTS settings_actor_i")
     db.execute("DROP TRIGGER IF EXISTS tasks_actor_u")
     db.execute("""CREATE TRIGGER tasks_actor_u BEFORE UPDATE ON tasks WHEN app_maint() = 0 AND NOT COALESCE(NEW.updated_by = app_actor(), 0)
@@ -6522,7 +6554,7 @@ def t_v233_actor_guard():
     D.raw.execute("CREATE TEMP TABLE fk_probe(parent_alive INTEGER)")
     D.raw.execute("CREATE TEMP TRIGGER fk_probe_t BEFORE UPDATE OF parent_task_id ON main.tasks BEGIN "
                   "INSERT INTO fk_probe SELECT EXISTS (SELECT 1 FROM main.tasks p WHERE p.id = OLD.parent_task_id); END")
-    fk_ok = _try(_raw(D, None, "DELETE FROM tasks WHERE id=?", (tp,)))                 # job dọn: xoá hàng cha, KHÔNG actor ⇒ hàng con tự về NULL
+    fk_ok = _try(_raw(D, sysW, "DELETE FROM tasks WHERE id=?", (tp,)))   # job dọn (v2.3.5: xoá cứng cần actor — tasks_writer_d): hàng con tự về NULL
     probe = [r[0] for r in D.raw.execute("SELECT parent_alive FROM fk_probe")]
     D.raw.execute("DROP TRIGGER fk_probe_t")
     D.raw.execute("DROP TABLE fk_probe")
@@ -6963,8 +6995,8 @@ def _seed_apply(D, tables, resolve, actor):
     """Bên áp seed tham chiếu — cùng thuật toán với applyGlobalSeed / applyWorkspaceSeed của @ga/db: MỘT giao dịch, app_actor() = actor system của workspace,
     created_by = actor đó, INSERT … SELECT … WHERE NOT EXISTS theo conflictKey (không ON CONFLICT). Trả (đã chèn, đã có); lỗi ⇒ rollback + ném."""
     db, q = D.raw, (lambda c: '"' + c + '"')
-    out, prev = [0, 0], D.ctx.actor
-    D.ctx.actor = actor
+    out, prev = [0, 0], (D.ctx.actor, D.ctx.boot)
+    D.ctx.actor, D.ctx.boot = actor, (SYS if resolve is None else resolve({'$ref': 'workspace'}))   # v2.3.5: = conn.bootstrap (app_bootstrap())
     db.execute("BEGIN")
     try:
         for t in tables:
@@ -6989,7 +7021,7 @@ def _seed_apply(D, tables, resolve, actor):
             db.execute("ROLLBACK")
         raise
     finally:
-        D.ctx.actor = prev
+        D.ctx.actor, D.ctx.boot = prev
     return tuple(out)
 
 def t_v234_seed_reference():
@@ -7019,7 +7051,11 @@ def t_v234_seed_reference():
     ten = {}
     for tag, code in (('seedref-a', 'SRA1'), ('seedref-b', 'SRB1')):
         w = uid('ws:' + tag)
-        D.raw.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (w, 'tenant', tag, tag.title(), code))   # app: Onboarding
+        D.ctx.boot = w                                                                                                              # app: Onboarding
+        try:                                                                                                                        # (conn.bootstrap)
+            D.raw.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (w, 'tenant', tag, tag.title(), code))
+        finally:
+            D.ctx.boot = None
         acts = {k: uid(f'actor:{w}:{k}') for k in G.ACTOR_KEYS}                                                                     # app cấp trước
         res = lambda ref, w=w, acts=acts: w if ref['$ref'] == 'workspace' else acts[ref['key']] if ref['$ref'] == 'actor' else G.seed_row_id(w, ref['key'])
         ten[w] = (_val(lambda res=res, acts=acts: _seed_apply(D, seed_['perWorkspace'], res, acts['system'])),
@@ -7264,12 +7300,18 @@ def t_v234_sql_noname():
     report("SQL-noname", ok, f"tên người trong SQL sinh ra: {hits if not ok else 'không'} ({', '.join(f'{f} {len(s)} ký tự' for f, s in srcs.items())})")
 
 # ================================================================== v2.3.4 — ca âm SINH TỰ ĐỘNG cho mọi guard sinh từ DDL (lane M0: mẫu mutation 7/20)
-GEN_KINDS = ('_no_delete', '_no_update', '_ident', '_no_replace_i', '_no_replace_u')
+GEN_KINDS = ('_no_delete', '_no_update', '_ident', '_no_replace_i', '_no_replace_u',
+             '_notnull_i', '_notnull_u', '_rowid_lock', '_writer_d',             # v2.3.5: + chống NULL-REPLACE, khoá rowid, cổng DELETE (mặc định + viết tay),
+             '_ws_actor_i', '_ws_actor_u')                                       # guard người ghi cho bảng không có created_by
 def _gen_kind(n):
     return next((k for k in GEN_KINDS if n.endswith(k)), None)
-def _gen_msg(n, t):
+def _gen_msg(n, t, sql=''):
     k = _gen_kind(n)
-    return {'_no_delete': f'append-only: {t}', '_no_update': f'append-only/write-once: {t}', '_ident': f'immutable identity: {t}'}.get(
+    if k == '_writer_d':                       # thông điệp riêng từng bảng (mặc định MSG_DEL / viết tay) — đọc từ chính trigger của generator
+        return re.search(r"RAISE\(ABORT, '([^']*)'\)", sql).group(1)
+    return {'_no_delete': f'append-only: {t}', '_no_update': f'append-only/write-once: {t}', '_ident': f'immutable identity: {t}',
+            '_notnull_i': S.MSG_NOTNULL.format(t=t), '_notnull_u': S.MSG_NOTNULL.format(t=t), '_rowid_lock': S.MSG_ROWID.format(t=t),
+            '_ws_actor_i': S.MSG_TENANT.format(t=t), '_ws_actor_u': S.MSG_TENANT.format(t=t)}.get(
         k, S.MSG_NO_REPLACE.format(t=t))
 
 def _gen_fixture(D, X):
@@ -7284,8 +7326,12 @@ def _gen_fixture(D, X):
         D.ins('auth_sessions', user_id=ryan, token_hash=f'th-gen-{i}', expires_at='2026-12-31T00:00:00.000Z')
         D.ins('backups', workspace_id=W, kind='manual', status='ok', target_uri=f'file:///backup-{i}', started_at=now(), created_by=sysW)
         D.ins('id_aliases', workspace_id=W, entity_type='roles', entity_id=X['mai'], old_display_id=f'RL-09{i}0', source_code='IMP', new_display_id='RL-0001')
-        db.execute("INSERT INTO schema_migrations(version, name, kind, checksum, dialect, compat_min_app_version, app_version) VALUES(?,?,?,?,?,?,?)",
-                   (9000 + i, f'gen_{i}', 'standard', 'c', 'sqlite', '0.0.0', '1.0.0'))
+        D.ctx.maint = 1                         # v2.3.5: runner ghi schema_migrations trong bảo trì (schema_migrations_maint_*)
+        try:
+            db.execute("INSERT INTO schema_migrations(version, name, kind, checksum, dialect, compat_min_app_version, app_version) VALUES(?,?,?,?,?,?,?)",
+                       (9000 + i, f'gen_{i}', 'standard', 'c', 'sqlite', '0.0.0', '1.0.0'))
+        finally:
+            D.ctx.maint = 0
         D.ins('update_runs', workspace_id=W, from_version='1.0.0', to_version='1.1.0', trigger='manual', initiated_by=own, status='succeeded',
               started_at=now(), created_by=sysW)
     sv = D.one("SELECT id FROM skill_versions WHERE workspace_id=? LIMIT 1", W)
@@ -7312,6 +7358,8 @@ def _gen_fixture(D, X):
     D.db._with_actor(rw['created_by'], lambda: D.raw.execute(f"INSERT INTO role_wounds({', '.join(cols)}) VALUES({', '.join('?' * len(cols))})",
                                                              [rw[c] for c in cols]))
     D.ctx.maint = 0
+    # v2.3.5: hàng allowlist KHÔNG phải owner (hàng owner bị telegram_allowlist_owner_d chặn xoá trước) — cổng telegram_allowlist_writer_d có hàng thử
+    D.ins('telegram_allowlist', workspace_id=W, bot_id=X['tg'], tg_user_id=4243, display_name='Gen · không phải owner', added_via='manual')
 
 def _gen_second_row(D, t):
     """Bảng chỉ có 1 hàng ⇒ chép thành hàng thứ hai (id mới, display_seq kế tiếp, mọi khoá unique khác được đổi: chữ thêm '-2', số + 100000, FK trong khoá
@@ -7380,10 +7428,10 @@ def t_v234_generated_guards():
     D, X = seed()
     _gen_fixture(D, X)
     db = D.raw
-    trig = [(m.group(1), m.group(2)) for s in S.build() for m in [re.match(r"CREATE TRIGGER (\w+) BEFORE (?:INSERT|UPDATE|DELETE)\b.*? ON (\w+)\b", s)]
+    trig = [(m.group(1), m.group(2), s) for s in S.build() for m in [re.match(r"CREATE TRIGGER (\w+) BEFORE (?:INSERT|UPDATE|DELETE)\b.*? ON (\w+)\b", s)]
             if m and _gen_kind(m.group(1))]
     in_db = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
-    tables = sorted({t for _, t in trig})
+    tables = sorted({x[1] for x in trig})
     added = [t for t in tables if db.execute(f"SELECT count(*) FROM {t}").fetchone()[0] == 1 and _gen_second_row(D, t)]
     OLD_TS = "'1999-01-01T00:00:00.000Z'"
     def actors_of(t, cols, rid):
@@ -7395,17 +7443,37 @@ def t_v234_generated_guards():
             cand += [D.db._sys_actor(ws), D.owner_actor(ws)]
         cand.append(X['A'][(X['W'], 'owner')])
         return [a for i, a in enumerate(cand) if a is not None and a not in cand[:i]]
+    def intruders(t, cols, rid):
+        """v2.3.5: người KHÔNG có quyền xoá cứng — Role / tác tử (system_key khác 'system') của chính workspace, actor system của tenant khác."""
+        ws = db.execute(f"SELECT workspace_id FROM {t} WHERE rowid=?", (rid,)).fetchone()[0] if 'workspace_id' in cols else X['W']
+        cand = [D.one("SELECT id FROM actors WHERE workspace_id=? AND kind='role' ORDER BY rowid LIMIT 1", ws),
+                D.one("SELECT id FROM actors WHERE workspace_id=? AND system_key='trainer'", ws),
+                D.db._sys_actor(X['W2'] if ws != X['W2'] else X['W']), None]
+        return [a for i, a in enumerate(cand) if a not in cand[:i]]
     found, miss = {}, []
-    for n, t in trig:
-        k, msg = _gen_kind(n), _gen_msg(n, t)
+    for n, t, tsql in trig:
+        k, msg = _gen_kind(n), _gen_msg(n, t, tsql)
         cols = [r[1] for r in db.execute(f"PRAGMA table_info({t})")]
+        nn = [r[1] for r in db.execute(f"PRAGMA table_info({t})") if r[3] and r[4] is not None]
         pk = [r[1] for r in sorted(db.execute(f"PRAGMA table_info({t})"), key=lambda r: r[5]) if r[5]]
         rows = [r[0] for r in db.execute(f"SELECT rowid FROM {t} ORDER BY rowid LIMIT 6")]
         stamp = f", updated_by = app_actor(), updated_at = {TS_FRESH_SQL}" if 'updated_by' in cols else ""
         cands = []
+        if k == '_notnull_i' and nn:                                            # cột NOT NULL có DEFAULT nhận NULL (lối OR REPLACE thay bằng DEFAULT)
+            cands += [(f"INSERT OR REPLACE INTO {t}({nn[0]}) VALUES(NULL)", (), a, 0) for a in actors_of(t, cols, rows[0])]
         for i, rid in enumerate(rows):
             acts = actors_of(t, cols, rid)
-            if k == '_no_delete':
+            if k == '_notnull_u' and nn:
+                cands += [(f"UPDATE OR REPLACE {t} SET {nn[0]} = NULL{stamp} WHERE rowid=?", (rid,), a, 0) for a in acts]
+            elif k == '_rowid_lock':                                            # bí danh không có trong mọi danh sách OF
+                cands += [(f"UPDATE {t} SET _rowid_ = _rowid_ + 1000000{stamp} WHERE rowid=?", (rid,), a, 0) for a in acts]
+            elif k == '_writer_d':
+                cands += [(f"DELETE FROM {t} WHERE rowid=?", (rid,), a, 0) for a in intruders(t, cols, rid)]
+            elif k == '_ws_actor_i':                                            # chép hàng đang có — không actor / actor workspace khác
+                cands += [(f"INSERT INTO {t} SELECT * FROM {t} WHERE rowid=?", (rid,), a, 0) for a in intruders(t, cols, rid)[2:]]
+            elif k == '_ws_actor_u':
+                cands += [(f"UPDATE {t} SET workspace_id = workspace_id WHERE rowid=?", (rid,), a, 0) for a in intruders(t, cols, rid)[2:]]
+            elif k == '_no_delete':
                 cands += [(f"DELETE FROM {t} WHERE rowid=?", (rid,), a, 0) for a in acts]
             elif k in ('_no_update', '_ident'):
                 if 'created_at' in cols:
@@ -7420,6 +7488,10 @@ def t_v234_generated_guards():
                     if rid2 != rid:
                         sets = ", ".join(f"{c} = (SELECT {c} FROM {t} WHERE rowid = {rid2})" for c in pk)
                         cands += [(f"UPDATE OR REPLACE {t} SET {sets} WHERE rowid=?", (rid,), a, m) for m in (1, 0) for a in acts]
+                        ofc = [c.strip() for c in re.match(r"CREATE TRIGGER \w+ BEFORE UPDATE OF (.*?) ON ", tsql, re.S).group(1).split(',')]
+                        if set(ofc) != set(pk):                 # v2.3.5: PK INTEGER (bí danh rowid) thuộc {t}_rowid_lock ⇒ trùng khoá unique KHÁC
+                            sets = ", ".join(f"{c} = (SELECT {c} FROM {t} WHERE rowid = {rid2})" for c in ofc)
+                            cands += [(f"UPDATE OR REPLACE {t} SET {sets} WHERE rowid=?", (rid,), a, m) for m in (1, 0) for a in acts]
         if n == 'ledger_entries_no_replace_i':
             W_, WT_, WM_ = X['W'], X['WT'], X['WM']
             bal = dict(db.execute("SELECT id, balance_minor FROM wallets WHERE id IN (?, ?)", (WT_, WM_)).fetchall())
@@ -7441,12 +7513,12 @@ def t_v234_generated_guards():
         else:
             miss.append(n)
     by_kind = {kk: sum(1 for n in found if n.endswith(kk)) for kk in GEN_KINDS}
-    tot_kind = {kk: sum(1 for n, _ in trig if n.endswith(kk)) for kk in GEN_KINDS}
+    tot_kind = {kk: sum(1 for n, _t, _s in trig if n.endswith(kk)) for kk in GEN_KINDS}
     ok = not miss and len(found) == len(trig)
     report("GEN-guards", ok, f"{len(found)}/{len(trig)} guard sinh từ DDL có ca âm tự dựng, bị chặn bằng đúng thông điệp của chính guard — "
            + ", ".join(f"{kk.strip('_')} {by_kind[kk]}/{tot_kind[kk]}" for kk in GEN_KINDS)
            + f"; {len(tables)} bảng (dựng thêm hàng: 7 bảng trống ×2, chép hàng thứ hai ở {len(added)} bảng một hàng)"
-           + f"; {sum(1 for n, _ in trig if n in in_db)}/{len(trig)} có trong DB"
+           + f"; {sum(1 for n, _t, _s in trig if n in in_db)}/{len(trig)} có trong DB"
            + (f"; THIẾU ca: {miss}" if miss else ""))
 
 def t_v231_relogin():
@@ -7501,6 +7573,562 @@ def t_v231_relogin():
            f"({'được' if adv_ok else 'BỊ CHẶN'}) ⇒ {l10}")
     _show(c)
 
+# ================================================================== v2.3.5 — review bảo mật tay 2bbd12b (pA…pI) + auto-review (users / SYS_SYS / DELETE / rowid /
+# workspaces INSERT / membership chéo workspace) — mọi bảng × I/U/D/rowid có cổng hoặc miễn có lý do (WRITER-all)
+def _m(msg):
+    """Mẫu khớp thông điệp RAISE của generator (đầu chuỗi, thoát ký tự đặc biệt)."""
+    return re.escape(msg[:60])
+
+def _mk_user(D, key, n):
+    """User mới tạo, CHƯA thuộc workspace nào (repository giả lập: actor system của workspace hệ thống — dịch vụ tài khoản)."""
+    u = uid('user:' + key)
+    D.db.execute("""INSERT INTO users(id,display_id,display_seq,username,display_name,password_hash,must_change_password,password_changed_at)
+                    VALUES(?,?,?,?,?,?,0,?)""", (u, f'US-{n:04d}', n, key, key.title(), 'argon2id$x', now()))
+    return u
+
+def _mk_member(D, ws, key, level, n):
+    """Người dùng mới + actor user + thành viên của ws (dựng bằng actor system của ws — như app khi owner mời người MỚI)."""
+    u = _mk_user(D, key, n)
+    a = uid(f'actor:{ws}:{key}')
+    D.db.execute("INSERT INTO actors(id,workspace_id,kind,user_id,label) VALUES(?,?,?,?,?)", (a, ws, 'user', u, key.title()))
+    D.db.execute("INSERT INTO workspace_members(workspace_id,user_id,access_level) VALUES(?,?,?)", (ws, u, level))
+    return u, a
+
+def _in_boot(D, ws, fn):
+    """Chạy fn như trong conn.bootstrap của workspace ws (app_bootstrap() = ws)."""
+    def run():
+        prev = D.ctx.boot
+        D.ctx.boot = ws
+        try:
+            return fn()
+        finally:
+            D.ctx.boot = prev
+    return run
+
+def _in_maint(D, fn):
+    def run():
+        D.ctx.maint = 1
+        try:
+            return fn()
+        finally:
+            D.ctx.maint = 0
+    return run
+
+def t_v235_root_authz():
+    """v2.3.5 (review tay HIGH pA + auto-review HIGH ×2 + review workspaces INSERT / membership chéo): bảng gốc phân quyền có cổng người ghi.
+    workspace_members: admin tự nâng / hạ / gỡ owner, viewer / Role / actor system tenant khác thêm người, đổi user_id, gỡ owner cuối, xoá cứng; owner / admin /
+    actor system tenant thêm hoặc kích hoạt lại user đang active ở tenant khác ⇒ chặn. actors: admin tạo actor system, viewer / Role tạo actor, tự đăng ký lần
+    hai / ngoài bootstrap / trong bootstrap workspace khác, đổi cột định danh, xoá cứng của admin / Role / tenant khác ⇒ chặn. users: viewer / admin / Role sửa
+    owner; owner A đặt mật khẩu user cũng thuộc B (và ngược lại), owner đặt lại mật khẩu thành viên trực tiếp; actor system tenant A / B, tác tử workspace hệ
+    thống sửa users; tự sửa cột khoá đăng nhập / vô hiệu / định danh, tài khoản bị vô hiệu tự sửa; Role / viewer / actor system tenant tạo user; xoá user của
+    owner / Role / tenant ⇒ chặn. workspaces: tạo bởi actor tenant khác / owner / không actor / bootstrap workspace khác / tác tử; xoá cứng ngoài bảo trì;
+    viewer / Role sửa ⇒ chặn. auth_sessions: tạo ngoài dịch vụ đăng nhập; tự gia hạn / bỏ thu hồi; thu hồi / xoá phiên người khác; actor system tenant ⇒ chặn.
+    schema_migrations: I / U / D ngoài bảo trì ⇒ chặn. Thuận tương ứng (owner / admin / system / SYS_SYS / chính người đó / bootstrap / bảo trì)."""
+    D, X = seed()
+    db, W, W2, SYS_, A = D.db, X['W'], X['W2'], X['SYS'], X['A']
+    own, own2, sysW, sysW2, ssys = A[(W, 'owner')], A[(W2, 'owner')], A[(W, 'system')], A[(W2, 'system')], A[(SYS_, 'system')]
+    mai_a, strn, ryan = A[(W, 'Mai')], A[(SYS_, 'trainer')], X['ryan']
+    au, adm = _mk_member(D, W, 'ra-adm', 'admin', 31)
+    vu, vw = _mk_member(D, W, 'ra-view', 'viewer', 32)
+    nu, _na = _mk_member(D, W2, 'ra-new', 'viewer', 33)                      # user của tenant B (active ở W2)
+    fu = _mk_user(D, 'ra-fresh', 34)                                         # user mới, chưa thuộc workspace nào
+    c, case = _cases(db)
+    pos = []
+    upd_m = lambda who, sql, user, *a: _raw(D, who, f"UPDATE workspace_members SET {sql} WHERE workspace_id=? AND user_id=?", (*a, W, user))
+    ins_m = lambda who, user, lvl, ws=W: _raw(D, who, "INSERT INTO workspace_members(workspace_id,user_id,access_level) VALUES(?,?,?)", (ws, user, lvl))
+    # ---- workspace_members: cổng người ghi
+    case("admin tự nâng mình lên owner", upd_m(adm, "access_level='owner'", au), _m(S.MSG_WM))
+    case("admin thêm thành viên mức owner (user mới)", ins_m(adm, fu, 'owner'), _m(S.MSG_WM))
+    case("viewer thêm thành viên (user mới)", ins_m(vw, fu, 'viewer'), _m(S.MSG_WM))
+    case("Role Mai thêm thành viên (user mới)", ins_m(mai_a, fu, 'viewer'), _m(S.MSG_WM))
+    case("actor system tenant B thêm thành viên vào A", ins_m(sysW2, fu, 'viewer'), _m(S.MSG_WM))
+    case("owner đổi user_id của hàng thành viên (ngoài bảo trì)", upd_m(own, "user_id=?", vu, fu), _m(S.MSG_WM))
+    case("owner duy nhất tự gỡ mình", upd_m(own, "removed_at=?", ryan, now()), _m(S.MSG_WM_LAST))
+    case("owner duy nhất tự hạ xuống admin", upd_m(own, "access_level='admin'", ryan), _m(S.MSG_WM_LAST))
+    ou = _mk_user(D, 'ra-own2', 38)
+    _pos(pos, ins_m(sysW, ou, 'owner'))                                      # owner thứ hai (user mới) ⇒ owner_last không chặn ⇒ thử đúng cổng người ghi
+    case("admin hạ owner thật xuống viewer", upd_m(adm, "access_level='viewer'", ryan), _m(S.MSG_WM))
+    case("admin gỡ owner thật (removed_at)", upd_m(adm, "removed_at=?", ryan, now()), _m(S.MSG_WM))
+    case("xoá cứng thành viên ngoài bảo trì", _raw(D, own, "DELETE FROM workspace_members WHERE workspace_id=? AND user_id=?", (W, vu)), _m(S.MSG_WM_DEL))
+    pa = _try(upd_m(adm, "access_level='owner'", au))                                   # pA bước 2
+    chain = _try(lambda: D.ins('secrets', workspace_id=W, kind='anchor_remote_token', label='evil', ciphertext=b'x', nonce=b'n', wrapped_dek=b'd',
+                               dek_nonce=b'n', kek_id='kek1', fingerprint='fp-evil', allowed_host='evil.example', created_by=adm))   # pA bước 3
+    # ---- workspace_members: membership chéo workspace (user đang active ở tenant khác ⇒ chỉ SYS_SYS)
+    case("owner A thêm user đang active ở tenant B", ins_m(own, nu, 'viewer'), _m(S.MSG_WM_X))
+    case("admin A thêm user đang active ở tenant B", ins_m(adm, nu, 'viewer'), _m(S.MSG_WM_X))
+    case("actor system tenant A thêm user đang active ở tenant B (mức owner)", ins_m(sysW, nu, 'owner'), _m(S.MSG_WM_X))
+    _pos(pos, ins_m(own, fu, 'viewer'))                                      # owner thêm user mới tạo
+    _pos(pos, ins_m(ssys, nu, 'viewer'))                                     # luồng mời: actor system workspace hệ thống thêm user của B vào A
+    _pos(pos, upd_m(own, "removed_at=?", vu, now()))                         # owner gỡ viewer khỏi A …
+    _pos(pos, ins_m(ssys, vu, 'viewer', W2))                                 # … viewer được mời sang B
+    case("owner A kích hoạt lại thành viên đang active ở tenant B", upd_m(own, "removed_at=NULL", vu), _m(S.MSG_WM_X))
+    case("actor system tenant A kích hoạt lại thành viên đang active ở B", upd_m(sysW, "removed_at=NULL", vu), _m(S.MSG_WM_X))
+    _pos(pos, upd_m(ssys, "removed_at=NULL", vu))                            # kích hoạt lại qua luồng mời
+    gu = _mk_user(D, 'ra-gone', 35)                                          # user từng ở B nhưng đã bị gỡ (không active) ⇒ owner A thêm được
+    _pos(pos, ins_m(ssys, gu, 'viewer', W2))
+    _pos(pos, _raw(D, own2, "UPDATE workspace_members SET removed_at=? WHERE workspace_id=? AND user_id=?", (now(), W2, gu)))
+    _pos(pos, ins_m(own, gu, 'viewer'))
+    # ---- actors
+    act = lambda who, aid, ws, kind, **kw: _raw(D, who, f"INSERT INTO actors(id,workspace_id,kind,label{''.join(',' + k for k in kw)}) VALUES(?,?,?,?{',?' * len(kw)})",
+                                                (aid, ws, kind, 'x', *kw.values()))
+    case("admin tạo actor system mới", act(adm, uid('ra:sys1'), W, 'system', system_key='scheduler'), _m(S.MSG_ACT))
+    case("viewer tạo actor user", act(vw, uid('ra:u1'), W, 'user', user_id=fu), _m(S.MSG_ACT))
+    case("Role Mai tạo actor user", act(mai_a, uid('ra:u2'), W, 'user', user_id=fu), _m(S.MSG_ACT))
+    sid2 = uid('ra:sys2')
+    case("actor system tự đăng ký lần hai (workspace đã có actor system)", _in_boot(D, W, act(sid2, sid2, W, 'system', system_key='system')), _m(S.MSG_ACT))
+    case("admin đổi kind actor của viewer (ngoài bảo trì)", _raw(D, adm, "UPDATE actors SET kind='system', user_id=NULL, system_key='scheduler' WHERE id=?",
+                                                                 (vw,)), _m(S.MSG_ACT_LOCK))
+    case("admin đổi user_id của actor viewer sang owner", _raw(D, adm, "UPDATE actors SET user_id=? WHERE id=?", (ryan, vw)), _m(S.MSG_ACT_LOCK))
+    case("Role Mai sửa nhãn actor của owner", _raw(D, mai_a, "UPDATE actors SET label='giả' WHERE id=?", (own,)), _m(S.MSG_ACT))
+    xa1, xa2, xa3 = (_val(act(sysW, uid(f'ra:x{i}'), W, 'user', user_id=fu)) and uid(f'ra:x{i}') for i in (1, 2, 3))   # actor chưa ai tham chiếu
+    for nm, who in (('admin', adm), ('Role Mai', mai_a), ('actor system tenant B', sysW2), ('tác tử Trainer của A', A[(W, 'trainer')])):
+        case(f"{nm} xoá cứng actor", _raw(D, who, "DELETE FROM actors WHERE id=?", (xa1,)), _m(S.MSG_ACT_DEL))
+    _pos(pos, _raw(D, own, "DELETE FROM actors WHERE id=?", (xa1,)))         # owner xoá actor
+    _pos(pos, _raw(D, sysW, "DELETE FROM actors WHERE id=?", (xa2,)))        # actor system xoá actor
+    _pos(pos, _raw(D, adm, "UPDATE actors SET label='Fresh' WHERE id=?", (xa3,)))   # admin sửa nhãn
+    # ---- workspaces: tạo (bootstrap / bảo trì / SYS_SYS), xoá (bảo trì), sửa (owner / admin / system của chính nó)
+    wsins = lambda who, key: _raw(D, who, "INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (uid('ws:' + key), 'tenant', key, key, key.upper()[-4:]))
+    case("actor system tenant B tạo workspace", wsins(sysW2, 'rw01'), _m(S.MSG_WS_NEW))
+    case("owner tenant A tạo workspace", wsins(own, 'rw02'), _m(S.MSG_WS_NEW))
+    case("không actor, ngoài bootstrap", wsins(None, 'rw03'), _m(S.MSG_WS_NEW))
+    case("trong bootstrap của workspace KHÁC", _in_boot(D, W2, wsins(None, 'rw04')), _m(S.MSG_WS_NEW))
+    case("tác tử Trainer của workspace hệ thống tạo workspace", wsins(strn, 'rw05'), _m(S.MSG_WS_NEW))
+    wn, wb, wm = uid('ws:rw06'), uid('ws:rw07'), uid('ws:rw08')
+    _pos(pos, wsins(ssys, 'rw06'))                                           # actor system workspace hệ thống (Onboarding)
+    _pos(pos, _in_boot(D, wb, wsins(None, 'rw07')))                          # conn.bootstrap của chính workspace đó
+    _pos(pos, _in_maint(D, wsins(None, 'rw08')))                             # bảo trì (khôi phục)
+    sid3 = uid('ra:sys3')
+    case("actor system đầu tiên tự đăng ký NGOÀI bootstrap", act(sid3, sid3, wn, 'system', system_key='system'), _m(S.MSG_ACT))
+    case("actor system đầu tiên tự đăng ký trong bootstrap workspace KHÁC", _in_boot(D, W2, act(sid3, sid3, wn, 'system', system_key='system')), _m(S.MSG_ACT))
+    _pos(pos, _in_boot(D, wn, act(sid3, sid3, wn, 'system', system_key='system')))
+    case("owner xoá cứng workspace", _raw(D, own, "DELETE FROM workspaces WHERE id=?", (wm,)), _m(S.MSG_WS_DEL))
+    case("actor system workspace hệ thống xoá cứng workspace (ngoài bảo trì)", _raw(D, ssys, "DELETE FROM workspaces WHERE id=?", (wm,)), _m(S.MSG_WS_DEL))
+    _pos(pos, _in_maint(D, _raw(D, None, "DELETE FROM workspaces WHERE id=?", (wm,))))   # purge
+    case("viewer đổi tên workspace", _raw(D, vw, "UPDATE workspaces SET name='giả' WHERE id=?", (W,)), _m(S.MSG_WS))
+    case("Role Mai đổi chủ workspace", _raw(D, mai_a, "UPDATE workspaces SET owner_user_id=? WHERE id=?", (au, W)), _m(S.MSG_WS))
+    _pos(pos, _raw(D, own, "UPDATE workspaces SET name='Afi Labs (mới)' WHERE id=?", (W,)))
+    # ---- users
+    usr = lambda who, sql, u: _raw(D, who, f"UPDATE users SET {sql} WHERE id=?", (u,))
+    case("viewer đổi password_hash của owner", usr(vw, "password_hash='argon2id$evil'", ryan), _m(S.MSG_USR))
+    case("admin đổi password_hash của owner", usr(adm, "password_hash='argon2id$evil'", ryan), _m(S.MSG_USR))
+    case("Role Mai đổi tên hiển thị của owner", usr(mai_a, "display_name='giả'", ryan), _m(S.MSG_USR))
+    case("owner A đặt password_hash của user cũng thuộc tenant B", usr(own, "password_hash='argon2id$evil'", nu), _m(S.MSG_USR))
+    case("owner B đặt password_hash của user cũng thuộc tenant A", usr(own2, "password_hash='argon2id$evil'", nu), _m(S.MSG_USR))
+    case("owner đặt lại mật khẩu thành viên trực tiếp (phải qua dịch vụ app = SYS_SYS)", usr(own, "password_hash='argon2id$reset'", au), _m(S.MSG_USR))
+    case("owner đổi email của thành viên", usr(own, "email='evil@example.com'", au), _m(S.MSG_USR))
+    case("actor system tenant A sửa users", usr(sysW, "failed_login_count=0, locked_until=NULL", ryan), _m(S.MSG_USR))
+    case("actor system tenant B đổi password_hash user", usr(sysW2, "password_hash='argon2id$evil'", ryan), _m(S.MSG_USR))
+    case("tác tử Trainer của workspace hệ thống sửa users", usr(strn, "password_hash='argon2id$evil'", ryan), _m(S.MSG_USR))
+    _pos(pos, usr(ssys, "locked_until='2099-01-01T00:00:00.000Z', failed_login_count=5, last_login_at='2026-01-01T00:00:00.000Z'", au))   # dịch vụ đăng nhập
+    for col, v in (('failed_login_count', '0'), ('locked_until', 'NULL'), ('disabled_at', "'2026-01-01T00:00:00.000Z'"),
+                   ('last_login_at', "'2099-01-01T00:00:00.000Z'"), ('display_seq', '999'), ('display_id', "'US-0999'"),
+                   ('created_at', "'2000-01-01T00:00:00.000Z'"), ('id', f"'{uid('ra:newid')}'")):
+        case(f"tự sửa {col} của chính mình", usr(adm, f"{col}={v}", au), _m(S.MSG_USR))
+    du, da = _mk_member(D, W, 'ra-dis', 'viewer', 36)
+    _pos(pos, usr(ssys, "disabled_at='2026-01-01T00:00:00.000Z'", du))      # dịch vụ app vô hiệu tài khoản
+    case("tài khoản đã vô hiệu tự sửa hồ sơ", usr(da, "display_name='vẫn sửa'", du), _m(S.MSG_USR))
+    _pos(pos, usr(adm, "display_name='Admin mới', email='adm@example.com', theme='dark'", au))           # tự sửa hồ sơ
+    _pos(pos, usr(adm, "password_hash='argon2id$own', password_changed_at='2026-10-17T00:00:00.000Z', must_change_password=0", au))   # tự đổi mật khẩu
+    _pos(pos, usr(ssys, "password_hash='argon2id$reset', must_change_password=1", vu))   # owner đặt lại = dịch vụ app chạy bằng SYS_SYS
+    newu = lambda who, key, n: _raw(D, who, "INSERT INTO users(id,display_id,display_seq,username,display_name,password_hash) VALUES(?,?,?,?,?,?)",
+                                    (uid('user:' + key), f'US-{n:04d}', n, key, key, 'argon2id$y'))
+    case("Role Mai tạo user", newu(mai_a, 'ra-r1', 41), _m(S.MSG_USR))
+    case("viewer tạo user", newu(vw, 'ra-v1', 42), _m(S.MSG_USR))
+    case("actor system tenant A tạo user", newu(sysW, 'ra-s1', 43), _m(S.MSG_USR))
+    _pos(pos, newu(adm, 'ra-a1', 44))                                        # admin tạo user (mời người mới)
+    _pos(pos, newu(ssys, 'ra-s2', 45))
+    dl = uid('user:ra-s2')
+    for nm, who in (('owner', own), ('Role Mai', mai_a), ('actor system tenant A', sysW)):
+        case(f"{nm} xoá cứng user", _raw(D, who, "DELETE FROM users WHERE id=?", (dl,)), _m(S.MSG_USR))
+    _pos(pos, _raw(D, ssys, "DELETE FROM users WHERE id=?", (dl,)))
+    # ---- auth_sessions (dịch vụ đăng nhập = SYS_SYS; chính người đó chỉ thu hồi / xoá phiên của mình)
+    asi = lambda who, key, u: _raw(D, who, "INSERT INTO auth_sessions(id,user_id,token_hash,expires_at) VALUES(?,?,?,?)",
+                                   (uid('as:' + key), u, 'th-' + key, '2026-12-31T00:00:00.000Z'))
+    s_au, s_ry, s_x = uid('as:ra-au'), uid('as:ra-ry'), uid('as:ra-x')
+    _pos(pos, asi(ssys, 'ra-au', au)); _pos(pos, asi(ssys, 'ra-ry', ryan)); _pos(pos, asi(ssys, 'ra-x', au))
+    for nm, who, u in (('Role Mai', mai_a, ryan), ('owner', own, au), ('actor system tenant A', sysW, ryan), ('chính người đó', adm, au)):
+        case(f"{nm} tạo phiên đăng nhập", asi(who, 'ra-e' + nm[:3], u), _m(S.MSG_AS))
+    case("tự gia hạn phiên của mình", _raw(D, adm, "UPDATE auth_sessions SET expires_at='2099-01-01T00:00:00.000Z' WHERE id=?", (s_au,)), _m(S.MSG_AS))
+    case("tự thu hồi KÈM gia hạn", _raw(D, adm, "UPDATE auth_sessions SET revoked_at=?, expires_at='2099-01-01T00:00:00.000Z' WHERE id=?", (now(), s_au)),
+         _m(S.MSG_AS))
+    case("admin thu hồi phiên của owner", _raw(D, adm, "UPDATE auth_sessions SET revoked_at=? WHERE id=?", (now(), s_ry)), _m(S.MSG_AS))
+    case("actor system tenant A sửa phiên", _raw(D, sysW, "UPDATE auth_sessions SET last_seen_at=? WHERE id=?", (now(), s_ry)), _m(S.MSG_AS))
+    _pos(pos, _raw(D, ssys, "UPDATE auth_sessions SET last_seen_at=?, ip='10.0.0.1' WHERE id=?", (now(), s_ry)))
+    _pos(pos, _raw(D, adm, "UPDATE auth_sessions SET revoked_at=? WHERE id=?", (now(), s_au)))   # tự thu hồi (đăng xuất)
+    case("tự bỏ thu hồi phiên đã thu hồi", _raw(D, adm, "UPDATE auth_sessions SET revoked_at=NULL WHERE id=?", (s_au,)), _m(S.MSG_AS))
+    case("admin xoá phiên của owner", _raw(D, adm, "DELETE FROM auth_sessions WHERE id=?", (s_ry,)), _m(S.MSG_AS))
+    case("actor system tenant A xoá phiên", _raw(D, sysW, "DELETE FROM auth_sessions WHERE id=?", (s_ry,)), _m(S.MSG_AS))
+    _pos(pos, _raw(D, adm, "DELETE FROM auth_sessions WHERE id=?", (s_au,)))  # tự xoá phiên của mình
+    _pos(pos, _raw(D, ssys, "DELETE FROM auth_sessions WHERE id=?", (s_x,)))
+    # ---- schema_migrations (runner — bảo trì)
+    smi = lambda v: (lambda: D.raw.execute("INSERT INTO schema_migrations(version,name,kind,checksum,dialect,compat_min_app_version,app_version) "
+                                           "VALUES(?,?,?,?,?,?,?)", (v, f'ra_{v}', 'standard', 'c', 'sqlite', '0.0.0', '1.0.0')))
+    case("ghi lịch sử migration ngoài bảo trì", lambda: D.db._with_actor(ssys, smi(9100)), _m(S.MSG_MIG))
+    _pos(pos, _in_maint(D, smi(9101)))
+    case("sửa checksum migration ngoài bảo trì", _raw(D, ssys, "UPDATE schema_migrations SET checksum='x' WHERE version=9101"), _m(S.MSG_MIG))
+    case("xoá lịch sử migration ngoài bảo trì", _raw(D, ssys, "DELETE FROM schema_migrations WHERE version=9101"), _m(S.MSG_MIG))
+    _pos(pos, _in_maint(D, _raw(D, None, "UPDATE schema_migrations SET checksum='y' WHERE version=9101")))
+    _pos(pos, _in_maint(D, _raw(D, None, "DELETE FROM schema_migrations WHERE version=9101")))
+    # ---- thuận còn lại (cổng người ghi workspace_members)
+    _pos(pos, upd_m(own, "access_level='owner'", au))                       # owner nâng admin lên owner
+    _pos(pos, upd_m(own, "access_level='admin'", au))                       # … rồi hạ lại (vẫn còn owner thật)
+    _pos(pos, upd_m(adm, "access_level='operator'", fu))                    # admin đổi mức thành viên thường
+    _pos(pos, upd_m(adm, "removed_at=?", fu, now()))                        # admin gỡ thành viên thường
+    hu = _mk_user(D, 'ra-sysown', 37)
+    _pos(pos, ins_m(sysW, hu, 'owner'))                                     # actor system tenant thêm owner là user mới (dựng / khôi phục)
+    _pos(pos, upd_m(own, "removed_at=?", ryan, now()))                      # đã có owner thứ hai ⇒ owner cũ tự gỡ được
+    _pos(pos, upd_m(ssys, "removed_at=NULL", ryan))                         # Ryan còn active ở W2 ⇒ kích hoạt lại qua SYS_SYS
+    _pos(pos, act(adm, uid('ra:u3'), W, 'user', user_id=hu))                # admin tạo actor user cho người được mời
+    _pos(pos, _in_maint(D, _raw(D, None, "DELETE FROM workspace_members WHERE workspace_id=? AND user_id=?", (W, fu))))   # bảo trì (purge)
+    ok = all(x[1] for x in c) and not pa and not chain and all(pos)
+    report("ROOT-authz", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn (workspace_members ×16 gồm chéo workspace ×5, actors ×13, workspaces ×9, users ×24, "
+           f"auth_sessions ×10, schema_migrations ×3); chuỗi pA: admin tự nâng owner {'BỊ CHẶN' if not pa else 'LỌT'} ⇒ token neo "
+           f"{'bị chặn' if not chain else 'LỌT'}; thuận {sum(pos)}/{len(pos)} (owner thêm user mới, luồng mời SYS_SYS thêm / kích hoạt lại user chéo, user đã "
+           f"rời B vào A, owner / system xoá actor, tạo workspace bằng SYS_SYS / bootstrap / bảo trì, tự đăng ký trong bootstrap, purge workspace, tự sửa hồ "
+           f"sơ / mật khẩu, đặt lại mật khẩu + khoá đăng nhập qua SYS_SYS, admin / SYS_SYS tạo user, SYS_SYS xoá user, phiên: tạo / sửa / xoá bằng SYS_SYS, tự "
+           f"thu hồi / xoá, migration trong bảo trì, owner nâng / hạ owner khác, admin đổi mức / gỡ, owner cũ tự gỡ khi còn owner khác, bảo trì xoá thành viên)")
+    _show(c)
+
+def t_v235_replace_notnull():
+    """v2.3.5 (review MEDIUM pB + LOW pF): OR REPLACE ghi NULL vào cột NOT NULL có DEFAULT ⇒ SQLite thay bằng DEFAULT SAU khi guard BEFORE đọc NULL (owner giả,
+    gỡ owner cuối) ⇒ {t}_notnull_i/_u chặn; REPLACE theo rowid ẩn (bảng không có INTEGER PK) xoá hàng owner allowlist ⇒ {t}_no_replace_i chặn (pragma
+    recursive_triggers bật hay tắt)."""
+    D, X = seed()
+    db, W, tg = D.db, X['W'], X['tg']
+    own = X['A'][(W, 'owner')]
+    adm = _admin_actor(D, W, 'nn-adm', 34)
+    c, case = _cases(db)
+    seq = lambda: D.one("SELECT max(display_seq) FROM telegram_allowlist WHERE workspace_id=?", W) + 1
+    ins = ("INSERT {} INTO telegram_allowlist(id,workspace_id,display_id,display_seq,created_by,bot_id,tg_user_id,display_name,is_owner,added_via,status) "
+           "VALUES(?,?,?,?,app_actor(),?,?,?,1,'manual',{})")
+    s1 = seq()
+    case("pB.2 INSERT OR REPLACE hàng owner, status NULL (DEFAULT 'active' sau guard)", _raw(D, adm, ins.format('OR REPLACE', 'NULL'),
+         (uid('nn:al2'), W, f'AL-{s1:04d}', s1, tg, 666, 'evil')), _m(S.MSG_NOTNULL.format(t='telegram_allowlist')))
+    al0 = D.one("SELECT id FROM telegram_allowlist WHERE bot_id=? AND is_owner=1 AND status='active' AND deleted_at IS NULL", tg)
+    case("pB.3b UPDATE OR REPLACE is_owner = NULL ở owner cuối", _raw(D, adm, f"UPDATE OR REPLACE telegram_allowlist SET is_owner=NULL, updated_by=app_actor(), "
+         f"updated_at={TS_FRESH_SQL} WHERE id=?", (al0,)), _m(S.MSG_NOTNULL.format(t='telegram_allowlist')))
+    case("UPDATE OR REPLACE status = NULL ở owner cuối", _raw(D, own, f"UPDATE OR REPLACE telegram_allowlist SET status=NULL, updated_by=app_actor(), "
+         f"updated_at={TS_FRESH_SQL} WHERE id=?", (al0,)), _m(S.MSG_NOTNULL.format(t='telegram_allowlist')))
+    res = {}
+    for rt in ('ON', 'OFF'):
+        D.raw.execute(f"PRAGMA recursive_triggers={rt}")
+        rid = D.one("SELECT rowid FROM telegram_allowlist WHERE id=?", al0)
+        s2 = seq()
+        res[rt] = expect_fail(D.raw, _raw(D, own, "INSERT OR REPLACE INTO telegram_allowlist(rowid,id,workspace_id,display_id,display_seq,created_by,bot_id,"
+                                              "tg_user_id,display_name,is_owner,added_via) VALUES(?,?,?,?,?,app_actor(),?,?,?,0,'manual')",
+                                              (rid, uid('nn:rowid' + rt), W, f'AL-{s2:04d}', s2, tg, 4242, 'x')),
+                              _m(S.MSG_NO_REPLACE.format(t='telegram_allowlist')))[0]
+    D.raw.execute("PRAGMA recursive_triggers=ON")
+    owners = D.one("SELECT count(*) FROM telegram_allowlist WHERE bot_id=? AND is_owner=1 AND status='active' AND deleted_at IS NULL", tg)
+    ok = all(x[1] for x in c) and all(res.values()) and owners == 1
+    report("REPLACE-notnull", ok, f"{sum(x[1] for x in c)}/{len(c)} lối OR REPLACE + NULL bị chặn bởi telegram_allowlist_notnull_i/_u; REPLACE theo rowid ẩn "
+           f"(recursive_triggers ON / OFF) bị chặn {res}; owner active còn {owners}")
+    _show(c)
+
+def t_v235_route_writers():
+    """v2.3.5 (review MEDIUM pC / pD / pH / pI + auto-review proactive_policies / DELETE): bảng định tuyến / quyền có cổng người ghi I / U / D. containers: viewer /
+    Role / admin đổi image_ref (cột cấu hình chỉ system), owner tạo container mang image, Role xoá container ⇒ chặn; telegram_allowlist: viewer / Role thêm
+    người, tác tử Telegram thêm hàng nhập tay, viewer / tác tử xoá hàng ⇒ chặn; engines (danh mục chung): viewer / owner / actor system của tenant sửa / thêm /
+    xoá ⇒ chặn; tool_grants / egress_rules: Role tự cấp / tự mở; admin / Role xoá cứng (chỉ owner) ⇒ chặn; settings: viewer / Role ghi khoá bất kỳ, admin ghi /
+    xoá retention, retention ngoài khoảng, Role / tenant khác xoá ⇒ chặn; proactive_policies: Role / viewer nới trần, max_per_day 2,5 / 21, Role xoá ⇒ chặn.
+    Thuận: system đổi image, tác tử Telegram thêm hàng capture, system của workspace hệ thống / bảo trì sửa engines, owner mở egress / xoá grant / xoá egress,
+    owner ghi / xoá retention đúng khoảng, admin xoá setting thường, owner xoá hàng allowlist thường, owner / admin chỉnh chính sách."""
+    D, X = seed()
+    db, W, A, CT = D.db, X['W'], X['A'], X['CT']
+    own, sysW, tele, mai_a, ssys = A[(W, 'owner')], A[(W, 'system')], A[(W, 'telegram')], A[(W, 'Mai')], A[(X['SYS'], 'system')]
+    sysW2 = A[(X['W2'], 'system')]
+    adm = _admin_actor(D, W, 'rw-adm', 35)
+    _vu, vw = _mk_member(D, W, 'rw-view', 'viewer', 36)
+    c, case = _cases(db)
+    pos = []
+    img = lambda who: _raw(D, who, f"UPDATE containers SET image_ref='ghcr.io/evil/x:latest', image_digest=NULL, updated_by=app_actor(), updated_at={TS_FRESH_SQL} "
+                                   "WHERE id=?", (CT['sys'],))
+    for nm, who in (('viewer', vw), ('Role Mai', mai_a), ('admin', adm)):
+        case(f"pC {nm} đổi image_ref container Hệ thống", img(who), _m(S.MSG_CT))
+    case("owner tạo container mang sẵn image_ref", lambda: D.ins('containers', workspace_id=W, kind='role', role_id=_role(D, W, 'Rw'), container_name='ga-role-rw',
+                                                                 desired_state='sleeping', observed_state='created', image_ref='ghcr.io/evil/y', created_by=own),
+         _m(S.MSG_CT) + '|' + MSG_READY_T)
+    case("Role Mai xoá cứng container của Lan", _raw(D, mai_a, "DELETE FROM containers WHERE id=?", (CT['Lan'],)), _m(S.MSG_DEL.format(t='containers')))
+    tg = X['tg']
+    al = lambda who, u, via='manual': (lambda: D.ins('telegram_allowlist', workspace_id=W, bot_id=tg, tg_user_id=u, display_name='x', is_owner=0, added_via=via,
+                                                     created_by=who))
+    case("pD viewer thêm người vào allowlist", al(vw, 9101), _m(S.MSG_AL))
+    case("pD Role Mai thêm người vào allowlist", al(mai_a, 9102), _m(S.MSG_AL))
+    case("tác tử Telegram thêm hàng nhập tay (manual)", al(tele, 9103), _m(S.MSG_AL))
+    alx = _pos(pos, al(own, 9105))                                           # hàng thường (owner thêm)
+    for nm, who in (('viewer', vw), ('tác tử Telegram', tele), ('actor system tenant B', sysW2)):
+        case(f"{nm} xoá cứng hàng allowlist", _raw(D, who, "DELETE FROM telegram_allowlist WHERE id=?", (alx,)), _m(S.MSG_AL))
+    eng = lambda who: _raw(D, who, "UPDATE engines SET requires_consent=0, cli_binary='sh' WHERE slug='antigravity'")
+    for nm, who in (('viewer', vw), ('owner', own), ('actor system của tenant', sysW)):
+        case(f"pD {nm} sửa danh mục engines", eng(who), _m(S.MSG_ENG))
+    case("owner thêm engine vào danh mục", _raw(D, own, "INSERT INTO engines(slug,name,vendor,cli_binary,priority_order,tos_risk,tos_notice_key,"
+                                                        "tos_notice_version) VALUES('evil','E','x','sh',9,'ok','k','1')"), _m(S.MSG_ENG))
+    case("actor system của tenant xoá engine", _raw(D, sysW, "DELETE FROM engines WHERE slug='codex'"), _m(S.MSG_ENG))
+    gid = D.one("SELECT id FROM tool_grants WHERE role_id=? LIMIT 1", X['mai'])
+    case("pH Role Mai tự đổi grant sang allow", _raw(D, mai_a, f"UPDATE tool_grants SET mode='allow', updated_by=app_actor(), updated_at={TS_FRESH_SQL} WHERE id=?",
+                                                      (gid,)), _m(S.MSG_GR))
+    case("Role Mai tự tạo grant", lambda: D.ins('tool_grants', workspace_id=W, tool_id=X['tl'], position_id=X['PS'], mode='allow', created_by=mai_a), _m(S.MSG_GR))
+    for nm, who in (('admin', adm), ('Role Mai', mai_a), ('actor system tenant B', sysW2)):
+        case(f"{nm} xoá cứng tool_grant", _raw(D, who, "DELETE FROM tool_grants WHERE id=?", (gid,)), _m(S.MSG_GR_DEL))
+    eg = lambda who: (lambda: D.ins('egress_rules', workspace_id=W, domain_pattern='*', applies_to='role', role_id=X['mai'], created_by=who))
+    case("pH Role Mai tự mở egress *", eg(mai_a), _m(S.MSG_EG))
+    case("viewer mở egress *", eg(vw), _m(S.MSG_EG))
+    egx = _pos(pos, eg(own))
+    for nm, who in (('admin', adm), ('Role Mai', mai_a)):
+        case(f"{nm} xoá cứng egress_rule", _raw(D, who, "DELETE FROM egress_rules WHERE id=?", (egx,)), _m(S.MSG_EG_DEL))
+    st = lambda who, k, v: (lambda: D.ins('settings', workspace_id=W, key=k, value_json=v, created_by=who))
+    case("pI viewer ghi audit.retention_days = 0", st(vw, 'audit.retention_days', '0'), _m(S.MSG_ST) + '|' + _m(S.MSG_ST_RET))
+    case("pI Role ghi purge.grace_days = -1", st(mai_a, 'purge.grace_days', '-1'), _m(S.MSG_ST) + '|' + _m(S.MSG_ST_RET))
+    case("pI Role ghi khoá lạ", st(mai_a, 'audit.retention_days.x', '"x"'), _m(S.MSG_ST))
+    case("admin ghi audit.retention_days (chỉ owner)", st(adm, 'audit.retention_days', '30'), _m(S.MSG_ST_RET))
+    for v in ('0', '36501', '"30"', '30.5'):
+        case(f"owner ghi audit.retention_days = {v}", st(own, 'audit.retention_days', v), _m(S.MSG_ST_RET))
+    case("owner ghi purge.grace_days = 3651", st(own, 'purge.grace_days', '3651'), _m(S.MSG_ST_RET))
+    ret = _val(st(own, 'log.retention_days', '14'))
+    case("owner đổi khoá retention sang khoá khác", _raw(D, own, f"UPDATE settings SET key='log.other', updated_by=app_actor(), updated_at={TS_FRESH_SQL} WHERE id=?",
+                                                         (ret,)), _m(S.MSG_ST_RET))
+    case("admin xoá cứng log.retention_days (chỉ owner)", _raw(D, adm, "DELETE FROM settings WHERE id=?", (ret,)), _m(S.MSG_ST_RET))
+    ui = _val(st(own, 'ui.rw_theme', '"dark"'))
+    case("Role Mai xoá cứng setting", _raw(D, mai_a, "DELETE FROM settings WHERE id=?", (ui,)), _m(S.MSG_ST))
+    case("actor system tenant B xoá setting của A", _raw(D, sysW2, "DELETE FROM settings WHERE id=?", (ui,)), _m(S.MSG_ST))
+    pp = D.one("SELECT id FROM proactive_policies WHERE role_id=?", X['mai'])
+    ppu = lambda who, sql: _raw(D, who, f"UPDATE proactive_policies SET {sql}, updated_by=app_actor(), updated_at={TS_FRESH_SQL} WHERE id=?", (pp,))
+    case("Role Mai tự nâng max_per_day = 20", ppu(mai_a, "max_per_day=20"), _m(S.MSG_PP))
+    case("Role Mai tự bỏ giờ yên tĩnh", ppu(mai_a, "quiet_start_min=0, quiet_end_min=0"), _m(S.MSG_PP))
+    case("viewer đổi chính sách", ppu(vw, "max_per_day=20"), _m(S.MSG_PP))
+    case("owner đặt max_per_day = 2,5", ppu(own, "max_per_day=2.5"), 'CHECK constraint')
+    case("owner đặt max_per_day = 21", ppu(own, "max_per_day=21"), 'CHECK constraint')
+    case("Role Mai xoá cứng chính sách của mình", _raw(D, mai_a, "DELETE FROM proactive_policies WHERE id=?", (pp,)), _m(S.MSG_PP))
+    _pos(pos, img(sysW))
+    _pos(pos, al(tele, 9104, 'capture'))
+    _pos(pos, eng(ssys))
+    _pos(pos, _in_maint(D, _raw(D, None, "UPDATE engines SET tos_notice_version='1' WHERE slug='antigravity'")))
+    _pos(pos, st(own, 'audit.retention_days', '730'))
+    _pos(pos, ppu(own, "max_per_day=10"))
+    _pos(pos, ppu(adm, "max_per_day=8"))
+    _pos(pos, _raw(D, own, "DELETE FROM tool_grants WHERE id=?", (gid,)))
+    _pos(pos, _raw(D, own, "DELETE FROM egress_rules WHERE id=?", (egx,)))
+    _pos(pos, _raw(D, own, "DELETE FROM settings WHERE id=?", (ret,)))
+    _pos(pos, _raw(D, adm, "DELETE FROM settings WHERE id=?", (ui,)))
+    _pos(pos, _raw(D, own, "DELETE FROM telegram_allowlist WHERE id=?", (alx,)))
+    ok = all(x[1] for x in c) and all(pos) and pp is not None and gid is not None
+    report("ROUTE-writers", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn (containers ×5, allowlist ×6, engines ×5, tool_grants ×5, egress ×4, settings ×13, "
+           f"proactive_policies ×6); thuận {sum(pos)}/{len(pos)} (owner thêm / xoá hàng allowlist, owner mở / xoá egress, system đổi image, tác tử Telegram thêm "
+           f"capture, system workspace hệ thống / bảo trì sửa engines, owner retention đúng khoảng + xoá, owner / admin chỉnh chính sách, owner xoá grant, admin "
+           f"xoá setting thường)")
+    _show(c)
+
+def t_v235_rowid_lock():
+    """v2.3.5 (review MEDIUM — rowid phụ thuộc parser): "BEFORE UPDATE OF rowid" không bắt SET _rowid_ / oid / cột INTEGER PRIMARY KEY ⇒ {t}_rowid_lock (không
+    danh sách OF, NEW.rowid IS NOT OLD.rowid). Ngoài bảo trì: rowid / "rowid" / ROWID / _rowid_ / oid (allowlist — bảng PK TEXT), id + oid (search_documents —
+    INTEGER PK), version (schema_migrations — INTEGER PK) ⇒ chặn. Bảo trì: UPDATE OR REPLACE sang rowid của hàng owner allowlist (pragma ON / OFF) ⇒ chặn, owner
+    còn nguyên. Thuận: bảo trì đổi rowid sang giá trị trống; UPDATE không đổi rowid; SET rowid = rowid."""
+    D, X = seed()
+    _gen_fixture(D, X)
+    W, tg = X['W'], X['tg']
+    own, sysW = X['A'][(W, 'owner')], X['A'][(W, 'system')]
+    c, case = _cases(D.raw)
+    msg = lambda t: _m(S.MSG_ROWID.format(t=t))
+    al = D.one("SELECT id FROM telegram_allowlist WHERE bot_id=? AND is_owner=1 AND status='active' AND deleted_at IS NULL", tg)
+    stamp = f", updated_by=app_actor(), updated_at={TS_FRESH_SQL}"
+    for alias in ('rowid', '"rowid"', 'ROWID', '_rowid_', 'oid'):
+        case(f"telegram_allowlist: SET {alias} = rowid + 100000", _raw(D, own, f"UPDATE telegram_allowlist SET {alias} = rowid + 100000{stamp} WHERE id=?", (al,)),
+             msg('telegram_allowlist'))
+    sd = D.one("SELECT id FROM search_documents ORDER BY id LIMIT 1")
+    case("search_documents: SET id (INTEGER PRIMARY KEY) = id + 100000", _raw(D, sysW, "UPDATE search_documents SET id = id + 100000 WHERE id=?", (sd,)),
+         msg('search_documents'))
+    case("search_documents: SET oid = oid + 100000", _raw(D, sysW, "UPDATE search_documents SET oid = oid + 100000 WHERE id=?", (sd,)), msg('search_documents'))
+    case("schema_migrations: SET version (INTEGER PRIMARY KEY) = version + 100000",
+         _raw(D, sysW, "UPDATE schema_migrations SET version = version + 100000 WHERE version = 9000"), msg('schema_migrations'))
+    other = D.one("SELECT id FROM telegram_allowlist WHERE bot_id=? AND is_owner=0 ORDER BY rowid LIMIT 1", tg)
+    for rt in ('ON', 'OFF'):
+        D.raw.execute(f"PRAGMA recursive_triggers={rt}")
+        case(f"bảo trì, recursive_triggers {rt}: UPDATE OR REPLACE SET _rowid_ = rowid của hàng owner",
+             _in_maint(D, _raw(D, None, "UPDATE OR REPLACE telegram_allowlist SET _rowid_ = (SELECT rowid FROM telegram_allowlist WHERE id=?) WHERE id=?",
+                               (al, other))), msg('telegram_allowlist'))
+    D.raw.execute("PRAGMA recursive_triggers=ON")
+    owners = D.one("SELECT count(*) FROM telegram_allowlist WHERE bot_id=? AND is_owner=1 AND status='active' AND deleted_at IS NULL", tg)
+    pos = []
+    free = D.one("SELECT max(rowid) FROM telegram_allowlist") + 1000
+    _pos(pos, _in_maint(D, _raw(D, None, "UPDATE telegram_allowlist SET _rowid_ = ? WHERE id=?", (free, other))))
+    _pos(pos, _raw(D, own, f"UPDATE telegram_allowlist SET display_name='Owner (đổi tên)'{stamp} WHERE id=?", (al,)))
+    _pos(pos, _raw(D, own, f"UPDATE telegram_allowlist SET rowid = rowid{stamp} WHERE id=?", (al,)))
+    moved = D.one("SELECT rowid FROM telegram_allowlist WHERE id=?", other) == free
+    ok = all(x[1] for x in c) and owners == 1 and all(pos) and moved
+    report("ROWID-lock", ok, f"{sum(x[1] for x in c)}/{len(c)} lối đổi rowid bị {{t}}_rowid_lock chặn (allowlist: rowid / \"rowid\" / ROWID / _rowid_ / oid; "
+           f"search_documents: id INTEGER PK / oid; schema_migrations: version INTEGER PK; bảo trì UPDATE OR REPLACE sang rowid hàng owner, pragma ON / OFF); owner "
+           f"active còn {owners}; thuận {sum(pos)}/{len(pos)} (bảo trì đổi sang rowid trống ⇒ {moved}, UPDATE không đổi rowid, SET rowid = rowid)")
+    _show(c)
+
+def t_v235_blob_checks():
+    """v2.3.5 (review LOW pE): CHECK chuỗi người nhập (so byte / GLOB) bị lách bằng BLOB cùng byte hoặc BLOB có NUL ⇒ + typeof = 'text': auth_volume, sha256 của
+    skin, allowed_host, short_code, slug (skills, taxonomy_nodes). Thuận: giá trị TEXT hợp lệ."""
+    D, X = seed()
+    db, W, EN = D.db, X['W'], X['EN']
+    c, case = _cases(db)
+    sysW = X['A'][(W, 'system')]
+    vol = D.one("SELECT auth_volume FROM engine_accounts WHERE id=?", EN['mai_cc'])
+    case("auth_volume BLOB cùng byte", lambda: db.execute("UPDATE engine_accounts SET auth_volume=? WHERE id=?", (vol.encode(), EN['mai_cc'])), 'CHECK constraint')
+    case("auth_volume BLOB '../../X\\0Y'", lambda: db.execute("UPDATE engine_accounts SET auth_volume=? WHERE id=?", (b'../../X\x00Y', EN['mai_ag'])),
+         'CHECK constraint')
+    sn = X['SN']['tq046'] if 'tq046' in X['SN'] else next(iter(X['SN'].values()))
+    case("skin sha256 BLOB 64 byte hex", _raw(D, X['A'][(W, 'owner')], f"UPDATE skin_assets SET sha256=?, updated_by=app_actor(), updated_at={TS_FRESH_SQL} WHERE id=?",
+                                              (b'0' * 64, sn)), 'CHECK constraint')
+    case("secrets.allowed_host BLOB", lambda: D.ins('secrets', workspace_id=W, kind='anchor_remote_token', label='blob-host', ciphertext=b'x', nonce=b'n',
+                                                   wrapped_dek=b'd', dek_nonce=b'n', kek_id='kek1', fingerprint='fp-bh', allowed_host=b'evil.example'),
+         'CHECK constraint')
+    case("workspaces.short_code BLOB", lambda: db.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)",
+                                                          (uid('ws:blob'), 'tenant', 'blob', 'Blob', b'BL01')), 'CHECK constraint')
+    case("skills.slug BLOB", lambda: D.ins('skills', workspace_id=W, slug=b'evil/../x', origin='owner'), 'CHECK constraint')
+    case("taxonomy_nodes.slug BLOB", lambda: D.ins('taxonomy_nodes', workspace_id=W, domain='skill', level='group', name='B', name_norm='b', slug=b'b',
+                                                   source='owner'), 'CHECK constraint')
+    pos = [_try(lambda: db.execute("UPDATE engine_accounts SET auth_volume=? WHERE id=?", ('ga-auth-blob-ok', EN['mai_cc']))),
+           _try(lambda: D.ins('skills', workspace_id=W, slug='slug-text-ok', origin='owner'))]
+    ok = all(x[1] for x in c) and all(pos)
+    report("BLOB-check", ok, f"{sum(x[1] for x in c)}/{len(c)} giá trị BLOB bị CHECK chặn (auth_volume ×2, sha256, allowed_host, short_code, slug ×2); TEXT hợp lệ "
+           f"vẫn ghi được ({sum(pos)}/{len(pos)})")
+    _show(c)
+
+def t_v235_audit_hmac():
+    """v2.3.5 (review MEDIUM pG): HMAC chuỗi audit phủ MỌI cột trừ row_hash, thứ tự JCS. Sửa (trong bảo trì — kẻ có file DB, không có khoá) after_json,
+    before_json, actor_kind, channel, hash_key_id, prev_hash, ghi vào cột đang NULL (tool), xoá giá trị về NULL (entity_id) ⇒ verify_chain báo đúng hàng đó;
+    chuỗi nguyên vẹn ⇒ sạch."""
+    D, X = seed()
+    W = X['W']
+    base = D.one("SELECT max(display_seq) FROM audit_log WHERE workspace_id=?", W)
+    edits = [("after_json", '{"url":"https://good.example/x"}'), ("before_json", '{"url":"https://good.example/x"}'), ("actor_kind", 'system'),
+             ("channel", 'system'), ("hash_key_id", 'kek-x'), ("prev_hash", '0' * 64), ("tool", 'forged'), ("entity_id", None)]
+    for i in range(len(edits) + 1):
+        audit(D, W, 'settings.update', entity_id='ST-x', detail={'i': i})
+    clean = verify_chain(D, W)[0]
+    D.ctx.maint = 1
+    try:
+        for i, (col, v) in enumerate(edits):
+            D.raw.execute(f"UPDATE audit_log SET {col}=? WHERE workspace_id=? AND display_seq=?", (v, W, base + 1 + i))
+    finally:
+        D.ctx.maint = 0
+    bad = verify_chain(D, W)[0]
+    want = [base + 1 + i for i in range(len(edits))]
+    cols = audit_cols(D.raw)
+    ok = clean == [] and bad == want and 'prev_hash' in cols and 'hash_key_id' in cols and 'row_hash' not in cols
+    report("AUDIT-hmac", ok, f"chuỗi nguyên vẹn ⇒ {clean or 'sạch'}; sửa {', '.join(c for c, _ in edits)} ⇒ verify_chain báo {bad} (kỳ vọng {want}); HMAC phủ "
+           f"{len(cols)} cột (mọi cột trừ row_hash): {', '.join(cols)}")
+
+# v2.3.5 (review: meta-test MỌI bảng × lối ghi INSERT / UPDATE / DELETE / đổi rowid — có cổng máy kiểm được hoặc khai miễn kèm lý do; bảng mới không ai quyết ⇒ đỏ):
+#   authz  — cổng phân quyền trên app_actor() (actors.id = app_actor() + workspace_members / actor system); UPDATE: các cổng phủ MỌI cột (trừ cột định danh do
+#            {t}_ident giữ, cột đóng dấu do {t}_actor_u giữ, cột khai miễn WRITER_COL_EXEMPT / WRITER_ALL_COL_EXEMPT)
+#   maint  — chặn mọi lần ghi ngoài bảo trì (WHEN app_maint() = 0 ⇒ RAISE, không điều kiện khác)
+#   frozen — UPDATE: append-only / write-once ({t}_no_update sinh từ rules)
+#   actor  — CHỈ guard chung người ghi ({t}_actor_i/_u: *_by = app_actor(); {t}_ws_actor_i/_u: actor của chính workspace) — KHÔNG phải cổng vai trò ⇒ bảng phải có
+#            tên trong WRITER_ALL_ACTOR_ONLY kèm lý do
+#   rowid  — {t}_rowid_lock: BEFORE UPDATE không danh sách OF, WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR …)
+# DELETE: chỉ nhận authz / maint; rowid: chỉ nhận rowid. Lối không có gì ⇒ phải nằm trong WRITER_ALL_EXEMPT (bảng, lối) kèm lý do. Mục miễn không còn khớp ⇒ đỏ.
+WRITER_ALL_REASONS = {
+    'flow': 'bảng nghiệp vụ: owner / admin / Role (qua gateway) / tác tử hệ thống cùng workspace ghi theo luồng — người ghi buộc = app_actor() (fail-closed) + '
+            'guard nghiệp vụ / chuyển trạng thái riêng; phân quyền theo vai trò ở tầng app — CHƯA có cổng vai trò ở DB (nợ ghi ở CHANGELOG v2.3.5)',
+    'runtime': 'kết quả vận hành do app ghi (cập nhật / sao lưu / quét khả năng / xếp hạng model / tác tử hệ thống) — người ghi = app_actor(); chưa giới hạn '
+               'actor system ở DB (nợ)',
+    'log': 'append-only (lịch sử / sự kiện / phiên bản): INSERT bởi actor của luồng, người ghi = app_actor(); UPDATE đóng băng ({t}_no_update), DELETE chỉ bảo trì',
+    'derived': 'không có cột người ghi — dẫn xuất / hàng con / bộ cấp số (nguồn có guard người ghi riêng); ghi cần actor của CHÍNH workspace ({t}_ws_actor_i/_u)',
+}
+WRITER_ALL_ACTOR_ONLY = {
+    **{t: 'flow' for t in ('assignments', 'change_sets', 'chat_threads', 'commitments', 'dna_field_defs', 'dna_fields', 'employee_cards', 'instructions',
+                           'jobs', 'knowledge_items', 'memories', 'message_attachments', 'notifications', 'permission_requests', 'positions', 'proactive_jobs',
+                           'role_skills', 'roles', 'skill_prereqs', 'skills', 'tasks', 'taxonomy_nodes', 'wallets')},
+    **{t: 'runtime' for t in ('app_versions', 'backups', 'capabilities', 'model_ranks', 'system_agents', 'update_runs')},
+    **{t: 'log' for t in ('audit_log', 'avatars', 'blobs', 'chat_messages', 'compiled_prompts', 'consents', 'dna_field_versions', 'id_aliases',
+                          'instruction_versions', 'message_anchors', 'polaris_checks', 'proactive_sends', 'probe_runs', 'quota_snapshots', 'recall_hits',
+                          'revisions', 'role_wounds', 'sessions', 'skill_versions', 'trial_runs', 'trust_tier_changes', 'ui_actions')},
+    **{t: 'derived' for t in ('change_set_items', 'compiled_prompt_segments', 'id_counters', 'knowledge_chunks', 'search_documents', 'skill_engine_support',
+                              'skill_files', 'usage_daily')},
+}
+_FTS_WHY = ('FTS5: bảng ảo + bảng bóng nội bộ — chỉ FTS5 ghi qua trigger đồng bộ search_documents_ai / _au / _ad (nguồn search_documents có guard người ghi + '
+            'cổng xoá); SQLite không cho trigger trên bảng ảo')
+WRITER_ALL_EXEMPT = {(t, op): _FTS_WHY for t in ('search_fts', 'search_fts_config', 'search_fts_data', 'search_fts_docsize', 'search_fts_idx')
+                     for op in ('INSERT', 'UPDATE', 'DELETE', 'ROWID')}
+WRITER_ALL_COL_EXEMPT = {
+    ('workspaces', 'core_agent_locked_at'): 'mốc khoá Core agent do trigger probe_runs_core_lock_* ghi (không có actor người dùng) — guard riêng '
+                                            'workspaces_core_lock_u: ghi một lần, không xoá / sửa'}
+_W_MAINT = re.compile(r"CREATE TRIGGER \w+ BEFORE (?:INSERT|UPDATE|DELETE) ON \w+\s+WHEN app_maint\(\) = 0\s+BEGIN SELECT RAISE\(ABORT, '[^']*'\); END$")
+_W_ROWID = re.compile(r"CREATE TRIGGER \w+ BEFORE UPDATE ON (\w+)\s+WHEN NEW\.rowid IS NOT OLD\.rowid AND \(app_maint\(\) = 0 OR ")
+_W_WSACT = re.compile(r"WHEN app_maint\(\) = 0 AND NOT EXISTS \(SELECT 1 FROM actors ta WHERE ta\.id = app_actor\(\) AND ta\.workspace_id = NEW\.workspace_id")
+
+def _writer_all(db):
+    tabs = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+    trig = [(n, t, s) for n, t, s in db.execute("SELECT name, tbl_name, sql FROM sqlite_master WHERE type='trigger'")]
+    cls, bad = {}, []
+    for t in tabs:
+        cols = [r[1] for r in db.execute(f"PRAGMA table_info({t})")]
+        for op in ('INSERT', 'UPDATE', 'DELETE'):
+            ts = [(n, s) for n, tt, s in trig if tt == t and _trig_event(s) == ('BEFORE', op)]
+            actor = any((n == f'{t}_actor_{op[0].lower()}') or (n == f'{t}_ws_actor_{op[0].lower()}' and _W_WSACT.search(s)) for n, s in ts)
+            if any(_W_MAINT.match(s) for _, s in ts):
+                k = 'maint'
+            elif op == 'UPDATE':
+                cov = set()
+                for _, s in ts:
+                    if _has_writer(s):
+                        cov |= _of_cols(s, cols)
+                ident = next((s for n, s in ts if n == f'{t}_ident'), '')
+                cov |= {c for c in WRITER_IDENT_COLS if f'NEW.{c} IS OLD.{c}' in ident}
+                if any(n == f'{t}_actor_u' for n, _ in ts):
+                    cov |= WRITER_META_COLS
+                cov |= {c for (tt, c) in list(WRITER_COL_EXEMPT) + list(WRITER_ALL_COL_EXEMPT) if tt == t}
+                k = ('authz' if any(_has_writer(s) for _, s in ts) and set(cols) <= cov else
+                     'frozen' if any(n == f'{t}_no_update' for n, _ in ts) else 'actor' if actor else None)
+            else:
+                k = 'authz' if any(_has_writer(s) for _, s in ts) else ('actor' if actor and op == 'INSERT' else None)
+            cls[(t, op)] = k
+        cls[(t, 'ROWID')] = 'rowid' if any(tt == t and (m := _W_ROWID.match(s)) and m.group(1) == t for n, tt, s in trig) else None
+        for op in ('INSERT', 'UPDATE', 'DELETE', 'ROWID'):
+            k = cls[(t, op)]
+            if k is None and (t, op) not in WRITER_ALL_EXEMPT:
+                bad.append(('none', f'{t}:{op}'))
+            elif k == 'actor' and t not in WRITER_ALL_ACTOR_ONLY:
+                bad.append(('actor-unlisted', f'{t}:{op}'))
+    stale = ([t for t in WRITER_ALL_ACTOR_ONLY if t not in tabs or not any(cls.get((t, op)) == 'actor' for op in ('INSERT', 'UPDATE'))]
+             + [f'{t}:{op}' for (t, op) in WRITER_ALL_EXEMPT if t not in tabs or cls.get((t, op)) is not None]
+             + [f'{t}.{c}' for (t, c) in WRITER_ALL_COL_EXEMPT if t not in tabs or c not in [r[1] for r in db.execute(f"PRAGMA table_info({t})")]]
+             + [k for k in WRITER_ALL_ACTOR_ONLY.values() if k not in WRITER_ALL_REASONS])
+    bad += [('stale-exempt', k) for k in stale]
+    return tabs, cls, bad
+
+def t_v235_writer_all():
+    """v2.3.5 (review: mọi bảng × I/U/D có cổng hoặc miễn có lý do + rowid): quét sqlite_master — mỗi bảng × INSERT / UPDATE / DELETE / đổi rowid được xếp loại
+    (authz / maint / frozen / actor / rowid); lối chỉ có guard chung người ghi phải khai tên bảng + lý do; lối không có gì phải khai miễn. Đối chứng âm: bỏ
+    tool_grants_writer_d, bỏ users_writer_u, thay settings_rowid_lock bằng bản "OF rowid", bảng mới không guard, bảng mới chỉ có guard chung người ghi, bỏ
+    workspaces_writer_i ⇒ đều bị bắt."""
+    D, X = seed()
+    db = D.raw
+    tabs, cls, bad0 = _writer_all(db)
+    by = {}
+    for (t, op), k in cls.items():
+        by.setdefault(op, {}).setdefault(k or 'miễn', []).append(t)
+    db.execute("DROP TRIGGER tool_grants_writer_d")
+    db.execute("DROP TRIGGER users_writer_u")
+    db.execute("DROP TRIGGER workspaces_writer_i")
+    db.execute("DROP TRIGGER settings_rowid_lock")
+    db.execute("CREATE TRIGGER settings_rowid_lock BEFORE UPDATE OF rowid ON settings WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR 0) "
+               "BEGIN SELECT RAISE(ABORT, 'x'); END")
+    db.execute("CREATE TABLE fake_tbl (id TEXT PRIMARY KEY, workspace_id TEXT)")
+    db.execute("CREATE TABLE fake_flow (id TEXT PRIMARY KEY, workspace_id TEXT, created_by TEXT)")
+    db.execute("CREATE TRIGGER fake_flow_actor_i BEFORE INSERT ON fake_flow WHEN app_maint() = 0 AND NOT COALESCE(NEW.created_by = app_actor(), 0) "
+               "BEGIN SELECT RAISE(ABORT, 'x'); END")
+    _t1, _c1, bad1 = _writer_all(db)
+    expect = {('none', 'tool_grants:DELETE'), ('none', 'users:UPDATE'), ('none', 'workspaces:INSERT'), ('none', 'settings:ROWID'),
+              ('none', 'fake_tbl:INSERT'), ('none', 'fake_tbl:UPDATE'), ('none', 'fake_tbl:DELETE'), ('none', 'fake_tbl:ROWID'),
+              ('actor-unlisted', 'fake_flow:INSERT'), ('none', 'fake_flow:UPDATE'), ('none', 'fake_flow:DELETE'), ('none', 'fake_flow:ROWID')}
+    ok = not bad0 and set(bad1) == expect
+    lst = lambda op, k: ', '.join(sorted(by.get(op, {}).get(k, [])))
+    cnt = lambda op: ' / '.join(f"{k} {len(v)}" for k, v in sorted(by.get(op, {}).items()))
+    report("WRITER-all", ok, f"{len(tabs)} bảng × 4 lối — INSERT: {cnt('INSERT')}; UPDATE: {cnt('UPDATE')}; DELETE: {cnt('DELETE')}; rowid: {cnt('ROWID')}. "
+           f"Cổng phân quyền I+U+D: {', '.join(sorted(t for t in tabs if all(cls[(t, o)] in ('authz', 'maint') for o in ('INSERT', 'UPDATE', 'DELETE'))))}. "
+           f"Chỉ guard chung người ghi (khai lý do): " + '; '.join(f"[{r}] {', '.join(sorted(t for t, k in WRITER_ALL_ACTOR_ONLY.items() if k == r))}"
+                                                                     for r in WRITER_ALL_REASONS)
+           + f". Miễn: {sorted({t for t, _ in WRITER_ALL_EXEMPT})} (FTS5) + cột {sorted(WRITER_ALL_COL_EXEMPT)}. Vi phạm: {bad0 or 'không'}; đối chứng âm bắt "
+           f"{len(expect & set(bad1))}/{len(expect)}: {sorted(bad1)}")
+
+
 if __name__ == '__main__':
     perf = '--perf' in sys.argv
     if not t_seed_build():
@@ -7532,4 +8160,6 @@ if __name__ == '__main__':
     t_v232_anchor_writer(); t_v232_cli_writer(); t_v232_writer_meta()
     t_v233_actor_meta(); t_v233_actor_guard(); t_v233_actor_claims(); t_v233_actor_inner(); t_v233_cred_writer(); t_v233_anchor_parse()
     t_v234_nul_checks(); t_v234_sql_noname(); t_v234_secret_kind(); t_v234_generated_guards(); t_v234_fts_sync(); t_v234_pair_u(); t_v234_engine_unrestricted(); t_v234_seed_reference(); t_v234_hand_guards()
+    t_v235_root_authz(); t_v235_replace_notnull(); t_v235_route_writers(); t_v235_rowid_lock(); t_v235_blob_checks(); t_v235_audit_hmac()
+    t_v235_writer_all()
     print("\nTỔNG:", sum(1 for r in RESULTS if r[1]), "/", len(RESULTS), "PASS — SQLite", sqlite3.sqlite_version)
