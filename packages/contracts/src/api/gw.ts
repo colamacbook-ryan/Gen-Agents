@@ -673,6 +673,11 @@ export const GW_29 = gw({
   method: 'POST',
   path: '/permission-requests/{permissionRef}/decision',
   auth: 'A',
+  // NỚI hàng rào = owner (Gen, fail-closed): `decision` ∈ {allow, ask} cấp / mở quyền tool cho Role ⇒ O; `deny` siết ⇒ A.
+  // Dịch vụ còn PHẢI (HANDLER-OBLIGATIONS #3): quyền thật đọc từ trạng thái phía máy chủ; KÉO DÀI `expiresAt` của một grant
+  // đang có (hoặc bỏ hạn) cũng là nới ⇒ O (hợp đồng không biểu đạt được: so với `expiresAt` đã lưu); ref cùng workspace (#1).
+  ownerWhen: { in: 'body', field: 'decision', equalsAny: ['allow', 'ask'] },
+  writesAccessPolicy: ['tool_grants'],
   o4: 'blocked',
   request: {
     params: z.strictObject({ permissionRef: Ref('PM') }),
@@ -703,6 +708,11 @@ export const GW_31 = gw({
   method: 'PUT',
   path: '/roles/{roleRef}/tool-grants/{toolSlug}',
   auth: 'A',
+  // NỚI hàng rào = owner (Gen, fail-closed): `mode` ∈ {allow, ask} cấp / mở quyền tool cho Role ⇒ O; `deny` siết ⇒ A.
+  // Dịch vụ còn PHẢI (HANDLER-OBLIGATIONS #3): quyền thật đọc từ trạng thái phía máy chủ; KÉO DÀI `expiresAt` của một grant
+  // đang có (hoặc bỏ hạn) cũng là nới ⇒ O (hợp đồng không biểu đạt được: so với `expiresAt` đã lưu); ref cùng workspace (#1).
+  ownerWhen: { in: 'body', field: 'mode', equalsAny: ['allow', 'ask'] },
+  writesAccessPolicy: ['tool_grants'],
   o4: 'blocked',
   request: {
     params: z.strictObject({ roleRef: Ref('RL'), toolSlug: KeyStr }),

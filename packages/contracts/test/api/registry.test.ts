@@ -178,7 +178,7 @@ describe('registry — quyền', () => {
     const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen.length > 0)
       .map((r) => r.id)
       .sort();
-    expect(withOwnerWhen).toEqual(['OPS-03', 'OPS-07', 'OPS-08', 'WRK-03', 'WRK-05']);
+    expect(withOwnerWhen).toEqual(['GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08', 'WRK-03', 'WRK-05']);
     const wrk03 = routeById('WRK-03');
     const wrk05 = routeById('WRK-05');
     const ops03 = routeById('OPS-03');
@@ -196,6 +196,15 @@ describe('registry — quyền', () => {
     const ops07 = routeById('OPS-07');
     expect(ops07 && requiredAccess(ops07, { body: { action: 'allow' } })).toBe('O');
     expect(ops07 && requiredAccess(ops07, { body: { action: 'deny' } })).toBe('A');
+    // GW-29 / GW-31 (tool grant): `allow` / `ask` = nới ⇒ O; `deny` = siết ⇒ A.
+    for (const id of ['GW-29', 'GW-31']) {
+      const r = routeById(id);
+      const field = id === 'GW-29' ? 'decision' : 'mode';
+      expect(r && requiredAccess(r, { body: { [field]: 'allow' } }), `${id} allow`).toBe('O');
+      expect(r && requiredAccess(r, { body: { [field]: 'ask' } }), `${id} ask`).toBe('O');
+      expect(r && requiredAccess(r, { body: { [field]: 'deny' } }), `${id} deny`).toBe('A');
+      expect(r && requiredAccess(r, { body: {} }), `${id} thiếu trường`).toBe('A');
+    }
     // OPS-08: xoá luật `deny` = nới ⇒ O; xoá `allow` = siết ⇒ A; không biết luật đã lưu ⇒ O (fail-closed).
     const ops08 = routeById('OPS-08');
     expect(ops08 && requiredAccess(ops08, { stored: { egressAction: 'deny' } })).toBe('O');
@@ -295,8 +304,13 @@ describe('registry — route ghi chính sách truy cập (egress_rules / tool_gr
         true,
       );
     // golden: thêm / bớt route ghi chính sách phải sửa test có chủ đích
-    expect(writers.map((r) => r.id).sort()).toEqual(['OPS-07', 'OPS-08']);
-    expect(writers.map((r) => r.writesAccessPolicy.join(',')).sort()).toEqual(['egress_rules', 'egress_rules']);
+    expect(writers.map((r) => r.id).sort()).toEqual(['GW-29', 'GW-31', 'OPS-07', 'OPS-08']);
+    expect(writers.map((r) => `${r.id}:${r.writesAccessPolicy.join(',')}`).sort()).toEqual([
+      'GW-29:tool_grants',
+      'GW-31:tool_grants',
+      'OPS-07:egress_rules',
+      'OPS-08:egress_rules',
+    ]);
   });
 });
 
