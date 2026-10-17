@@ -9,6 +9,7 @@
     { "path": "packages/db" },
     { "path": "packages/engines" },
     { "path": "packages/security" },
+    { "path": "packages/testkit" },
     { "path": "testing/fakes" }
   ]
 }

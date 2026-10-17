@@ -4,8 +4,9 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Control plane (Hono API, SSE, scheduler, gateway…) — BUILD-PLAN §B.4. Khung tối thiểu: hiện mới có module auth/ (L-SEC).",
+  "description": "Control plane (Hono API, SSE, scheduler, gateway…) — BUILD-PLAN §B.4. Khung http/ + context/ + events/ (L-APP), auth/ (L-SEC).",
   "exports": {
+    ".": "./src/app.ts",
     "./auth": "./src/auth/index.ts"
   },
   "scripts": {
@@ -14,6 +15,12 @@
   "dependencies": {
     "@ga/contracts": "workspace:*",
     "@ga/db": "workspace:*",
-    "@ga/security": "workspace:*"
+    "@ga/security": "workspace:*",
+    "@hono/node-server": "2.1.5",
+    "hono": "4.13.13",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@ga/testkit": "workspace:*"
   }
 }

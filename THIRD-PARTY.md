@@ -3,12 +3,14 @@
 > SINH TỰ ĐỘNG bởi `pnpm license:check -- --write` (scripts/license-gate.mjs). Không sửa tay — CI đỏ nếu lệch.
 > License đọc từ chính tệp LICENSE của từng gói (STD-04 §6). Chính sách: `scripts/license-policy.json`.
 
-## Đi vào sản phẩm (6 gói, gồm phụ thuộc gián tiếp)
+## Đi vào sản phẩm (8 gói, gồm phụ thuộc gián tiếp)
 
 | Gói | Phiên bản | License | Nhận ra từ tệp LICENSE | Ghi chú |
 |---|---|---|---|---|
+| @hono/node-server | 2.1.5 | MIT | MIT |  |
 | better-sqlite3 | 13.0.3 | MIT | MIT |  |
 | hash-wasm | 4.12.0 | MIT | MIT |  |
+| hono | 4.13.13 | MIT | MIT |  |
 | kysely | 0.29.6 | MIT | MIT |  |
 | node-addon-api | 8.9.2 | MIT | MIT |  |
 | ws | 8.18.3 | MIT | MIT |  |

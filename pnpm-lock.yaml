@@ -32,6 +32,19 @@ importers:
       '@ga/security':
         specifier: workspace:*
         version: link:../../packages/security
+      '@hono/node-server':
+        specifier: 2.1.5
+        version: 2.1.5(hono@4.13.13)
+      hono:
+        specifier: 4.13.13
+        version: 4.13.13
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@ga/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
 
   apps/egress:
     devDependencies:
@@ -107,6 +120,21 @@ importers:
         specifier: 4.12.0
         version: 4.12.0
 
+  packages/testkit:
+    dependencies:
+      '@ga/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@ga/db':
+        specifier: workspace:*
+        version: link:../db
+      '@ga/security':
+        specifier: workspace:*
+        version: link:../security
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
   testing/fakes:
     devDependencies:
       '@ga/contracts':
@@ -167,6 +195,12 @@ packages:
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
+
+  '@hono/node-server@2.1.5':
+    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4 || ^5.0.0-0
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
@@ -362,6 +396,10 @@ packages:
 
   hash-wasm@4.12.0:
     resolution: {integrity: sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==}
+
+  hono@4.13.13:
+    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
+    engines: {node: '>=16.9.0'}
 
   kysely@0.29.6:
     resolution: {integrity: sha512-hHaB8C/rfzDDtr/t8YZwxAuPJTT0zHyaPoVzcXwDYhYNAgH/4sIfVhi/XLLIY+bL/FqaIJnjATDbi8ObSELmxg==}
@@ -649,6 +687,10 @@ snapshots:
   '@biomejs/cli-win32-x64@2.5.15':
     optional: true
 
+  '@hono/node-server@2.1.5(hono@4.13.13)':
+    dependencies:
+      hono: 4.13.13
+
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
   '@oxc-project/types@0.154.0': {}
@@ -792,6 +834,8 @@ snapshots:
     optional: true
 
   hash-wasm@4.12.0: {}
+
+  hono@4.13.13: {}
 
   kysely@0.29.6: {}
 

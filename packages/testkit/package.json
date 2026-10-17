@@ -1,0 +1,20 @@
+{
+  "name": "@ga/testkit",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "CHỈ DÙNG TRONG TEST (BUILD-PLAN §D.2: chỉ import từ testing/** hoặc dynamic import có guard): thế giới test 2 tenant (A, B) × owner/admin/operator/viewer + phiên, đồng hồ giả, RecoveryProvider giả, SessionsService giả, client HTTP theo route id, bộ sinh mẫu request, registry seeder chống IDOR.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs"
+  },
+  "dependencies": {
+    "@ga/contracts": "workspace:*",
+    "@ga/db": "workspace:*",
+    "@ga/security": "workspace:*",
+    "zod": "4.6.7"
+  }
+}
