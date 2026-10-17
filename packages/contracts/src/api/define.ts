@@ -26,13 +26,6 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
 export const O4_MODES = ['open', 'blocked', 'setup', 'core'] as const;
 export type O4Mode = (typeof O4_MODES)[number];
 
-/**
- * Cổng người ghi (STD-11): route ghi credential / mở PTY ⇒ `O`. Contract test: `credential_write` / `pty` ⇒ `auth = 'O'`;
- * mọi body có `SecretInput` phải khai cổng; `user_password` (mật khẩu đăng nhập của chính người dùng) là `public` hoặc `V`.
- */
-export const ROUTE_GATES = ['credential_write', 'pty', 'user_password'] as const;
-export type RouteGate = (typeof ROUTE_GATES)[number];
-
 /** Route `A` nhưng một giá trị của request nâng lên `O` (vd WRK-03 `purpose = owner_change`). */
 export type OwnerWhen =
   | { in: 'body' | 'query'; field: string; equals: string | boolean }
@@ -112,7 +105,14 @@ export interface RouteInput<Q extends RequestSpec, S extends ResponseSpec> {
   mount?: 'api' | 'edge';
   auth: AuthLevel;
   ownerWhen?: OwnerWhen;
-  gate?: RouteGate;
+  /**
+   * Route TẠO / SỬA / XOÁ / THU HỒI / XUẤT credential (khoá API, token bot, token neo, tài khoản engine + volume `/auth`,
+   * đồng ý Clause 6 gắn tài khoản, đổi chủ Telegram) HOẶC mở PTY đăng nhập. Contract test: cờ này ⇒ `auth = 'O'`, KHÔNG ngoại lệ
+   * (không `ownerWhen`) — fail-closed, STD-11 "cổng người ghi". Khai tường minh, không suy từ tên route.
+   */
+  touchesCredential?: boolean;
+  /** Route nhận mật khẩu đăng nhập của CHÍNH người dùng (EXT-01, EXT-04): `public` hoặc `V`, không phải `touchesCredential`. */
+  userPassword?: boolean;
   o4: O4Mode;
   /** Bắt buộc header `Idempotency-Key` (SYS-19, SYS-74, WRK-23…26). */
   idempotent?: boolean;
@@ -140,7 +140,8 @@ export interface RouteDraft<Q extends RequestSpec = RequestSpec, S extends Respo
   readonly lane: Lane;
   readonly auth: AuthLevel;
   readonly ownerWhen?: OwnerWhen;
-  readonly gate?: RouteGate;
+  readonly touchesCredential: boolean;
+  readonly userPassword: boolean;
   readonly o4: O4Mode;
   /** Dẫn xuất từ `o4`: RecoveryGuard đọc cờ này (một nguồn duy nhất). */
   readonly recovery: boolean;
@@ -212,7 +213,8 @@ export function defineLane(lane: Lane) {
       lane,
       auth: input.auth,
       ...(input.ownerWhen ? { ownerWhen: input.ownerWhen } : {}),
-      ...(input.gate ? { gate: input.gate } : {}),
+      touchesCredential: input.touchesCredential ?? false,
+      userPassword: input.userPassword ?? false,
       o4: input.o4,
       recovery: flags.recovery,
       recoveryCoreOnly: flags.core,

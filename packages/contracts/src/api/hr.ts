@@ -23,7 +23,7 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok } from './define.ts';
-import { Budget, EngineSlug, I18nParams } from './shapes.ts';
+import { Budget, EngineSlug, I18nParams, ROLE_RUNTIMES } from './shapes.ts';
 
 // L-HR — nhân sự: Role, DNA, revision, Position, đào tạo (Instruction / Skill / Knowledge), cây, Kho nhân vật + avatar, thẻ,
 // thử việc (BACKEND-TRIAL §3.3, SYS-30…79: 50 route). Tách khỏi L-SYS theo quyết định của Gen; thử việc gọi Judge qua dịch vụ
@@ -48,7 +48,6 @@ export const ROLE_COLORS = [
 ] as const;
 /** = CHECK `roles.lifecycle_status`. */
 export const ROLE_LIFECYCLES = ['draft', 'born', 'training', 'candidate', 'carded', 'suspended', 'archived'] as const;
-export const ROLE_RUNTIMES = ['none', 'sleeping', 'starting', 'running', 'error', 'stopped'] as const;
 export const INSTRUCTION_LAYERS = ['values', 'persona', 'style', 'drive', 'position', 'house_rules'] as const;
 export const CARD_STATUSES = ['draft', 'issued', 'suspended', 'revoked', 'superseded'] as const;
 export const AVATAR_SOURCES = ['library', 'upload', 'monogram', 'generated'] as const;

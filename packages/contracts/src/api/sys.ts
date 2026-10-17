@@ -151,6 +151,8 @@ export const SYS_04 = sys({
   method: 'POST',
   path: '/onboarding/core-agent',
   auth: 'O',
+  // Tạo tài khoản + binding + container của Core agent (volume `/auth`) và ghi đồng ý Clause 6.
+  touchesCredential: true,
   o4: 'setup',
   request: {
     body: z.strictObject({
@@ -178,6 +180,7 @@ export const SYS_05 = sys({
   method: 'DELETE',
   path: '/onboarding/core-agent',
   auth: 'O',
+  touchesCredential: true,
   o4: 'setup',
   // Gỡ tài khoản + binding chưa khoá ("Chọn loại khác").
   response: noContent(),
@@ -291,6 +294,8 @@ export const SYS_11 = sys({
   method: 'POST',
   path: '/core-agent/type-change',
   auth: 'O',
+  // Đổi loại Core agent: tắt binding cũ, tạo / bật tài khoản + đồng ý mới.
+  touchesCredential: true,
   o4: 'open',
   request: {
     body: z.strictObject({ targetEngineSlug: EngineSlug, consent: ConsentInput.optional() }),

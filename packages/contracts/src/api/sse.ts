@@ -3,6 +3,7 @@ import { SseEvent } from '../events.ts';
 import { TURN_REJECTIONS } from '../sessions.ts';
 import { DisplayId, Int, KeyStr, Nat, Pct, str, Ts, Ulid } from './common.ts';
 import { GridKey } from './grids.ts';
+import { TgUserId } from './shapes.ts';
 
 // Sự kiện SSE `GET /api/v1/stream` (BACKEND-TRIAL §3.7): 26 loại. 13 loại đầu đã có ở `events.ts` (dùng lại NGUYÊN, không
 // định nghĩa trùng); 12 loại mới ở đây + `log.line` (chỉ trên `/logs/stream`).
@@ -137,7 +138,7 @@ export const NewSseEvent = z.discriminatedUnion('type', [
     botDisplayId: DisplayId('TG'),
     purpose: z.enum(['allowlist', 'owner_change']),
     state: z.enum(['captured', 'expired']),
-    candidate: z.strictObject({ displayName: str(120), tgUserId: str(32, 1) }).nullable(),
+    candidate: z.strictObject({ displayName: str(120), tgUserId: TgUserId }).nullable(),
   }),
   z.strictObject({
     ...base,
@@ -166,14 +167,20 @@ export type NewSseEvent = z.infer<typeof NewSseEvent>;
 export const StreamEvent = z.union([SseEvent, NewSseEvent]);
 export type StreamEvent = z.infer<typeof StreamEvent>;
 
-/** `log.line` — CHỈ trên `GET /logs/stream` (OPS-24). `message` đã qua bộ che. */
-export const LogLineEvent = z.strictObject({
-  ...base,
-  type: z.literal('log.line'),
+/** Một dòng log JSONL: `{ts, container, level, message}`; `message` ĐÃ qua bộ che (OPS-24 stream, OPS-25 đọc tệp). */
+export const logLineShape = {
   ts: Ts,
   container: str(63, 1),
   level: KeyStr,
   message: str(16_384),
+} as const;
+export const LogLine = z.strictObject(logLineShape);
+
+/** `log.line` — CHỈ trên `GET /logs/stream` (OPS-24): phong bì chung + `LogLine`. */
+export const LogLineEvent = z.strictObject({
+  ...base,
+  type: z.literal('log.line'),
+  ...logLineShape,
 });
 export type LogLineEvent = z.infer<typeof LogLineEvent>;
 

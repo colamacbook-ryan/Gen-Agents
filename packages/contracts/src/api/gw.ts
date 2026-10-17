@@ -187,7 +187,10 @@ export const GW_07 = gw({
   id: 'GW-07',
   method: 'POST',
   path: '/roles/{roleRef}/engine-accounts',
-  auth: 'A',
+  // Tạo tài khoản engine (+ volume `/auth`, + đồng ý Clause 6 trong body) = chạm credential ⇒ owner (đặc tả §3.4 ghi `A`; đã nâng
+  // `O` theo rà soát bảo mật 2026-10-17, fail-closed).
+  auth: 'O',
+  touchesCredential: true,
   o4: 'blocked',
   request: {
     params: z.strictObject({ roleRef: Ref('RL') }),
@@ -216,7 +219,9 @@ export const GW_08 = gw({
   id: 'GW-08',
   method: 'DELETE',
   path: '/engine-accounts/{accountRef}',
-  auth: 'A',
+  // Gỡ tài khoản kèm credential (volume `/auth`) mà owner đã đăng nhập: admin không được (rà soát bảo mật 2026-10-17, MEDIUM).
+  auth: 'O',
+  touchesCredential: true,
   o4: 'blocked',
   request: { params: AccountParams, body: z.strictObject({ confirmLabel: ConfirmName }) },
   // Gỡ binding + tài khoản của Role. `db.core_agent_rule`: tài khoản Core agent sau mốc khoá.
@@ -271,7 +276,7 @@ export const GW_11 = gw({
   method: 'POST',
   path: '/engine-accounts/{accountRef}/consents',
   auth: 'O',
-  gate: 'credential_write',
+  touchesCredential: true,
   o4: 'core',
   request: { params: AccountParams, body: ConsentInput },
   response: ok(z.strictObject({ consent: IdOf('CN') })),
@@ -284,7 +289,7 @@ export const GW_12 = gw({
   method: 'PUT',
   path: '/engine-accounts/{accountRef}/api-key',
   auth: 'O',
-  gate: 'credential_write',
+  touchesCredential: true,
   o4: 'core',
   // Chỉ body; lưu mã hoá envelope, tự kiểm đăng nhập. CLI: ô ẩn hoặc `--stdin`, không bao giờ qua argv / query.
   request: { params: AccountParams, body: z.strictObject({ apiKey: SecretInput('api_key') }) },
@@ -298,7 +303,7 @@ export const GW_13 = gw({
   method: 'DELETE',
   path: '/engine-accounts/{accountRef}/api-key',
   auth: 'O',
-  gate: 'credential_write',
+  touchesCredential: true,
   o4: 'core',
   request: { params: AccountParams },
   // Thu hồi khỏi kho bí mật và container.
@@ -319,7 +324,7 @@ export const GW_14 = gw({
   method: 'POST',
   path: '/engine-accounts/{accountRef}/login-sessions',
   auth: 'O',
-  gate: 'pty',
+  touchesCredential: true,
   o4: 'core',
   request: { params: AccountParams, body: z.strictObject({ mode: z.enum(['login', 'relogin']) }) },
   // `Cache-Control: no-store`. Đặt `login_status = in_progress` (Core agent: `relogin_in_progress`). WebSocket mở bằng vé
@@ -589,6 +594,7 @@ export const GW_26 = gw({
   },
   response: ok(PageOf(SessionRow)),
   cli: ['sessions', 'task show', 'diag'],
+  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_27 = gw({
@@ -607,6 +613,7 @@ export const GW_27 = gw({
     }),
   ),
   cli: ['session show'],
+  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 // ---------------------------------------------------------------- GW-28…32 quyền tool
@@ -639,6 +646,7 @@ export const GW_28 = gw({
   request: { query: z.strictObject({ status: z.enum(PERMISSION_STATUSES).optional() }) },
   response: ok(list(PermissionRow)),
   cli: ['perms'],
+  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_29 = gw({
@@ -658,6 +666,7 @@ export const GW_29 = gw({
   // `conflict` khi đã quyết. B-REL: duyệt bằng CLI (Q-B5: không có nút duyệt nhanh trên Telegram).
   response: ok(z.strictObject({ request: PermissionRow, grant: IdOf('GR').nullable() })),
   cli: ['perm allow', 'perm ask', 'perm deny'],
+  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_30 = gw({
@@ -669,6 +678,7 @@ export const GW_30 = gw({
   request: { params: z.strictObject({ roleRef: Ref('RL') }) },
   response: ok(list(GrantRow)),
   cli: ['grants'],
+  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_31 = gw({
@@ -684,6 +694,7 @@ export const GW_31 = gw({
   response: ok(GrantRow),
   errors: ['db.*'],
   cli: ['grants set'],
+  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_32 = gw({
@@ -709,6 +720,7 @@ export const GW_32 = gw({
     ),
   ),
   cli: ['tools'],
+  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_ROUTES = [

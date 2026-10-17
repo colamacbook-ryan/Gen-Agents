@@ -32,7 +32,7 @@ export const EXT_01 = sec({
   method: 'POST',
   path: '/auth/login',
   auth: 'public',
-  gate: 'user_password',
+  userPassword: true,
   o4: 'open',
   request: { body: z.strictObject({ username: str(64, 1), password: SecretInput('password') }) },
   // Set-Cookie: ga_session. Mang csrfToken ⇒ no-store.
@@ -69,7 +69,7 @@ export const EXT_04 = sec({
   method: 'POST',
   path: '/auth/password',
   auth: 'V',
-  gate: 'user_password',
+  userPassword: true,
   o4: 'open',
   request: {
     body: z.strictObject({ currentPassword: SecretInput('password'), newPassword: SecretInput('password') }),
@@ -92,7 +92,7 @@ export const EXT_05 = rt({
   path: '/term',
   mount: 'edge',
   auth: 'O',
-  gate: 'pty',
+  touchesCredential: true,
   o4: 'core',
   response: ws(PtyClientMessage, PtyServerMessage),
   cli: ['login'],

@@ -9,6 +9,17 @@ import { IdOf, Int, idShape, KeyStr, Lang, Nat, Pct, str, Ts } from './common.ts
 /** Mức nghiêm trọng (= CHECK `notifications.severity`). */
 export const Severity = z.enum(['ok', 'info', 'warn', 'danger']);
 
+/** `roles.runtime_state` (= `role.state` của SSE). */
+export const ROLE_RUNTIMES = ['none', 'sleeping', 'starting', 'running', 'error', 'stopped'] as const;
+
+/** Telegram user id (số nguyên dạng chuỗi, tối đa 20 chữ số — vượt 2^53 nên không dùng number). */
+export const TgUserId = z
+  .string()
+  .min(1)
+  .max(20)
+  .regex(/^\d{1,20}$/)
+  .meta({ example: '123456789' });
+
 /** Slug loại CLI (registry engines): đúng hình dạng của contracts (`ENGINE_SLUG_RE`). */
 export const EngineSlug = EngineSlugFormat.meta({ example: 'engine-x' });
 /** id model từ capability registry (STD-10): đúng `MODEL_ID_RE`, không bao giờ dạng cờ `-…`. */
