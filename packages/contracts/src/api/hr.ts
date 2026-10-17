@@ -438,6 +438,12 @@ export const SYS_45 = hr({
   method: 'PATCH',
   path: '/positions/{positionRef}',
   auth: 'A',
+  // Đặt / đổi / gỡ hạn mức (`dailyTokenQuota`) và trần thưởng (`rewardCapMinor`) là NỚI hàng rào ⇒ owner (Gen, fail-closed).
+  // `present`: khoá có mặt (kể cả `null` = gỡ trần). Sửa `title` / `jd` / `kpi` / `heartbeat` vẫn A.
+  ownerWhen: [
+    { in: 'body', field: 'dailyTokenQuota', present: true },
+    { in: 'body', field: 'rewardCapMinor', present: true },
+  ],
   o4: 'blocked',
   request: {
     params: z.strictObject({ positionRef: Ref('PS') }),
