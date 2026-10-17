@@ -1584,11 +1584,13 @@ def t_polaris_prompt():
     report("POLARIS-prompt", ok, f"bản 'worst' đúng thứ tự luôn → có điều kiện (IN-0006) → Polaris; chèn khối luôn sau Polaris bị chặn ({m1[:40]}); "
            f"khối Polaris > 80 token không còn bị chặn (v2.2.2: cảnh báo, không chặn); khối Polaris ({b['polaris_tokens']} token) nằm trong ngân sách và cổng ≤2.000")
 
+_REG_NO = [1000]     # v2.3.4: số hồ sơ khai sinh của Role dựng thêm — bộ đếm (4 chữ số cuối của perf_counter_ns từng trùng ⇒ UNIQUE registry_no, test chập chờn)
 def make_carded_role(D, X, name, color='jade'):
     W, A = X['W'], X['A']
+    _REG_NO[0] += 1
     def go():
         r = D.ins('roles', workspace_id=W, name=name, name_norm=name.lower(), color=color, lifecycle_status='carded', born_at=now(),
-                  registry_no='GA-7K2Q-' + str(time.perf_counter_ns())[-4:])
+                  registry_no=f'GA-7K2Q-{_REG_NO[0]:04d}')
         rv = D.ins('revisions', workspace_id=W, scope='role', role_id=r, seq=1, major=1, minor=0, kind='birth', is_core=1, note='Khai sinh',
                    snapshot_json='{}', snapshot_hash='h', prompt_tokens=1)
         wl = D.ins('wallets', workspace_id=W, owner_kind='role', role_id=r)
