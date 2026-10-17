@@ -1,0 +1,39 @@
+.ga-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-1);
+}
+
+.ga-field__label {
+  color: var(--ga-text-secondary);
+  font-size: var(--ga-fs-meta);
+  font-weight: 500;
+}
+
+.ga-field__input {
+  height: 32px;
+  padding: 0 var(--ga-sp-3);
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-input);
+  background: var(--ga-bg-sunken);
+  color: var(--ga-text-primary);
+  font-size: var(--ga-fs-base);
+}
+
+.ga-field__input:disabled {
+  opacity: 0.6;
+}
+
+.ga-field__input[aria-invalid="true"] {
+  border-color: var(--ga-danger);
+}
+
+.ga-field__hint {
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-field__error {
+  color: var(--ga-danger);
+  font-size: var(--ga-fs-meta);
+}

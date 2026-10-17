@@ -1,0 +1,65 @@
+.ga-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  height: 20px;
+  padding: 0 var(--ga-sp-2);
+  border-radius: var(--ga-r-input);
+  background: var(--ga-idle-soft);
+  color: var(--ga-idle);
+  font-size: var(--ga-fs-meta);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background 200ms var(--ga-ease),
+    color 200ms var(--ga-ease);
+}
+
+.ga-chip--ok {
+  background: var(--ga-ok-soft);
+  color: var(--ga-ok);
+}
+
+.ga-chip--info {
+  background: var(--ga-info-soft);
+  color: var(--ga-info);
+}
+
+.ga-chip--warn {
+  background: var(--ga-warn-soft);
+  color: var(--ga-warn);
+}
+
+.ga-chip--danger {
+  background: var(--ga-danger-soft);
+  color: var(--ga-danger);
+}
+
+.ga-chip--idle {
+  background: var(--ga-idle-soft);
+  color: var(--ga-idle);
+}
+
+/* Trọng thương: trạng thái con người, KHÔNG tô danger */
+.ga-chip--wound {
+  background: var(--ga-wound-bg);
+  color: var(--ga-wound-text);
+}
+
+.ga-chip--accent {
+  background: var(--ga-accent-soft);
+  color: var(--ga-accent);
+}
+
+.ga-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+/* chấm thở của "Đang chạy" (keyframes ga-breath ở tokens/base.css) */
+.ga-chip__dot--breath {
+  animation: ga-breath 2s ease-out infinite;
+}

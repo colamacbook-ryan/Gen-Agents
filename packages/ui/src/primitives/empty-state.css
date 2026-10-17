@@ -1,0 +1,37 @@
+.ga-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  max-width: 420px;
+  margin: 0 auto;
+  padding: var(--ga-sp-8) var(--ga-sp-4);
+  text-align: center;
+}
+
+.ga-empty__art {
+  color: var(--ga-text-muted);
+}
+
+/* một điểm ember duy nhất trong minh hoạ */
+.ga-empty__art .ga-empty__dot {
+  fill: var(--ga-accent);
+  stroke: none;
+}
+
+.ga-empty__title {
+  margin-top: var(--ga-sp-2);
+  color: var(--ga-text-primary);
+  font-family: var(--ga-font-serif);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.ga-empty__desc {
+  color: var(--ga-text-secondary);
+}
+
+.ga-empty__action {
+  margin-top: var(--ga-sp-2);
+}

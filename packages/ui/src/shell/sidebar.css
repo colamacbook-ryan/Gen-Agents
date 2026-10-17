@@ -1,0 +1,255 @@
+.ga-sidebar {
+  display: flex;
+  flex: 0 0 var(--ga-sidebar-w);
+  flex-direction: column;
+  width: var(--ga-sidebar-w);
+  padding: 0 var(--ga-sp-2) var(--ga-sp-2);
+  border-right: 1px solid var(--ga-border-subtle);
+  background: var(--ga-bg-surface);
+}
+
+.ga-sidebar--rail {
+  flex-basis: var(--ga-rail-w);
+  width: var(--ga-rail-w);
+}
+
+.ga-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: var(--ga-header-h);
+  padding: 0 var(--ga-sp-1);
+}
+
+.ga-sidebar__mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ga-r-input);
+  background: var(--ga-accent);
+}
+
+.ga-sidebar__mark::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--ga-on-accent);
+  transform: rotate(45deg);
+}
+
+.ga-sidebar__name {
+  font-size: var(--ga-fs-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ga-sidebar__ws {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  height: 24px;
+  margin-left: auto;
+  padding: 0 var(--ga-sp-2);
+  border: 0;
+  border-radius: var(--ga-r-input);
+  background: transparent;
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-sidebar__ws:hover {
+  background: var(--ga-border-subtle);
+  color: var(--ga-text-primary);
+}
+
+.ga-sidebar__groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-1);
+  margin-top: var(--ga-sp-1);
+}
+
+.ga-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: var(--ga-nav-item-h);
+  padding: 0 var(--ga-sp-2);
+  border-radius: var(--ga-r-control);
+  color: var(--ga-text-secondary);
+  text-decoration: none;
+}
+
+.ga-nav-item:hover {
+  background: var(--ga-bg-raised);
+  color: var(--ga-text-primary);
+}
+
+/* mục đang chọn: nền raised + vạch accent 2px bên trái (ngoại lệ có chủ đích của STD-07 §9) */
+.ga-nav-item[aria-current="page"] {
+  background: var(--ga-bg-raised);
+  box-shadow: inset 2px 0 0 var(--ga-accent);
+  color: var(--ga-text-primary);
+  font-weight: 500;
+}
+
+.ga-nav-item__count {
+  margin-left: auto;
+  color: var(--ga-text-muted);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.ga-nav-item__badge {
+  margin-left: auto;
+  color: var(--ga-accent);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-nav-item--disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ga-nav-item--disabled:hover {
+  background: transparent;
+  color: var(--ga-text-secondary);
+}
+
+.ga-nav-item__badge--muted {
+  color: var(--ga-text-muted);
+}
+
+.ga-nav-item__alert {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--ga-danger);
+}
+
+.ga-sidebar__rule {
+  height: 1px;
+  margin: var(--ga-sp-3) var(--ga-sp-1) var(--ga-sp-2);
+  background: var(--ga-border-subtle);
+}
+
+.ga-sidebar__label {
+  padding: var(--ga-sp-1) var(--ga-sp-2);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ga-pinned {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: var(--ga-row-h);
+  padding: 0 var(--ga-sp-2);
+  border-radius: var(--ga-r-control);
+  color: var(--ga-text-secondary);
+  text-decoration: none;
+}
+
+.ga-pinned:hover {
+  background: var(--ga-bg-raised);
+  color: var(--ga-text-primary);
+}
+
+.ga-pinned__code {
+  margin-left: auto;
+  color: var(--ga-text-muted);
+  font-family: var(--ga-font-mono);
+  font-size: 10px;
+}
+
+.ga-sidebar__empty {
+  padding: var(--ga-sp-1) var(--ga-sp-2);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-sidebar__bottom {
+  margin-top: auto;
+}
+
+.ga-sidebar__owner {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  padding: var(--ga-sp-1) var(--ga-sp-2);
+}
+
+.ga-sidebar__owner-avatar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--ga-border-strong);
+  border-radius: 50%;
+  background: var(--ga-border-subtle);
+  font-size: var(--ga-fs-micro);
+  font-weight: 600;
+}
+
+.ga-sidebar__owner-text {
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.ga-sidebar__owner-name {
+  overflow: hidden;
+  font-size: var(--ga-fs-meta);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ga-sidebar__version {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  color: var(--ga-text-secondary);
+  font-family: var(--ga-font-mono);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.ga-sidebar__version-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ga-accent);
+}
+
+.ga-sidebar__logout {
+  margin-left: auto;
+}
+
+/* thu gọn thành rail 56px: chỉ còn icon */
+.ga-sidebar--rail .ga-sidebar__name,
+.ga-sidebar--rail .ga-sidebar__ws,
+.ga-sidebar--rail .ga-nav-item__text,
+.ga-sidebar--rail .ga-nav-item__count,
+.ga-sidebar--rail .ga-nav-item__badge,
+.ga-sidebar--rail .ga-sidebar__label,
+.ga-sidebar--rail .ga-pinned__name,
+.ga-sidebar--rail .ga-pinned__code,
+.ga-sidebar--rail .ga-sidebar__owner-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

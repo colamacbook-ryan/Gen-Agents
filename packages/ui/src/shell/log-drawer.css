@@ -1,0 +1,36 @@
+.ga-logdrawer {
+  border-top: 1px solid var(--ga-border-subtle);
+  background: var(--ga-bg-surface);
+}
+
+.ga-logdrawer__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: var(--ga-row-h);
+  padding: 0 var(--ga-sp-4);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-logdrawer__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: 24px;
+  padding: 0 var(--ga-sp-2);
+  border: 0;
+  border-radius: var(--ga-r-input);
+  background: transparent;
+  color: var(--ga-text-secondary);
+}
+
+.ga-logdrawer__toggle:hover {
+  background: var(--ga-bg-raised);
+  color: var(--ga-text-primary);
+}
+
+.ga-logdrawer__body {
+  height: 240px;
+  border-top: 1px solid var(--ga-border-subtle);
+}

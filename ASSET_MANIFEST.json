@@ -1,5 +1,138 @@
 {
   "$comment": "Mọi asset (ảnh, font, âm thanh, tham số nhân vật trong skins/) phải có mục ở đây: nguồn + license + sha256 (STD-04 §6). Cổng: pnpm license:check. M0 chưa có asset; gói tam-quoc-chibi 1.0.0 vào ở M3 (L-CHIBI, BUILD-PLAN §D.5).",
   "version": 1,
-  "assets": []
+  "assets": [
+    {
+      "path": "apps/web/public/favicon.svg",
+      "source": "Afi Labs — tự vẽ (SVG, ô vuông accent + hình thoi, khớp mark của sidebar)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "042199686bd2a675ece37b618ad4b99ab45c4815f0de28155207b1ee22319efc"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-mono-latin-400-normal.woff2",
+      "source": "@fontsource/ibm-plex-mono@5.3.0 — IBM Plex Mono 400 latin (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-mono-latin-500-normal.woff2",
+      "source": "@fontsource/ibm-plex-mono@5.3.0 — IBM Plex Mono 500 latin (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "01d285447409c8a588692162439a038b8cbd7871309ee20267b0d2d91c6e8e22"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-mono-latin-ext-400-normal.woff2",
+      "source": "@fontsource/ibm-plex-mono@5.3.0 — IBM Plex Mono 400 latin-ext (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "6bc0f226a5b7884a8170e3f62c63d7675609d4631bdc5931b5cdab81821f00eb"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-mono-latin-ext-500-normal.woff2",
+      "source": "@fontsource/ibm-plex-mono@5.3.0 — IBM Plex Mono 500 latin-ext (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "6bb06407c97584b0867a959e05e8874693bfeb8c317de190811c51598f2d99ea"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-mono-vietnamese-400-normal.woff2",
+      "source": "@fontsource/ibm-plex-mono@5.3.0 — IBM Plex Mono 400 vietnamese (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "62632b6375305e70ddcafdd895218e6ae41a184fcd280a69c739460604ca00a9"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-mono-vietnamese-500-normal.woff2",
+      "source": "@fontsource/ibm-plex-mono@5.3.0 — IBM Plex Mono 500 vietnamese (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "781633d95de88040fb77141d1e65d928c87c0144691fbc74da5a64d137a7e910"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-latin-400-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 400 latin (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "3b646991d30055a93a4ecc499713d4347953a74a947ecab435ab72070cbdab0e"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-latin-500-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 500 latin (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "0717336fb31fcdcde4b8deb3675bb4a0f7f6d484864afcd6751ac29975962203"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-latin-600-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 600 latin (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "8960851d691c054ed38e259bdcf1a6190d157b4203ed5bb32c632a863fb8ec2f"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-latin-ext-400-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 400 latin-ext (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "c93d2a12aaa280f68b9ab7b726ff8dfedda67c99ef9abed047c1847a1cc6d583"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-latin-ext-500-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 500 latin-ext (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "2846035d85100f84c79393f80f1442d4ee720129ab8b3ffa8969aae281db8c6c"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-latin-ext-600-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 600 latin-ext (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "b25dfd4f979e442ae1e25cd0894463434cf01ba21ac1a35d39f4a82bd4cc060e"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-vietnamese-400-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 400 vietnamese (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "771538f7f26551bd13ab97d585de6ce7ebe3b432837999d5b743391b48f4946a"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-vietnamese-500-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 500 vietnamese (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "85ba3d9c2488a813bbf1d60da3a848bce4a97ac8c8a539289d8524aef6c471f9"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/ibm-plex-sans-vietnamese-600-normal.woff2",
+      "source": "@fontsource/ibm-plex-sans@5.3.0 — IBM Plex Sans 600 vietnamese (github.com/IBM/plex), tự host",
+      "license": "OFL-1.1",
+      "sha256": "5d34b803637befe3714d55d383d9149692c39838c8deb45c8cbdd43b0fd09b98"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/newsreader-latin-400-normal.woff2",
+      "source": "@fontsource/newsreader@5.3.0 — Newsreader 400 latin (github.com/productiontype/Newsreader), tự host",
+      "license": "OFL-1.1",
+      "sha256": "e66067814f1c672d33a457e4f4d102c818b481420e2234cf685ebdbf2f443904"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/newsreader-latin-500-normal.woff2",
+      "source": "@fontsource/newsreader@5.3.0 — Newsreader 500 latin (github.com/productiontype/Newsreader), tự host",
+      "license": "OFL-1.1",
+      "sha256": "5613e2fc8377392c02e8ac9d55014689fb5320a5f2a7be55e8088a314728ac2c"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/newsreader-latin-ext-400-normal.woff2",
+      "source": "@fontsource/newsreader@5.3.0 — Newsreader 400 latin-ext (github.com/productiontype/Newsreader), tự host",
+      "license": "OFL-1.1",
+      "sha256": "9d9350535facb67450976945ae249ab8ade73e4909deb3deaa756caa5e7dbb59"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/newsreader-latin-ext-500-normal.woff2",
+      "source": "@fontsource/newsreader@5.3.0 — Newsreader 500 latin-ext (github.com/productiontype/Newsreader), tự host",
+      "license": "OFL-1.1",
+      "sha256": "9b553af5de5ebba87ea66530fa0cc05a3e5ed68c4a051915af0bc21188a9df9c"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/newsreader-vietnamese-400-normal.woff2",
+      "source": "@fontsource/newsreader@5.3.0 — Newsreader 400 vietnamese (github.com/productiontype/Newsreader), tự host",
+      "license": "OFL-1.1",
+      "sha256": "8c86fceeb18a3edd641e9102f47450eebde912a3501368671b161e82fbf26e19"
+    },
+    {
+      "path": "packages/ui/src/tokens/fonts/newsreader-vietnamese-500-normal.woff2",
+      "source": "@fontsource/newsreader@5.3.0 — Newsreader 500 vietnamese (github.com/productiontype/Newsreader), tự host",
+      "license": "OFL-1.1",
+      "sha256": "f950f15b6fab6593349cdad92849419530bd4305d9a2edd4145cfc42d0c2c5a1"
+    }
+  ]
 }
