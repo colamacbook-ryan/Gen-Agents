@@ -150,10 +150,15 @@ const MUTANTS = [
     edits: [['    if (total > maxBytes) {', '    if (false) {']],
   },
   {
-    id: 'M11-no-password-change-gate',
-    desc: 'bỏ cổng must_change_password',
-    file: P,
-    edits: [['if (session.mustChangePassword && !allowedDuringPasswordChange(route)) {', 'if (false) {']],
+    id: 'M12-auth-locked-old-mapping',
+    desc: 'L-SEC: khoá tạm trả lại mã cũ ngoài hợp đồng (auth.rate_limited 429)',
+    file: 'apps/control-plane/src/auth/http.ts',
+    edits: [
+      [
+        "      return errorResponse(403, 'auth.locked', { retryAfterSeconds: f.retryAfterSeconds });",
+        "      return errorResponse(429, 'auth.rate_limited', { retryAfterSeconds: f.retryAfterSeconds });",
+      ],
+    ],
   },
 ];
 
