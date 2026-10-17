@@ -8,6 +8,15 @@ import { cliEnv, FAKES_DIR, lines, runCli, startCli, startMockMcp, tmp, waitFor 
 const data = (n: string) => readFileSync(join(FAKES_DIR, 'agy/dumps', n), 'utf8');
 const CANARY = /GA-CANARY-[0-9a-f-]{36}/;
 
+/** Help thật Spike 1b + đúng MỘT dòng giả định AGY-T03 (`--allowed-tools`, FAKE-ONLY) ngay sau `--agent`. */
+function helpWithAssumed(): string {
+  const real = data('help.txt');
+  const at = real.indexOf('\n', real.indexOf('  --agent ')) + 1;
+  const line =
+    '  --allowed-tools                 Only allow tools whose full name starts with this prefix (FAKE-ONLY, assumption AGY-T03)\n';
+  return real.slice(0, at) + line + real.slice(at);
+}
+
 function loggedInHome(): { home: string; env: NodeJS.ProcessEnv } {
   const home = tmp();
   const env = cliEnv(home);
@@ -16,11 +25,19 @@ function loggedInHome(): { home: string; env: NodeJS.ProcessEnv } {
 }
 
 describe('fake-agy: bề mặt lấy nguyên văn từ Spike 1b', () => {
+  it('help = help thật + đúng một dòng giả định AGY-T03 (bỏ dòng đó ⇒ trùng byte với Spike 1b)', async () => {
+    const outText = (await runCli('agy', ['--help'], { env: cliEnv(tmp()) })).stdout;
+    const extra = outText.split('\n').filter((l) => l.includes('FAKE-ONLY'));
+    expect(extra).toHaveLength(1);
+    expect(extra[0]).toMatch(/^ {2}--allowed-tools /);
+    expect(outText.replace(`${extra[0]}\n`, '')).toBe(data('help.txt'));
+  });
+
   it('--version / --help / help <sub> in đúng byte của dữ liệu', async () => {
     const env = cliEnv(tmp());
     expect((await runCli('agy', ['--version'], { env })).stdout).toBe(data('version.txt'));
-    expect((await runCli('agy', ['--help'], { env })).stdout).toBe(data('help.txt'));
-    expect((await runCli('agy', ['help'], { env })).stdout).toBe(data('help.txt'));
+    expect((await runCli('agy', ['--help'], { env })).stdout).toBe(helpWithAssumed());
+    expect((await runCli('agy', ['help'], { env })).stdout).toBe(helpWithAssumed());
     expect((await runCli('agy', ['help', 'models'], { env })).stdout).toBe(data('help-models.txt'));
     expect((await runCli('agy', ['models', '--help'], { env })).stdout).toBe(data('help-models.txt'));
     expect((await runCli('agy', ['mcp', 'add', '--help'], { env })).stdout).toBe(data('help-mcp-add.txt'));
@@ -30,7 +47,7 @@ describe('fake-agy: bề mặt lấy nguyên văn từ Spike 1b', () => {
   it('GA_FAKE_HELP_STREAM=stderr chuyển help sang stderr (stream thật chưa biết: ASSUMPTIONS AG-HELP-1)', async () => {
     const r = await runCli('agy', ['--help'], { env: cliEnv(tmp(), { GA_FAKE_HELP_STREAM: 'stderr' }) });
     expect(r.stdout).toBe('');
-    expect(r.stderr).toBe(data('help.txt'));
+    expect(r.stderr).toBe(helpWithAssumed());
   });
 
   it('agy models: chưa đăng nhập = exit 1 + câu "Please sign in" của Spike; đã đăng nhập = 11 dòng TSV', async () => {

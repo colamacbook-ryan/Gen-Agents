@@ -4,6 +4,7 @@
     { "path": "packages/chibi" },
     { "path": "packages/contracts" },
     { "path": "packages/db" },
+    { "path": "packages/engines" },
     { "path": "testing/fakes" }
   ]
 }

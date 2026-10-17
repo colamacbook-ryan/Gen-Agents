@@ -27,10 +27,26 @@ function die(code: number, msg: string): never {
 
 const printHelp = (text: string) => (env.GA_FAKE_HELP_STREAM === 'stderr' ? err(text) : out(text));
 
+/**
+ * GIẢ ĐỊNH AGY-T03 (adapter L-ENG, Gen duyệt 2026-10-16): cơ chế giới hạn công cụ `--allowed-tools <tiền tố>` — agy 1.3.5 THẬT
+ * KHÔNG có. CLI giả khai cờ này (một dòng chèn vào help thật, đánh dấu FAKE-ONLY) để IT chạy được lượt agy đã qua cổng
+ * engine_unrestricted của adapter. Spike 1c (M6) tìm cơ chế thật rồi sửa adapter + CLI giả cùng lúc.
+ */
+const ALLOWED_TOOLS_HELP_LINE =
+  '  --allowed-tools                 Only allow tools whose full name starts with this prefix (FAKE-ONLY, assumption AGY-T03)\n';
+
+/** Help thật của Spike 1b + dòng `--allowed-tools` (sau `--agent`, đúng thứ tự chữ cái như Go flag in). */
+function helpText(): string {
+  const real = data('help.txt');
+  const anchor = real.indexOf('\n', real.indexOf('  --agent ')) + 1;
+  return real.slice(0, anchor) + ALLOWED_TOOLS_HELP_LINE + real.slice(anchor);
+}
+
 // ---------------------------------------------------------------- cờ (kiểu Go flag: -x, --x, --x=v, --x v)
 const VALUE_FLAGS = new Set([
   '--add-dir',
   '--agent',
+  '--allowed-tools',
   '--conversation',
   '--effort',
   '--input-format',
@@ -101,7 +117,7 @@ function parseFlags(args: string[]): Parsed {
       flags.set(key, true);
     } else {
       err(`flag provided but not defined: ${name}\n`);
-      printHelp(data('help.txt'));
+      printHelp(helpText());
       process.exit(2);
     }
   }
@@ -364,7 +380,10 @@ async function runPrint(flags: Map<string, string | true>, promptArg: string): P
     emitError(fmt, toAgyError(r), conv, seconds());
   }
 
-  const tools = sc?.script ? await runToolScript(sc.script, pickMcpServer(mcpServers(), env), 'agy', env) : [];
+  // --allowed-tools (AGY-T03, giả định): chỉ công cụ có tên đầy đủ `mcp__<máy chủ>__<tool>` bắt đầu bằng tiền tố được gọi.
+  const allowed = flags.get('--allowed-tools');
+  const allow = (full: string) => typeof allowed !== 'string' || full.startsWith(allowed);
+  const tools = sc?.script ? await runToolScript(sc.script, pickMcpServer(mcpServers(), env), 'agy', env, allow) : [];
   const text = sc?.script?.reply ?? r.text;
   const outTok = approxTokens(text);
   const usage: Usage = {
@@ -507,7 +526,7 @@ async function modelsCommand(): Promise<void> {
 function subcommand(sub: string, args: string[]) {
   if (sub === 'help') {
     const topic = args[0];
-    if (!topic) return printHelp(data('help.txt'));
+    if (!topic) return printHelp(helpText());
     const f = HELP_FILES[topic];
     if (!f) die(2, `Unknown help topic "${topic}"`);
     return printHelp(data(f));
@@ -565,7 +584,7 @@ async function main(): Promise<void> {
     return out(`${v}\n`);
   }
   const { flags, rest } = parseFlags(argv);
-  if (flags.has('-h') || flags.has('--help') || flags.has('-help')) return printHelp(data('help.txt'));
+  if (flags.has('-h') || flags.has('--help') || flags.has('-help')) return printHelp(helpText());
   const sub = rest[0];
   if (sub && SUBCOMMANDS.includes(sub) && !flags.has('--print') && !flags.has('-p') && !flags.has('--prompt')) {
     return subcommand(sub, rest.slice(1));

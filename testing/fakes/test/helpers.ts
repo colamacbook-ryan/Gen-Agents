@@ -88,10 +88,13 @@ export async function waitFor(cond: () => boolean, ms = 5000, what = 'điều ki
 export interface MockMcp {
   url: string;
   calls: Array<{ name: string; args: unknown; authorization: string | undefined }>;
+  /** MỌI thông điệp nhận được (kể cả initialize / thông báo) — để ca âm "không gọi gì" kiểm được. */
+  methods: string[];
   close(): Promise<void>;
 }
 export async function startMockMcp(opts: { sse?: boolean } = {}): Promise<MockMcp> {
   const calls: MockMcp['calls'] = [];
+  const methods: string[] = [];
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
@@ -101,6 +104,7 @@ export async function startMockMcp(opts: { sse?: boolean } = {}): Promise<MockMc
         method: string;
         params?: { name?: string; arguments?: unknown };
       };
+      methods.push(msg.method);
       if (msg.id === undefined) {
         res.writeHead(202);
         return res.end();
@@ -136,6 +140,7 @@ export async function startMockMcp(opts: { sse?: boolean } = {}): Promise<MockMc
   return {
     url: `http://127.0.0.1:${port}/mcp`,
     calls,
+    methods,
     close: () =>
       new Promise<void>((r) => {
         server.close(() => r());
