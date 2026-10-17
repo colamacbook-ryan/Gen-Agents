@@ -2,7 +2,7 @@
 -- compat_min_app_version: 0.0.0
 -- expand_only: false
 -- breaking: baseline — trước v0.1.0 được sinh lại khi DB spec đổi; từ v0.1.0 forward-only (BUILD-PLAN §D.4)
--- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql @ Second-Brain 70903fd (DATABASE v2.3.2) — KHÔNG SỬA TAY.
+-- GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v2.3.5) — KHÔNG SỬA TAY.
 -- Chỉ bảng + index (+ bảng ảo FTS5). Trigger ở R__triggers.sql, view ở R__views.sql (CNS-157).
 
 -- @ga:object table workspaces
@@ -12,7 +12,7 @@ CREATE TABLE workspaces (
   slug TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   owner_user_id TEXT REFERENCES users(id),
-  short_code TEXT NOT NULL UNIQUE CHECK (length(short_code) = 4),
+  short_code TEXT NOT NULL UNIQUE CHECK (typeof(short_code) = 'text' AND length(short_code) = 4),
   locale TEXT NOT NULL DEFAULT 'vi',
   timezone TEXT NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
   currency_code TEXT NOT NULL DEFAULT 'GEN',
@@ -205,7 +205,7 @@ CREATE TABLE skin_assets (
   faction TEXT,
   file_path TEXT,
   mime TEXT CHECK (mime IS NULL OR mime IN ('image/png', 'image/jpeg', 'image/webp')),
-  sha256 TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
+  sha256 TEXT NOT NULL CHECK (typeof(sha256) = 'text' AND length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*' AND length(CAST(sha256 AS BLOB)) = length(sha256)),
   source TEXT NOT NULL CHECK (length(trim(source)) > 0),
   source_url TEXT,
   license TEXT NOT NULL CHECK (length(trim(license)) > 0),
@@ -480,7 +480,7 @@ CREATE TABLE taxonomy_nodes (
   parent_id TEXT REFERENCES taxonomy_nodes(id) DEFERRABLE INITIALLY DEFERRED,
   name TEXT NOT NULL,
   name_norm TEXT NOT NULL,
-  slug TEXT NOT NULL CHECK (length(slug) BETWEEN 1 AND 64),
+  slug TEXT NOT NULL CHECK (typeof(slug) = 'text' AND length(slug) BETWEEN 1 AND 64),
   description TEXT,
   ordinal INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'proposed', 'obsolete')),
@@ -509,7 +509,7 @@ CREATE TABLE skills (
   deleted_at TEXT,
   deleted_by TEXT REFERENCES actors(id),
   version INTEGER NOT NULL DEFAULT 1,
-  slug TEXT NOT NULL CHECK (length(slug) BETWEEN 1 AND 64),
+  slug TEXT NOT NULL CHECK (typeof(slug) = 'text' AND length(slug) BETWEEN 1 AND 64),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'proposed', 'obsolete')),
   origin TEXT NOT NULL CHECK (origin IN ('owner', 'trainer', 'imported', 'builtin')),
   current_version_id TEXT REFERENCES skill_versions(id) DEFERRABLE INITIALLY DEFERRED,
@@ -1140,6 +1140,7 @@ CREATE TABLE engine_installs (
   failure_reason TEXT CHECK (failure_reason IS NULL OR failure_reason IN ('domain_blocked', 'unsupported_arch', 'network', 'checksum_mismatch', 'unknown')),
   detail TEXT,
   checked_at TEXT,
+  tool_restriction_version TEXT,
   CHECK ((install_state = 'installed') = (installed_version IS NOT NULL)),
   CHECK ((install_state = 'failed') = (failure_reason IS NOT NULL))
 );
@@ -1161,7 +1162,7 @@ CREATE TABLE engine_accounts (
   label TEXT NOT NULL,
   auth_method TEXT NOT NULL CHECK (auth_method IN ('subscription', 'api_key', 'adc')),
   secret_id TEXT REFERENCES secrets(id),
-  auth_volume TEXT CHECK (auth_volume IS NULL OR (length(auth_volume) BETWEEN 3 AND 63 AND auth_volume NOT GLOB '*[^a-z0-9-]*')),
+  auth_volume TEXT CHECK (auth_volume IS NULL OR (typeof(auth_volume) = 'text' AND length(auth_volume) BETWEEN 3 AND 63 AND auth_volume NOT GLOB '*[^a-z0-9-]*' AND length(CAST(auth_volume AS BLOB)) = length(auth_volume))),
   account_hint TEXT,
   plan_label TEXT,
   plan_confidence TEXT CHECK (plan_confidence IS NULL OR plan_confidence IN ('direct', 'indirect', 'unknown')),
@@ -1492,9 +1493,9 @@ CREATE TABLE proactive_policies (
   version INTEGER NOT NULL DEFAULT 1,
   role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
   is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0, 1)),
-  max_per_day INTEGER NOT NULL DEFAULT 5 CHECK (max_per_day BETWEEN 0 AND 20),
-  quiet_start_min INTEGER NOT NULL CHECK (quiet_start_min BETWEEN 0 AND 1439),
-  quiet_end_min INTEGER NOT NULL CHECK (quiet_end_min BETWEEN 0 AND 1439),
+  max_per_day INTEGER NOT NULL DEFAULT 5 CHECK (typeof(max_per_day) = 'integer' AND max_per_day BETWEEN 0 AND 20),
+  quiet_start_min INTEGER NOT NULL CHECK (typeof(quiet_start_min) = 'integer' AND quiet_start_min BETWEEN 0 AND 1439),
+  quiet_end_min INTEGER NOT NULL CHECK (typeof(quiet_end_min) = 'integer' AND quiet_end_min BETWEEN 0 AND 1439),
   weekend_differs INTEGER NOT NULL DEFAULT 0 CHECK (weekend_differs IN (0, 1)),
   weekend_quiet_start_min INTEGER CHECK (weekend_quiet_start_min IS NULL OR weekend_quiet_start_min BETWEEN 0 AND 1439),
   weekend_quiet_end_min INTEGER CHECK (weekend_quiet_end_min IS NULL OR weekend_quiet_end_min BETWEEN 0 AND 1439),
@@ -2180,7 +2181,7 @@ CREATE TABLE secrets (
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'rotated', 'revoked')),
   rotated_from_id TEXT REFERENCES secrets(id) ON DELETE SET NULL,
   last_used_at TEXT,
-  allowed_host TEXT CHECK (allowed_host IS NULL OR (length(allowed_host) BETWEEN 1 AND 253 AND allowed_host NOT GLOB '*[^a-z0-9.:-]*')),
+  allowed_host TEXT CHECK (allowed_host IS NULL OR (typeof(allowed_host) = 'text' AND length(allowed_host) BETWEEN 1 AND 253 AND allowed_host NOT GLOB '*[^a-z0-9.:-]*' AND length(CAST(allowed_host AS BLOB)) = length(allowed_host) AND allowed_host NOT GLOB ':*' AND allowed_host NOT GLOB '*.' AND allowed_host NOT GLOB '*.:*' AND (allowed_host NOT GLOB '*:*' OR (substr(allowed_host, instr(allowed_host, ':') + 1) GLOB '[1-9]*' AND substr(allowed_host, instr(allowed_host, ':') + 1) NOT GLOB '*[^0-9]*' AND CAST(substr(allowed_host, instr(allowed_host, ':') + 1) AS INTEGER) <= 65535 AND substr(allowed_host, instr(allowed_host, ':') + 1) <> '443')))),
   CHECK ((kind = 'anchor_remote_token') = (allowed_host IS NOT NULL)),
   UNIQUE (workspace_id, display_seq)
 );
