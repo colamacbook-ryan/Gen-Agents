@@ -3,18 +3,25 @@
 // (2) tool "chỉ nhận anchor" được miễn quét trong khi slug anchor 40 ký tự vẫn chở được token chữ thường / hex.
 // CNS-169 (Gen quyết 2026-10-16): hex / UUID / đoạn thiếu một lớp ký tự CỐ Ý không chặn (trừ khi có tiền tố đã biết);
 // lần chặn ⇒ audit `credential.blocked` (cảnh báo owner), không phải harness.violation.
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   ANCHOR_GRID_TABLES,
   ANCHOR_SCREENS,
   Anchor,
+  boundedNfkc,
   CREDENTIAL_BLOCKED,
   CREDENTIAL_DETECTORS,
+  CREDENTIAL_KEY_NAME_MAX_CHARS,
   CREDENTIAL_PATTERN_IDS,
+  credentialKeyMatches,
   findCredentialLike,
   freeFormFields,
+  isCredentialKeyName,
   MCP_TOOLS,
+  normalizeCredentialName,
   PENALTY_EVIDENCE_ACTIONS,
   payloadLimitExceeded,
   SseEvent,
@@ -26,6 +33,12 @@ import {
 } from '../src/index.ts';
 
 const CANARY = 'GA-CANARY-3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11';
+
+/** Đường tệp đã theo dõi của repo (dữ liệu thật cho đo báo nhầm). */
+function listRepoFiles(): string[] {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  return execFileSync('git', ['-C', root, 'ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+}
 /**
  * Giá trị GIẢ dựng lúc chạy (luật lane: không để chuỗi giống credential nằm nguyên văn trong mã nguồn — gitleaks quét lịch
  * sử). `fake(n, bảng)` lặp bảng ký tự cho đủ n; `kv(tên, dấu, giá trị)` ghép phép gán.
@@ -33,6 +46,10 @@ const CANARY = 'GA-CANARY-3f2b9c1e-8d4a-4f6b-9a1c-2e7d5b8c0a11';
 const fake = (n: number, alphabet = '0123456789abcdef') =>
   Array.from({ length: n }, (_, i) => alphabet[(i * 7 + 3) % alphabet.length]).join('');
 const kv = (name: readonly string[], sep: string, value: string) => `${name.join('_')}${sep}${value}`;
+/** Chuỗi base64 chuẩn GIẢ, tất định, luôn có '+' và '/' (dựng lúc chạy). */
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const b64 = (n: number, salt = 0) =>
+  Array.from({ length: n }, (_, i) => (i === 7 ? '/' : i === 19 ? '+' : B64[(i * 37 + salt * 11 + 5) % 64])).join('');
 const FAKE_JWT = `eyJhbGciOiJIUzI1NiJ9.${'eyJzdWIiOiJ4In0'}.${'c2lnbmF0dXJlLXRlc3Q'}`;
 const FAKE_ACCESS = `ya29.${'A0ARrdaM-test-only-0123456789'}`;
 const ANCHOR = 'grid:skills/row:SK-0004/col:C';
@@ -119,7 +136,7 @@ describe('mọi tool đều bị quét — không có ngoại lệ', () => {
 describe('canary đủ dạng (STD-11 1.10)', () => {
   it('canary chữ hoa / chữ thường / hex hoa ⇒ denied qua mọi kiểu trường', () => {
     for (const c of [CANARY, CANARY.toLowerCase(), `GA-CANARY-${'3F2B9C1E8D4A4F6B'}`]) {
-      expect(screenToolPayload('send_telegram', { chatRef: 'c', text: c }).status, c).toBe('denied');
+      expect(screenToolPayload('send_telegram', { chatRef: 'AL-0001', text: c }).status, c).toBe('denied');
       expect(screenToolPayload('propose_change', { title: 't', items: [{ [c]: 1 }] }).status, `khoá ${c}`).toBe(
         'denied',
       );
@@ -271,7 +288,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
   });
 
   it('lần chặn ⇒ audit credential.blocked (cảnh báo owner), KHÔNG phải án phạt; không mang payload', () => {
-    const r = screenToolPayload('send_telegram', { chatRef: 'c', text: `token ${BLOCKED_TOKENS.highEntropy}` });
+    const r = screenToolPayload('send_telegram', { chatRef: 'AL-0001', text: `token ${BLOCKED_TOKENS.highEntropy}` });
     expect(r.status).toBe('denied');
     if (r.status !== 'denied' || r.code !== 'credential_like_payload') throw new Error('phải bị chặn');
     expect(r.audit).toEqual({
@@ -295,6 +312,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       'encoded_marker_flood',
       'credential_field_name',
       'too_deep',
+      'too_large',
     ]);
     expect(
       SseEvent.safeParse({
@@ -311,7 +329,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
     ).toBe(true);
   });
 
-  it('url_userinfo tách authority như parser URL: mật khẩu chứa " \' < > @, userinfo dài, username rỗng', () => {
+  it('url_userinfo xấp xỉ TRÊN parser WHATWG: ký tự lạ, userinfo dài, scheme đặc biệt không cần //, không cần ranh giới', () => {
     const pw = (x: string) => `${x}${fake(6, 'Pw9x')}`;
     for (const s of [
       `https://u:${pw('"')}@h/x`,
@@ -323,36 +341,70 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       `https://:${pw('')}@h`,
       `log: ftp://deploy:${pw('')}@files.internal:21/up`,
       `https://u:p\t${pw('')}@h`,
+      // TAB / LF / CR bị parser bỏ — kể cả giữa scheme
+      `ht\ntps://u:${pw('')}@h`,
+      `HTTPS://u:${pw('')}@h`,
+      // scheme đặc biệt: số gạch / gạch ngược tuỳ ý, kể cả không có
+      `https:\\\\u:${pw('')}@h`,
+      `https:/u:${pw('')}@h`,
+      `https:u:${pw('')}@h`,
+      `https:///u:${pw('')}@h`,
+      `wss:\\/u:${pw('')}@h`,
+      // scheme khác có //
+      `postgres://app:${pw('')}@db:5432/x`,
+      // review lần 3: ký tự scheme hợp lệ đứng trước scheme (fail-closed: không cần ranh giới trái)
+      `1.https://u:${pw('')}@h`,
+      `-https://u:${pw('')}@h`,
+      `x.ftp://u:${pw('')}@h`,
+      `xhttps:u:${pw('')}@h`,
+      `FILE:///u:${pw('')}@h`,
     ]) {
-      expect(findCredentialLike(s)?.patternId, s.slice(0, 60)).toBe('url_userinfo');
+      expect(findCredentialLike(s)?.patternId, JSON.stringify(s.slice(0, 60))).toBe('url_userinfo');
     }
     for (const s of [
       'https://u@h',
       'mailto:a@b',
+      'mailto:a:b@c',
+      'urn:x:y@z',
       'a:b@c',
       'https://h:8080/x@y',
       'https://u@h:8080',
       'https://h/a:b@c',
+      'x:/u:p@h',
+      'x:///u:p@h',
+      'https:\\h\\a:b@c',
+      'http: lỗi kết nối: xem log@server',
     ]) {
-      expect(findCredentialLike(s), s).toBeNull();
+      expect(findCredentialLike(s), JSON.stringify(s)).toBeNull();
     }
   });
 
-  it('url_userinfo ⊇ new URL(): mọi chuỗi URL hợp lệ có password khác rỗng đều bị bắt (corpus ngẫu nhiên tất định)', () => {
-    // Khoảng trắng (trừ TAB / LF / CR mà parser URL bỏ qua) kết thúc authority khi quét văn bản — corpus không chèn khoảng
-    // trắng vào userinfo (URL có khoảng trắng thô không đứng nguyên trong văn bản chạy).
+  it('url_userinfo ⊇ new URL(): mọi chuỗi có URL.password ≠ "" đều bị bắt (corpus tất định, đủ các dạng lệch)', () => {
+    // mulberry32 tất định (LCG 32-bit cho chuỗi ngẫu nhiên tương quan khi rút nhiều lần liên tiếp)
     let seed = 20261016;
     const rnd = () => {
-      seed = (seed * 1103515245 + 12345) >>> 0;
-      return seed / 4294967296;
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-    const ALPHA = 'abcXYZ019:@"\'<>%!$&()*+,;=~._-\t\n[]';
-    const pick = (n: number) => Array.from({ length: n }, () => ALPHA[Math.floor(rnd() * ALPHA.length)]).join('');
+    const one = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)] as T;
+    // không có khoảng trắng thô (xem chú thích hasUrlUserinfo); có TAB / LF / CR, \\, @, :, ký tự lạ
+    const ALPHA = 'abcXYZ019:@"\'<>%!$&()*+,;=~._-\t\n\r[]\\/';
+    const pick = (n: number) => Array.from({ length: n }, () => one([...ALPHA])).join('');
+    const withTab = (x: string) => {
+      if (rnd() < 0.8) return x;
+      const k = Math.floor(rnd() * (x.length + 1));
+      return `${x.slice(0, k)}${one(['\t', '\n', '\r'])}${x.slice(k)}`;
+    };
+    const SCHEMES = ['https', 'HTTPS', 'Http', 'http', 'ws', 'WSS', 'ftp', 'file', 'postgres', 'x-y', 'mailto', 'urn'];
+    const PREFIXES = ['', '', 'x.', 'a-', 'A+b.', 'z9'];
+    const SEPS = ['', '/', '//', '///', '\\', '\\\\', '/\\', '\\/', '//\\'];
     let withPassword = 0;
     const misses: string[] = [];
-    for (let k = 0; k < 20_000; k++) {
-      const scheme = ['https', 'http', 'ftp', 'postgres', 'x-y', 'ws'][Math.floor(rnd() * 6)];
-      const s = `${scheme}://${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${['', '/p', '?q=1', '#f', ':8080/x'][Math.floor(rnd() * 5)]}`;
+    for (let k = 0; k < 80_000; k++) {
+      const s = `${one(PREFIXES)}${withTab(one(SCHEMES))}:${one(SEPS)}${pick(Math.floor(rnd() * 12))}@${pick(Math.floor(rnd() * 3))}h${one(['', '/p', '?q=1', '#f', ':8080/x', '\\p'])}`;
       let u: URL;
       try {
         u = new URL(s);
@@ -363,8 +415,204 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       withPassword++;
       if (findCredentialLike(s) === null || findCredentialLike(`xem ${s} nhé`) === null) misses.push(JSON.stringify(s));
     }
-    expect(withPassword).toBeGreaterThan(500);
+    expect(withPassword).toBeGreaterThan(1500);
     expect(misses.slice(0, 5)).toEqual([]);
+  });
+
+  it('tên credential mọi kiểu viết (camel / kebab / snake / HOA) + giá trị hex / chữ thường ⇒ chặn (review tay M0)', () => {
+    const hex40 = fake(40);
+    const lower40 = fake(40, 'abcdefghijklmnopqrstuvwxyz');
+    // 8 ca lọt reviewer nêu (5 tên camel / kebab + 3 secret base64 có + /)
+    const leaks: unknown[] = [
+      { [['refresh', 'Token'].join('')]: hex40 },
+      { [['client', 'Secret'].join('')]: hex40 },
+      { [['access', 'Token'].join('')]: lower40 },
+      `${['api', 'key'].join('-')}: ${hex40}`,
+      `${['api', 'Secret'].join('')}=${hex40}`,
+      `aws secret: ${b64(40, 1)}`,
+      `"${b64(40, 2)}"`,
+      `K=${b64(44, 3)}`,
+    ];
+    for (const v of leaks) {
+      expect(findCredentialLike(v), JSON.stringify(v).slice(0, 70)).not.toBeNull();
+    }
+    for (const k of ['refreshToken', 'Refresh-Token', 'REFRESH_TOKEN', 'refresh__token', 'X-Api-Key', 'apiToken']) {
+      expect(isCredentialKeyName(k), k).toBe(true);
+      expect(findCredentialLike(`${k}=${hex40}`), k).not.toBeNull();
+    }
+    for (const k of ['refresh', 'token', 'tokenCount', 'apikeys', 'secretary', 'accessTokenCount']) {
+      expect(isCredentialKeyName(k), k).toBe(false);
+    }
+    expect(normalizeCredentialName('Refresh-Token')).toBe('refreshtoken');
+  });
+
+  it('khoá object chuẩn hoá ĐẦY ĐỦ: khoảng trắng, chấm, hai chấm, khoảng trắng cuối, fullwidth, hoa thường (MEDIUM)', () => {
+    const hex = fake(40);
+    const variants = [
+      'refresh token',
+      'refresh.token',
+      'refresh:token',
+      'refresh_token ',
+      ' refresh_token',
+      '\uff52\uff45\uff46\uff52\uff45\uff53\uff48_token',
+      'ReFrEsH-ToKeN',
+      'client/secret',
+      'API KEY',
+      'x.api.key',
+      'refresh\u2460token',
+      'access\u00adtoken',
+    ];
+    for (const k of variants) {
+      expect(isCredentialKeyName(k), JSON.stringify(k)).toBe(true);
+      expect(findCredentialLike({ [k]: hex })?.patternId, JSON.stringify(k)).toBe('credential_field_name');
+    }
+    expect(normalizeCredentialName('\uff52\uff45\uff46\uff52\uff45\uff53\uff48_Token')).toBe('refreshtoken');
+    // chuỗi thô: fullwidth được NFKC; ngữ pháp vế trái giữ nguyên ([_-]* giữa các phần)
+    expect(findCredentialLike(`\uff52\uff45\uff46\uff52\uff45\uff53\uff48_token=${hex}`)).not.toBeNull();
+    // trần trước chuẩn hoá: vượt trần ⇒ normalize ném, credentialKeyMatches fail-closed
+    const huge = 'a'.repeat(CREDENTIAL_KEY_NAME_MAX_CHARS + 1);
+    expect(() => normalizeCredentialName(huge)).toThrow(RangeError);
+    expect(credentialKeyMatches(huge, new Set(['x']))).toBe(true);
+    for (const k of ['refresh', 'token', 'tokens', 'apikeys', 'refresh token count', 'secret santa']) {
+      expect(isCredentialKeyName(k), k).toBe(false);
+    }
+  });
+
+  it('password / passwd: chỉ khớp dạng khoá hoặc phép gán có giá trị, không khớp từ trần trong câu văn', () => {
+    const v = fake(12, 'pAsS1w0rD');
+    for (const s of [
+      { password: 'x' },
+      { Passwd: v },
+      `password=${v}`,
+      `"password": "${v}"`,
+      `login with passwd: '${v}'`,
+    ]) {
+      expect(findCredentialLike(s), JSON.stringify(s)).not.toBeNull();
+    }
+    for (const s of [
+      'Quên password? Bấm "Đặt lại mật khẩu"',
+      'password: tối thiểu 12 ký tự',
+      'Đổi password mỗi 90 ngày, không dùng lại passwd cũ',
+      'the password field is required',
+      'password=****',
+      'password = short',
+    ]) {
+      expect(findCredentialLike(s), s).toBeNull();
+    }
+  });
+
+  it('superset: mọi khoá bản cũ của packages/security bắt (bỏ mọi ký tự ngoài a–z0–9, không NFKC) thì bản mới cũng bắt', () => {
+    // fixture = SENSITIVE_KEY_NAMES của packages/security @ d211309 / d39d676 (dạng đã chuẩn hoá cũ)
+    const OLD = [
+      'refreshtoken',
+      'accesstoken',
+      'idtoken',
+      'authtoken',
+      'sessiontoken',
+      'oauthtoken',
+      'token',
+      'clientsecret',
+      'secret',
+      'secretkey',
+      'privatekey',
+      'apikey',
+      'xapikey',
+      'password',
+      'passwd',
+      'authorization',
+      'proxyauthorization',
+      'bearer',
+      'cookie',
+      'setcookie',
+      'authcode',
+      'bearertoken',
+      'apisecret',
+      'apitoken',
+      'awssecretaccesskey',
+    ];
+    const oldNorm = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const set = new Set(OLD.map(normalizeCredentialName));
+    let seed = 11;
+    const rnd = () => {
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const JUNK = [
+      ' ',
+      '.',
+      ':',
+      '_',
+      '-',
+      '/',
+      '\u00a0',
+      '\u2460',
+      '\u00ad',
+      '\u200b',
+      '\uff3f',
+      '\u0130',
+      '\u212a',
+      '\u017f',
+      '9',
+    ];
+    let oldCaught = 0;
+    const misses: string[] = [];
+    for (let k = 0; k < 20_000; k++) {
+      const name = OLD[Math.floor(rnd() * OLD.length)] as string;
+      const key = [...name]
+        .map((c) => (rnd() < 0.3 ? c.toUpperCase() : c) + (rnd() < 0.15 ? JUNK[Math.floor(rnd() * JUNK.length)] : ''))
+        .join('');
+      if (!set.has(oldNorm(key))) continue;
+      oldCaught++;
+      if (!credentialKeyMatches(key, set)) misses.push(JSON.stringify(key));
+    }
+    expect(oldCaught).toBeGreaterThan(5000);
+    expect(misses.slice(0, 5)).toEqual([]);
+  });
+
+  it('base64_secret_run: bắt base64 có + / (≥ 99 % mẫu 40 ký tự); 0 báo nhầm trên đường tệp / URL thật', () => {
+    // độ phủ: 2 000 secret base64 40 ký tự ngẫu nhiên tất định, đủ '+' hoặc '/'
+    let seed = 7;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed / 4294967296;
+    };
+    let total = 0;
+    let caught = 0;
+    while (total < 2000) {
+      const v = Array.from({ length: 40 }, () => B64[Math.floor(rnd() * 64)]).join('');
+      if (!/[+/]/.test(v)) continue;
+      total++;
+      if (findCredentialLike(`k ${v} `) !== null) caught++;
+    }
+    expect(caught / total).toBeGreaterThanOrEqual(0.99);
+    // báo nhầm: mọi đường tệp của repo (tương đối + tuyệt đối) + URL GitHub / raw / có query dựng từ chúng + URL mẫu
+    const repoFiles = listRepoFiles();
+    const sha = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b';
+    const samples: string[] = [
+      'https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions',
+      'https://vnexpress.net/gia-vang-hom-nay-16-10-2026-4801234.html?utm_source=Facebook&utm_medium=Social&utm_campaign=Feed2026',
+      'https://www.npmjs.com/package/@biomejs/biome/v/2.5.15?activeTab=versions',
+      'https://stackoverflow.com/questions/12345678/how-to-escape-a-Forward-Slash-in-JavaScript-RegExp-2026',
+      '/usr/lib/node_modules/corepack/dist/lib/corepack.cjs:12345',
+      'C:/Users/RyanNguyen/AppData/Local/Programs/Microsoft VS Code/resources/app/out/vs/workbench/Workbench2026.js',
+      '/home/user/Second-Brain/01-projects/gen-agents/audit/CNS-2026-10-16-closure-m0.md',
+    ];
+    for (const f of repoFiles) {
+      samples.push(
+        f,
+        `/home/user/gen-agents/${f}`,
+        `https://github.com/example-org/gen-agents/blob/${sha}/${f}`,
+        `https://raw.githubusercontent.com/example-org/gen-agents/${sha}/${f}?token=&plain=1#L10-L20`,
+      );
+    }
+    const fp = samples.filter((x) => CREDENTIAL_DETECTORS.find((d) => d.id === 'base64_secret_run')?.test(x));
+    expect(samples.length).toBeGreaterThan(200);
+    expect(fp).toEqual([]);
+    // chuỗi base64 ngắn (< 40) không bắt
+    expect(findCredentialLike(`v=${b64(36)}`)).toBeNull();
   });
 
   it('npm / hf / GOCSPX / Bearer / URL có mật khẩu (L-SEC) — ca âm không bắt', () => {
@@ -416,6 +664,7 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
       google_oauth_client_secret: `GOCSPX-${fake(28, 'zX1cV2bN3m-_')}`,
       bearer_token: `Authorization: ${['Bear', 'er'].join('')} ${fake(24, 'abc.def~123+/=')}`,
       url_userinfo: `postgres://app:${fake(12, 'pAsS-w0rd')}@db.internal:5432/x`,
+      base64_secret_run: `secret ${b64(40)}`,
     };
     for (const p of CREDENTIAL_DETECTORS) expect(findCredentialLike(samples[p.id])?.patternId, p.id).toBe(p.id);
     expect(findCredentialLike({ Refresh_Token: 'bất kỳ' })).toEqual({ patternId: 'credential_field_name' });
@@ -426,18 +675,27 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
 
 // ---------------------------------------------------------------- STD-11 1.10: chặn kích thước trước khi quét + quét tuyến tính
 const MB = 1 << 20;
+/**
+ * Best of 3 runs; each run = min(wall time, this PROCESS's CPU time). On a shared machine (load ≫ number of cores) wall time
+ * stretches 10–100× while waiting for CPU ⇒ false reds (Gen 2026-10-17: load 18 on 4 cores, every case > 2 s). CPU time
+ * only measures work actually done. vitest runs each file in its own process (pool `forks`, the default) so
+ * `process.cpuUsage()` doesn't count other files.
+ */
 function fastest(fn: () => unknown): number {
   let best = Number.POSITIVE_INFINITY;
   for (let i = 0; i < 3; i++) {
+    const c0 = process.cpuUsage();
     const t0 = performance.now();
     fn();
-    best = Math.min(best, performance.now() - t0);
+    const wall = performance.now() - t0;
+    const c = process.cpuUsage(c0);
+    best = Math.min(best, wall, (c.user + c.system) / 1000);
   }
   return best;
 }
 
-// Trần thời gian chỉ để tách TUYẾN TÍNH (~10–30 ms / MiB cho cả bộ) khỏi SIÊU TUYẾN TÍNH (bậc hai trên 1 MiB ≈ 10^12 bước,
-// hàng phút): 200 ms chừa biên cho máy CI bận + vitest chạy song song nhiều tệp test, vẫn bắt được ReDoS với biên cực lớn.
+// The time cap only separates LINEAR (~10–30 ms / MiB for the whole set) from SUPER-LINEAR (quadratic on 1 MiB ≈ 10^12 steps,
+// minutes): 200 ms of CPU leaves ~7× headroom over the linear case and still catches ReDoS by a huge margin.
 // Ở runtime chuỗi không bao giờ tới 1 MiB: payloadLimitExceeded chặn > 16 KiB / chuỗi, > 64 KiB / payload TRƯỚC khi quét.
 const SCAN_BUDGET_MS = 200;
 
@@ -471,6 +729,18 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
     '://@ lặp': '://@'.repeat(Math.floor(MB / 4)),
     ':// + 1 MiB TAB/LF': `://${'\t\n'.repeat(MB / 2)}`,
     ':/:/ lặp (gần ://)': ':/:/'.repeat(Math.floor(MB / 4)),
+    'a: lặp': 'a:'.repeat(MB / 2),
+    '://a: lặp': '://a:'.repeat(Math.floor(MB / 5)),
+    '://a:@ lặp (mỗi authority có @)': ' ://a@'.repeat(Math.floor(MB / 6)),
+    'httpS:ftp:wss: lặp': 'httpS:ftp:wss:'.repeat(Math.floor(MB / 14)),
+    'https: lặp (authority lồng nhau)': 'https:'.repeat(Math.floor(MB / 6)),
+    'https:a:@ lặp': 'https:a:@'.repeat(Math.floor(MB / 9)),
+    'https: + 1 MiB gạch': `https:${'/'.repeat(MB)}`,
+    'x// lặp': 'x://'.repeat(Math.floor(MB / 4)),
+    'TAB lặp giữa scheme': 'ht\ttps:'.repeat(Math.floor(MB / 8)),
+    'base64 1 MiB (+ / thưa, ít đổi lớp)': `${'aaaaAAAA1111/'.repeat(Math.floor(MB / 13))}`,
+    'base64 đoạn 39 lặp': `${'Ab1+'.repeat(9)}Ab1 `.repeat(Math.floor(MB / 40)),
+    'refresh-_-token lặp': 'refresh-_-_-_-'.repeat(Math.floor(MB / 14)),
     '://u:p lặp (không @)': '://u:pppppppppp '.repeat(Math.floor(MB / 16)),
     'Bearer lặp': 'Bearer '.repeat(Math.floor(MB / 7)),
     'bearer + 1 MiB tab': `bearer${'\t'.repeat(MB)}`,
@@ -483,10 +753,58 @@ describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dư�
   };
   for (const [name, str] of Object.entries(adversarial)) {
     it(name, () => {
-      const ms = fastest(() => findCredentialLike(str));
+      // gọi THẲNG từng bộ phát hiện (findCredentialLike từ chối chuỗi > trần trước khi quét — xem 'NFKC có trần')
+      const ms = fastest(() => CREDENTIAL_DETECTORS.map((d) => d.test(str)));
       expect(ms, `${name}: ${ms.toFixed(1)} ms`).toBeLessThan(SCAN_BUDGET_MS);
     });
   }
+});
+
+describe('NFKC có trần (DoS: U+FDFA nở 18×)', () => {
+  const FDFA = '\ufdfa';
+  it('100 K ký tự U+FDFA trong value ⇒ denied payload_too_large, < 250 ms (cả khi gọi thẳng findCredentialLike)', () => {
+    const big = FDFA.repeat(100_000);
+    let r: ReturnType<typeof screenToolPayload> | undefined;
+    const ms = fastest(() => {
+      r = screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: big });
+    });
+    expect(r).toMatchObject({ status: 'denied', code: 'payload_too_large' });
+    expect(ms).toBeLessThan(250);
+    let hit: ReturnType<typeof findCredentialLike> = null;
+    const ms2 = fastest(() => {
+      hit = findCredentialLike({ v: big });
+    });
+    expect(hit).toEqual({ patternId: 'too_large' });
+    expect(ms2).toBeLessThan(250);
+  });
+
+  it('chuỗi nằm TRONG trần ký tự nhưng phình quá trần sau NFKC ⇒ payload_too_large, < 250 ms', () => {
+    const atCap = FDFA.repeat(TOOL_PAYLOAD_LIMITS.maxStringChars);
+    let r: ReturnType<typeof screenToolPayload> | undefined;
+    const ms = fastest(() => {
+      r = screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: atCap });
+    });
+    expect(r).toMatchObject({ status: 'denied', code: 'payload_too_large' });
+    expect(ms).toBeLessThan(250);
+    expect(boundedNfkc(FDFA.repeat(1000))).toBeNull();
+    // khoá object phình: khớp (fail-closed), normalizeCredentialName ném
+    const key = FDFA.repeat(2000);
+    expect(isCredentialKeyName(key)).toBe(true);
+    expect(() => normalizeCredentialName(key)).toThrow(RangeError);
+    expect(findCredentialLike({ [key]: 1 })).toEqual({ patternId: 'credential_field_name' });
+  });
+
+  it('văn bản tiếng Việt có dấu sát trần KHÔNG bị coi là phình (NFKC giữ nguyên); NFKC theo khúc = NFKC cả chuỗi', () => {
+    const vi = 'Đổi mật khẩu xong rồi nhé, kiểm tra giúp ở trang cài đặt. '
+      .repeat(400)
+      .slice(0, TOOL_PAYLOAD_LIMITS.maxStringChars);
+    expect(screenToolPayload('propose_edit', { anchor: ANCHOR, newValue: vi }).status).toBe('ok');
+    const mixed = Array.from(
+      { length: 12_000 },
+      (_, i) => ['\uff41', 'ệ', 'x', '\u2460', '\ud835\udc00', ' '][i % 6],
+    ).join('');
+    expect(boundedNfkc(mixed, 1_000_000)).toBe(mixed.normalize('NFKC'));
+  });
 });
 
 describe('chặn kích thước TRƯỚC khi quét', () => {

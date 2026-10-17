@@ -111,18 +111,16 @@ describe('write(actor, fn)', () => {
     expect(() => systemActorId(conn, TENANT_WS, 'scheduler')).toThrow(ConnectionContractError);
   });
 
-  // Bật khi DB vendor có app_actor (v2.3.3+): guard chung chặn ghi không qua write() và *_by lệch actor.
-  it.runIf(SYNC.appFunctions.includes('app_actor'))(
-    'DB ≥ v2.3.3: ghi không qua write() hoặc *_by lệch actor ⇒ bị chặn',
-    () => {
-      expect(() =>
-        conn.db
-          .prepare(POS('01JP0S00000000000000000005', 5, TENANT_ACTOR).sql)
-          .run(...POS('01JP0S00000000000000000005', 5, TENANT_ACTOR).parameters),
-      ).toThrow();
-      expect(() => conn.write(SYS_ACTOR, (w) => w.run(POS('01JP0S00000000000000000006', 6, TENANT_ACTOR)))).toThrow();
-      conn.write(TENANT_ACTOR, (w) => w.run(POS('01JP0S00000000000000000007', 7, TENANT_ACTOR)));
-      expect(count(conn, 'SELECT count(*) FROM positions')).toBe(1);
-    },
-  );
+  // DB ≥ v2.3.3 (nay v2.3.4, nguồn = repo): guard chung chặn ghi không qua write() và *_by lệch actor — luôn chạy (không còn runIf).
+  it('DB ≥ v2.3.3: ghi không qua write() hoặc *_by lệch actor ⇒ bị chặn', () => {
+    expect(SYNC.appFunctions).toContain('app_actor');
+    expect(() =>
+      conn.db
+        .prepare(POS('01JP0S00000000000000000005', 5, TENANT_ACTOR).sql)
+        .run(...POS('01JP0S00000000000000000005', 5, TENANT_ACTOR).parameters),
+    ).toThrow();
+    expect(() => conn.write(SYS_ACTOR, (w) => w.run(POS('01JP0S00000000000000000006', 6, TENANT_ACTOR)))).toThrow();
+    conn.write(TENANT_ACTOR, (w) => w.run(POS('01JP0S00000000000000000007', 7, TENANT_ACTOR)));
+    expect(count(conn, 'SELECT count(*) FROM positions')).toBe(1);
+  });
 });

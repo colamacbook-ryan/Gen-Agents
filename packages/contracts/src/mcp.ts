@@ -152,7 +152,11 @@ export const ToolArgs = {
     /** Role tự khai chưa chắc (nguồn chat_messages.certainty / avatar 'unsure', G-13). */
     certainty: z.enum(CERTAINTY_LEVELS).nullable(),
   }),
-  send_telegram: z.strictObject({ chatRef: z.string().min(1), text: z.string().min(1).max(4096) }),
+  /**
+   * chatRef = display_id của một hàng telegram_allowlist (AL-…) — gateway tự tra chat_id từ allowlist, KHÔNG BAO GIỜ nhận
+   * chat_id / username từ Role (review tay M0, LOW: không định tuyến bằng chuỗi tự do).
+   */
+  send_telegram: z.strictObject({ chatRef: z.string().regex(/^AL-\d{4,8}$/), text: z.string().min(1).max(4096) }),
   propose_change: z.strictObject({ title: z.string().min(1).max(200), items: z.array(z.json()).min(1) }),
   highlight: z.strictObject({ anchor: Anchor, label: z.string().max(120).nullable() }),
   navigate: z.strictObject({ anchor: Anchor }),
@@ -382,9 +386,91 @@ export const CREDENTIAL_KEY_NAMES = [
   'api_key',
   'apikey',
   'x-api-key',
+  'api_secret',
+  'api_token',
   'aws_secret_access_key',
+  // L-RT / L-SEC đề xuất (Gen duyệt): chỉ khớp ở dạng KHOÁ object hoặc PHÉP GÁN có giá trị ≥ 8 ký tự — không khớp từ trần
+  // trong câu văn ("quên password?", "password: tối thiểu 12 ký tự" không bị chặn; test đo trên văn bản thật của repo).
+  'password',
+  'passwd',
 ] as const;
-const CREDENTIAL_NAMES_ALT = CREDENTIAL_KEY_NAMES.map((n) => n.replace('-', '\\-')).join('|');
+
+/** Trần độ dài tên khoá TRƯỚC khi chuẩn hoá (= trần một chuỗi của payload, đã chặn trước khi quét). */
+export const CREDENTIAL_KEY_NAME_MAX_CHARS = TOOL_PAYLOAD_LIMITS.maxStringChars;
+
+/** Trần độ dài SAU NFKC của một chuỗi được quét (NFKC có thể nở một ký tự thành tới 18, vd U+FDFA). */
+export const NFKC_MAX_CHARS = TOOL_PAYLOAD_LIMITS.maxStringChars;
+const NFKC_CHUNK = 2048;
+
+/**
+ * NFKC có trần (security review: DoS — chuỗi đã qua trần kích thước vẫn phình tới 18× rồi bị quét): chuẩn hoá theo từng
+ * khúc ≤ 2 048 code unit (không cắt đôi cặp surrogate), cộng dồn độ dài và DỪNG ngay khi vượt `max` ⇒ trả null (người gọi
+ * coi là too_large, fail-closed). Việc làm ≤ max + 18 × khúc. Tính đúng độ dài thật (không ước lượng bi quan) ⇒ văn bản
+ * tiếng Việt có dấu (NFKC giữ nguyên) không bị từ chối nhầm. Ghép khúc có thể khác NFKC cả chuỗi ở chỗ khúc cắt giữa một
+ * chuỗi ký tự tổ hợp — không ảnh hưởng tên credential (ASCII sau NFKC, ký tự fullwidth chuẩn hoá độc lập từng ký tự).
+ */
+export function boundedNfkc(s: string, max: number = NFKC_MAX_CHARS): string | null {
+  if (!/[^\t\n\r\x20-\x7e]/.test(s)) return s.length > max ? null : s; // ASCII: NFKC giữ nguyên
+  const parts: string[] = [];
+  let total = 0;
+  for (let i = 0; i < s.length; ) {
+    let end = Math.min(s.length, i + NFKC_CHUNK);
+    const last = s.charCodeAt(end - 1);
+    if (end < s.length && last >= 0xd800 && last <= 0xdbff) end--; // không tách cặp surrogate
+    const part = s.slice(i, end).normalize('NFKC');
+    total += part.length;
+    if (total > max) return null;
+    parts.push(part);
+    i = end;
+  }
+  return parts.join('');
+}
+
+/**
+ * Chuẩn hoá tên khoá — MỘT nguồn cho contracts và @ga/security (security review MEDIUM: bản chỉ bỏ `_` / `-` làm lọt
+ * `"refresh token"`, `"refresh.token"`, `"refresh:token"`, `"refresh_token "`, fullwidth `\uff52\uff45…_token`):
+ *   NFKC (fullwidth / ký tự tương thích → ASCII) → chữ thường → bỏ MỌI ký tự ngoài a–z0–9.
+ * Tên dài hơn CREDENTIAL_KEY_NAME_MAX_CHARS ⇒ RangeError (người gọi chặn kích thước trước — xem credentialKeyMatches).
+ */
+export function normalizeCredentialName(name: string): string {
+  if (name.length > CREDENTIAL_KEY_NAME_MAX_CHARS) throw new RangeError('tên khoá vượt trần trước khi chuẩn hoá');
+  const nf = boundedNfkc(name);
+  if (nf === null) throw new RangeError('tên khoá vượt trần sau NFKC');
+  return nf.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Dạng chuẩn hoá KHÔNG NFKC (= bản cũ của packages/security) — giữ để bản mới ⊇ bản cũ (vd `refresh①token`). */
+function plainCredentialName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Khoá object có thuộc tập tên (đã chuẩn hoá bằng normalizeCredentialName) không — so CẢ dạng NFKC lẫn dạng cũ ⇒ không hẹp
+ * hơn bản nào. Vượt trần ⇒ coi là khớp (fail-closed). @ga/security dùng hàm này với tập tên của mình.
+ */
+export function credentialKeyMatches(key: string, normalizedNames: ReadonlySet<string>): boolean {
+  if (key.length > CREDENTIAL_KEY_NAME_MAX_CHARS) return true;
+  const nf = boundedNfkc(key);
+  if (nf === null) return true; // phình quá trần sau NFKC ⇒ khớp (fail-closed)
+  return (
+    normalizedNames.has(nf.toLowerCase().replace(/[^a-z0-9]/g, '')) || normalizedNames.has(plainCredentialName(key))
+  );
+}
+
+export const CREDENTIAL_KEY_NAMES_NORMALIZED: ReadonlySet<string> = new Set(
+  CREDENTIAL_KEY_NAMES.map(normalizeCredentialName),
+);
+
+/**
+ * Vế trái của phép gán trong CHUỖI THÔ chỉ khớp theo ngữ pháp `[_-]*` giữa các phần (không mở rộng ra mọi dấu câu — tránh
+ * báo nhầm câu văn), không phân biệt hoa thường; chuỗi có ký tự ngoài ASCII được thử thêm bản NFKC (fullwidth…).
+ */
+const CREDENTIAL_NAMES_ALT = [...CREDENTIAL_KEY_NAMES_NORMALIZED]
+  .map((n) => {
+    const raw = CREDENTIAL_KEY_NAMES.find((k) => normalizeCredentialName(k) === n) as string;
+    return raw.split(/[_-]/).join('[_-]*');
+  })
+  .join('|');
 
 /**
  * Chuỗi thô chứa phép gán credential (security review L-RT — parser-differential: khoá JSON NHÚNG trong chuỗi, vd log
@@ -397,6 +483,17 @@ const CREDENTIAL_ASSIGNMENT_RE = new RegExp(
 );
 
 /**
+ * Thử regex trên chuỗi, và trên bản NFKC CÓ TRẦN nếu chuỗi có ký tự ngoài ASCII (fullwidth / ký tự tương thích → ASCII).
+ * Vượt trần sau NFKC ⇒ true (fail-closed; findCredentialLike đã trả too_large trước khi tới đây).
+ */
+function testWithNfkc(s: string, re: RegExp): boolean {
+  if (re.test(s)) return true;
+  if (!/[^\t\n\r\x20-\x7e]/.test(s)) return false;
+  const nf = boundedNfkc(s);
+  return nf === null || re.test(nf);
+}
+
+/**
  * Đoạn token tối đại ≥ 32: lookbehind MỘT ký tự (không quantifier) ⇒ chỉ thử ở ĐẦU đoạn, mỗi đoạn quét một lần (nhanh ~3×
  * so với thử ở mọi vị trí trên chuỗi nhiều đoạn ngắn); lastIndex nhảy qua cả đoạn ⇒ tuyến tính.
  */
@@ -404,10 +501,12 @@ const LONG_TOKEN_RUN_RE = /(?<![0-9A-Za-z_-])[0-9A-Za-z_-]{32,}/g;
 
 /**
  * Đoạn token liền ≥ 32 ký tự có CẢ chữ hoa, chữ thường VÀ chữ số (Gen quyết 2026-10-16, CNS-169). Đoạn chỉ gồm chữ số hex
- * + '-' (hex mọi độ dài / hoa thường, UUID) KHÔNG bị chặn — mã commit, checksum, UUID là dữ liệu làm việc hợp lệ.
- * Miễn hex vì CNS-169 (commit hash / checksum là dữ liệu lõi của agent code; sink MCP do owner kiểm soát; lối ra ngoài
- * qua egress allowlist). Chỗ key hex / chữ thường hay nằm được BÙ bằng `credential_assignment` (tên credential + gán) và
- * `env_secret_assignment` (dòng kiểu `.env`: `ABC_SECRET=…`, `X_API_KEY=…`).
+ * + '-' (hex mọi độ dài / hoa thường, UUID) KHÔNG bị chặn — mã commit, checksum, UUID là dữ liệu làm việc hợp lệ (sink MCP
+ * do owner kiểm soát; lối ra ngoài qua egress allowlist).
+ * Phần bù cho key hex / chữ thường: chỉ khi nó đứng cạnh TÊN — `credential_assignment` (tên credential mọi kiểu viết
+ * snake / camel / kebab + `:` / `=` + ≥ 8 ký tự), khoá object tên credential (`credential_field_name`, cùng chuẩn hoá) và
+ * `env_secret_assignment` (`ABC_SECRET=…`). Secret base64 có `+` / `/` (bị cắt thành đoạn ngắn ở đây) do `base64_secret_run`.
+ * KHÔNG bù (rủi ro chấp nhận theo CNS-169): key hex / chỉ chữ thường đứng một mình, không tên, không tiền tố hãng.
  */
 function hasHighEntropyRun(s: string): boolean {
   const re = LONG_TOKEN_RUN_RE;
@@ -436,32 +535,104 @@ function isJsSpace(c: number): boolean {
   );
 }
 
+/** Ứng viên A: scheme đặc biệt ở BẤT KỲ đâu (không cần ranh giới trái) — alternation chuỗi cố định, không quantifier. */
+const SPECIAL_SCHEME_ANYWHERE_RE = /(?:https?|wss?|ftp|file):/gi;
+
 /**
- * Mật khẩu trong URL `scheme://user:password@host` — tách authority NHƯ parser URL (security review, parser-differential:
- * bản regex cũ loại `"'<>` và có trần 1024 ⇒ mật khẩu chứa `"` / `<` hay userinfo dài lọt, trong khi `new URL()` vẫn coi
- * là userinfo). Sau mỗi `://`: authority kéo tới ký tự đầu tiên trong `/ ? #` hoặc khoảng trắng (TAB / LF / CR bị parser URL
- * bỏ qua ⇒ đi xuyên qua); có `@` và đoạn trước `@` CUỐI CÙNG chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng). Một lượt duyệt mỗi
- * authority, các authority không chồng nhau ⇒ tuyến tính (kích thước đã chặn trước khi quét).
+ * Mật khẩu trong URL — XẤP XỈ TRÊN parser WHATWG (fail-closed, Gen quyết sau ba vòng review parser-differential: mô phỏng
+ * đúng từng nhánh của parser thì lỗ nào cũng phải vá riêng ⇒ chặn RỘNG hơn parser, không bao giờ hẹp hơn):
+ *   1. bỏ mọi TAB / LF / CR (parser URL bỏ trước khi parse; trần kích thước đã đặt trước bước này);
+ *   2. ứng viên A — mọi `http: https: ws: wss: ftp: file:` (không phân biệt hoa thường, KHÔNG cần ranh giới trái:
+ *      `1.https:`, `-https:`, `x.ftp:` vẫn là ứng viên): bỏ qua `[/\\]*`, authority tới ký tự đầu tiên trong `/ \\ ? #` hoặc
+ *      khoảng trắng;
+ *   3. ứng viên B — mọi `://` (scheme bất kỳ): authority tới ký tự đầu tiên trong `/ ? #` hoặc khoảng trắng;
+ *   4. authority có `@` và đoạn trước `@` CUỐI chứa `:` ⇒ bắt (tên đăng nhập có thể rỗng).
+ * Báo nhầm tăng nhẹ được chấp nhận (dòng chứa `user:pass@` sau một scheme). Khoảng trắng kết thúc authority (quét văn bản).
+ * Tuyến tính: authority của ứng viên B không chồng nhau; ứng viên A nằm trong authority đã quét (không khớp) của ứng viên A
+ * trước thì nhảy qua (không thể khớp) ⇒ mỗi ký tự được quét tối đa một lần cho A và một lần cho B (`https:https:…`, `://a:`).
  */
-function hasUrlUserinfo(s: string): boolean {
-  let from = 0;
-  for (;;) {
-    const at = s.indexOf('://', from);
-    if (at < 0) return false;
+function hasUrlUserinfo(raw: string): boolean {
+  if (!raw.includes('@') || !raw.includes(':')) return false;
+  const s = /[\t\n\r]/.test(raw) ? raw.replace(/[\t\n\r]/g, '') : raw;
+  const n = s.length;
+  /** Quét authority [start, …) tới ký tự dừng; trả [khớp?, vị trí dừng]. `backslash` = '\\' cũng dừng (ứng viên A). */
+  const scan = (start: number, backslash: boolean): [boolean, number] => {
     let firstColon = -1;
     let lastAt = -1;
-    let i = at + 3;
-    for (; i < s.length; i++) {
+    let i = start;
+    for (; i < n; i++) {
       const c = s.charCodeAt(i);
-      if (c === 9 || c === 10 || c === 13) continue;
-      if (c === 47 || c === 63 || c === 35 || isJsSpace(c)) break;
-      if (c === 58 && firstColon < 0) firstColon = i;
-      else if (c === 64) lastAt = i;
+      if (c === 47 || c === 63 || c === 35 || (backslash && c === 92)) break;
+      if ((c <= 32 || c >= 127) && isJsSpace(c)) break;
+      if (c === 58) {
+        if (firstColon < 0) firstColon = i;
+      } else if (c === 64) lastAt = i;
     }
-    if (lastAt >= 0 && firstColon >= 0 && firstColon < lastAt) return true;
-    // `://` kế tiếp nằm SAU authority này (authority không chứa '/'), trừ khi nó bắt đầu ngay tại ký tự dừng
-    from = Math.max(at + 1, i - 1);
+    return [firstColon >= 0 && firstColon < lastAt, i];
+  };
+  // A: ứng viên nằm TRONG authority đã quét không khớp của ứng viên A trước (cùng tập dừng) cũng không thể khớp — ':' đầu
+  // tiên của nó không sớm hơn, '@' cuối không muộn hơn ⇒ nhảy qua; ứng viên có gạch ngay sau ':' bắt đầu SAU vị trí dừng.
+  const re = SPECIAL_SCHEME_ANYWHERE_RE;
+  re.lastIndex = 0;
+  let doneA = 0;
+  for (let m = re.exec(s); m !== null; m = re.exec(s)) {
+    let i = m.index + m[0].length;
+    while (i < n && (s.charCodeAt(i) === 47 || s.charCodeAt(i) === 92)) i++;
+    re.lastIndex = m.index + 1;
+    if (i < doneA) continue;
+    const [hit, end] = scan(i, true);
+    if (hit) return true;
+    doneA = end;
   }
+  // B: authority của các `://` không chồng nhau (authority dừng ở '/', mà `://` kế tiếp chứa '/')
+  for (let at = s.indexOf('://'); at >= 0; at = s.indexOf('://', at + 1)) {
+    const [hit, end] = scan(at + 3, false);
+    if (hit) return true;
+    if (end > at + 3) at = end - 3;
+  }
+  return false;
+}
+
+/** Đoạn tối đại trên lớp base64 [A-Za-z0-9+/=_-] ≥ 40 (lookbehind một ký tự ⇒ chỉ thử ở đầu đoạn, tuyến tính). */
+const BASE64_RUN_RE = /(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/=_-]{40,}/g;
+
+/**
+ * Secret base64 chuẩn có `+` / `/` (vd secret 40 ký tự kiểu AWS) — high_entropy_run không thấy vì `+` / `/` cắt nó thành
+ * đoạn < 32 (review tay M0, LOW: ~58 % mẫu 40 ký tự lọt). Bắt khi đoạn [A-Za-z0-9+/=_-] ≥ 40 có `+` hoặc `/` VÀ có một
+ * đoạn con giữa hai `/` dài ≥ 10, đủ hoa + thường + số, có chữ ngoài hex, mật độ đổi lớp (hoa ↔ thường ↔ số giữa hai ký tự
+ * chữ / số liền kề) ≥ 1/4. Base64 ngẫu nhiên đổi lớp ~65 %; đoạn của đường dẫn / URL là từ / mã (`ASSET_MANIFEST`,
+ * `CNS-2026-10-15-coreagent-r5`, đổi lớp < 10 %) hoặc mã commit hex. Đo: 99,73 % secret base64 40 ký tự có + / bị chặn
+ * (cùng các detector khác); 0 báo nhầm trên 2 168 đường tệp + URL GitHub / raw (repo này + Second-Brain). Lần đo đầu
+ * (mật độ tính trên CẢ đoạn) báo nhầm 24 URL chứa mã commit ⇒ đổi sang tính theo đoạn con. Một lượt mỗi đoạn ⇒ tuyến tính.
+ */
+function hasBase64SecretRun(s: string): boolean {
+  const re = BASE64_RUN_RE;
+  re.lastIndex = 0;
+  for (let m = re.exec(s); m !== null; m = re.exec(s)) {
+    const r = m[0];
+    if (!/[+/]/.test(r)) continue;
+    // đường dẫn / URL: mỗi đoạn giữa '/' là từ / mã (ít đổi lớp) hoặc hex — base64 có đoạn ≥ 10 đổi lớp dày, đủ 3 lớp
+    for (const seg of r.split('/')) if (seg.length >= 10 && isBase64LikeSegment(seg)) return true;
+  }
+  return false;
+}
+
+/** Đủ hoa + thường + số, có chữ ngoài hex, và ≥ 1/4 cặp chữ / số liền kề đổi lớp (hoa ↔ thường ↔ số). */
+function isBase64LikeSegment(seg: string): boolean {
+  if (!/\d/.test(seg) || !/[a-z]/.test(seg) || !/[A-Z]/.test(seg) || !/[G-Zg-z]/.test(seg)) return false;
+  let pairs = 0;
+  let changes = 0;
+  let prev = -1; // 0 = hoa, 1 = thường, 2 = số, -1 = ký tự khác
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg.charCodeAt(i);
+    const cls = c >= 65 && c <= 90 ? 0 : c >= 97 && c <= 122 ? 1 : c >= 48 && c <= 57 ? 2 : -1;
+    if (cls >= 0 && prev >= 0) {
+      pairs++;
+      if (cls !== prev) changes++;
+    }
+    prev = cls;
+  }
+  return pairs > 0 && changes * 4 >= pairs;
 }
 
 /** Tiền tố của canary do CLI giả ghi: `GA-CANARY-<uuid>` — bằng chứng chắc duy nhất (chỉ có trong test). */
@@ -498,8 +669,8 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   { id: 'telegram_bot_token', test: (s) => /\b\d{8,10}:[0-9A-Za-z_-]{35}/.test(s) },
   { id: 'pem_private_key', test: hasPemPrivateKey },
   // tiền tố cố định + MỘT quantifier (\s*) ⇒ tuyến tính; refresh_token + phép gán ⇒ chặn bất kể giá trị (giữ từ v0)
-  { id: 'refresh_token_field', test: (s) => /refresh_token["']?\s*[:=]/i.test(s) },
-  { id: 'credential_assignment', test: (s) => CREDENTIAL_ASSIGNMENT_RE.test(s) },
+  { id: 'refresh_token_field', test: (s) => testWithNfkc(s, /refresh[_-]*token["']?\s*[:=]/i) },
+  { id: 'credential_assignment', test: (s) => testWithNfkc(s, CREDENTIAL_ASSIGNMENT_RE) },
   /**
    * Gán kiểu `.env` (Gen, security review "miễn hex làm lọt key hãng không prefix"): tên UPPER_SNAKE kết thúc bằng
    * _SECRET / _TOKEN / _PASSWORD / _PASSWD / _KEY / _PAT + [:=] + ≥ 8 ký tự giá trị. PHÂN BIỆT hoa thường (câu văn không
@@ -511,10 +682,16 @@ export const CREDENTIAL_DETECTORS: ReadonlyArray<{ id: string; test: (s: string)
   },
   { id: 'canary', test: (s) => /GA-CANARY-[0-9a-f-]{8}/i.test(s) },
   { id: 'high_entropy_run', test: hasHighEntropyRun },
+  { id: 'base64_secret_run', test: hasBase64SecretRun },
 ];
 
-/** Tên khoá JSON mang credential: payload có khoá này (bất kể giá trị) ⇒ chặn. */
+/** Dạng regex của tên (ngữ pháp chuỗi thô `[_-]*`) — giữ cho bên dùng cũ; khoá object dùng isCredentialKeyName. */
 export const CREDENTIAL_KEY_RE = new RegExp(`^(?:${CREDENTIAL_NAMES_ALT})$`, 'i');
+
+/** Khoá object có phải tên credential không — chuẩn hoá ĐẦY ĐỦ (NFKC, hoa thường, bỏ mọi ký tự ngoài a–z0–9). */
+export function isCredentialKeyName(key: string): boolean {
+  return credentialKeyMatches(key, CREDENTIAL_KEY_NAMES_NORMALIZED);
+}
 
 /** Mọi patternId có thể trả về (audit `credential.blocked` chỉ mang id này, không mang payload). */
 /**
@@ -545,9 +722,11 @@ export const CREDENTIAL_PATTERN_IDS = [
   'env_secret_assignment',
   'canary',
   'high_entropy_run',
+  'base64_secret_run',
   'encoded_marker_flood',
   'credential_field_name',
   'too_deep',
+  'too_large',
 ] as const;
 export type CredentialPatternId = (typeof CREDENTIAL_PATTERN_IDS)[number];
 
@@ -558,6 +737,9 @@ export type CredentialPatternId = (typeof CREDENTIAL_PATTERN_IDS)[number];
 export function findCredentialLike(value: unknown, depth = 0): { patternId: string } | null {
   if (depth > TOOL_PAYLOAD_LIMITS.maxDepth) return { patternId: 'too_deep' };
   if (typeof value === 'string') {
+    // trần TRƯỚC (chuỗi) và SAU NFKC — vượt ⇒ too_large (screenToolPayload trả payload_too_large), không quét tiếp
+    if (value.length > TOOL_PAYLOAD_LIMITS.maxStringChars || boundedNfkc(value) === null)
+      return { patternId: 'too_large' };
     for (const d of CREDENTIAL_DETECTORS) if (d.test(value)) return { patternId: d.id };
     return null;
   }
@@ -570,7 +752,7 @@ export function findCredentialLike(value: unknown, depth = 0): { patternId: stri
   }
   if (value !== null && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
-      if (CREDENTIAL_KEY_RE.test(k)) return { patternId: 'credential_field_name' };
+      if (isCredentialKeyName(k)) return { patternId: 'credential_field_name' };
       const hit = findCredentialLike(k, depth + 1) ?? findCredentialLike(v, depth + 1);
       if (hit) return hit;
     }
@@ -595,6 +777,9 @@ export function screenToolPayload(tool: string, rawArgs: unknown): ScreenResult 
   if (tooBig) return { status: 'denied', code: 'payload_too_large', reason: tooBig };
   // luôn quét — không có tool nào, không có cờ nào bỏ qua được bước này
   const hit = findCredentialLike(tool) ?? findCredentialLike(rawArgs);
+  if (hit?.patternId === 'too_large') {
+    return { status: 'denied', code: 'payload_too_large', reason: 'chuỗi vượt trần sau chuẩn hoá NFKC' };
+  }
   if (hit) {
     return {
       status: 'denied',
@@ -684,4 +869,6 @@ export const TURN_TICKET = {
   scheme: 'Bearer',
   /** GET → TurnBundle (contracts/runner.ts — ý định, không argv). Kiểm đăng nhập / probe: bundle đi qua stdin (ProbeBundle). */
   bundlePath: '/turn/bundle',
+  /** Đường MCP (Streamable HTTP) trên gateway: adapter nhận `${GA_GATEWAY_URL}${mcpPath}` (thay hằng tạm của runner). */
+  mcpPath: '/mcp',
 } as const;

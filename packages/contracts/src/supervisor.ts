@@ -63,13 +63,27 @@ export function isAllowedExecArgv(argv: readonly string[]): boolean {
   );
 }
 
+// ---------------------------------------------------------------- định danh định tuyến (review tay M0, LOW: không chuỗi tự do)
+/** Volume credential của một tài khoản engine: `ga-auth-en-<số của EN->` (mount RW vào container có binding). */
+export const AuthVolumeName = z.string().regex(/^ga-auth-en-\d{4,12}$/);
+/** display_id của Role. */
+export const RoleDisplayId = z.string().regex(/^RL-\d{4,12}$/);
+/** workspaces.short_code (4 ký tự chữ / số). */
+export const WorkspaceCode = z.string().regex(/^[A-Za-z0-9]{4}$/);
+const UlidId = z.string().regex(ULID_RE);
+
 export const Consumer = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('role'), roleId: z.string().length(26), roleDisplayId: z.string() }),
-  z.strictObject({ kind: z.literal('sys'), workspaceId: z.string().length(26), workspaceCode: z.string().length(4) }),
+  z.strictObject({ kind: z.literal('role'), roleId: UlidId, roleDisplayId: RoleDisplayId }),
+  z.strictObject({ kind: z.literal('sys'), workspaceId: UlidId, workspaceCode: WorkspaceCode }),
 ]);
 export type Consumer = z.infer<typeof Consumer>;
 
-export const ContainerRef = z.strictObject({ name: z.string().regex(/^ga-(role|sys)-[A-Za-z0-9-]+$/) });
+export const ContainerRef = z.strictObject({
+  name: z
+    .string()
+    .max(63)
+    .regex(/^ga-(role|sys)-[A-Za-z0-9-]+$/),
+});
 export type ContainerRef = z.infer<typeof ContainerRef>;
 
 export const ObservedState = z.enum([
@@ -88,7 +102,7 @@ export const EnsureContainerRequest = z.strictObject({
   consumer: Consumer,
   template: ContainerTemplate,
   /** Tên volume ga-auth-en-* được mount RW (một mỗi tài khoản có binding bật — v_container_mounts). */
-  authVolumes: z.array(z.string().regex(/^ga-auth-en-[a-z0-9-]{1,48}$/)),
+  authVolumes: z.array(AuthVolumeName).max(64),
 });
 export const EnsureContainerResponse = z.strictObject({
   container: ContainerRef,
@@ -201,7 +215,7 @@ export const DesiredContainer = z.strictObject({
   consumer: Consumer,
   template: ContainerTemplate,
   desired: DesiredState,
-  authVolumes: z.array(z.string()),
+  authVolumes: z.array(AuthVolumeName).max(64),
 });
 export const ReconcileRequest = z.strictObject({ desired: z.array(DesiredContainer) });
 export const ReconcileReport = z.strictObject({

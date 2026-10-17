@@ -134,6 +134,27 @@ function balancedParen(text, open) {
   return text.slice(open);
 }
 
+/** Đoạn từ dấu `{` tại `open` tới `}` khớp (bỏ qua chuỗi) — trả vị trí kết thúc (sau `}`), hoặc độ dài văn bản. */
+function balancedBraceEnd(text, open) {
+  let depth = 0;
+  let quote = '';
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = '';
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') quote = c;
+    else if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return text.length;
+}
+
 // ---------------------------------------------------------------- regex có nguy cơ ReDoS (STD-11 1.10)
 /** Thân các regex trong mã (đã bỏ chú thích): regex literal + `RegExp('…')` với chuỗi thường (template literal bỏ qua). */
 export function regexBodies(code) {
@@ -313,7 +334,7 @@ export const RULES = [
     id: 'no-owner-name',
     why: 'không hardcode tên owner cụ thể trong apps/, packages/, skins/ — fixtures được miễn (INT-12, STD-06, CNS-161)',
     applies: (rel) => TEXT_EXT.test(rel) && /^(apps|packages|skins)\//.test(rel) && !/(^|\/)fixtures\//.test(rel),
-    /** Bản sinh từ DB spec: chỉ cảnh báo — sửa tại nguồn (Second-Brain, lane DB) rồi `pnpm db:sync`. */
+    /** Bản sinh từ DB spec: chỉ cảnh báo — sửa tại nguồn `db/spec/` (lane DB; test SQL-noname chặn ở đó) rồi `pnpm db:sync && pnpm db:gen`. */
     warnOnly: (rel) => /^packages\/db\/(migrations|src\/generated)\//.test(rel),
     check(_rel, text) {
       return findAll(text, OWNER_NAMES).map((m) => ({ line: lineOf(text, m.index), msg: `"${m[0]}"` }));
@@ -528,6 +549,52 @@ export const RULES = [
         }
       }
       return out;
+    },
+  },
+  {
+    id: 'no-chibi-testing-import',
+    why: 'apps/** và packages/*/src/** không import @ga/chibi/testing (svg() chuỗi mang style nội tuyến — chỉ cho test / script của chibi; L-CHIBI, CSP chặt)',
+    applies: (rel) =>
+      CODE_EXT.test(rel) &&
+      (rel.startsWith('apps/') || /^packages\/[^/]+\/src\//.test(rel)) &&
+      rel !== 'packages/chibi/src/testing.ts',
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      // = importsChibiTesting của packages/chibi/test/boundary.test.ts (feat/m3-chibi): import / require / import() động /
+      // đường tương đối tới chibi/src/testing
+      const re =
+        /['"`](?:@ga\/chibi\/testing|@ga\/chibi\/src\/testing(?:\.ts)?|(?:\.{1,2}\/)+(?:packages\/)?chibi\/src\/testing(?:\.ts)?)['"`]/g;
+      return findAll(code, re).map((m) => ({ line: lineOf(code, m.index), msg: `import chibi testing: ${m[0]}` }));
+    },
+  },
+  {
+    id: 'no-raw-normalize',
+    why: 'cấm .normalize( trong apps/*/src + packages/*/src — dùng boundedNfkc(s, max) của @ga/contracts: NFKC có thể phình 18× sau bước chặn kích thước (L-36); ngoại lệ hiếm: `// lint-allow no-raw-normalize: <lý do>` ngay dòng trên',
+    applies: (rel) => CODE_EXT.test(rel) && /^(apps|packages)\/[^/]+\/src\//.test(rel) && !isTest(rel),
+    check(rel, text) {
+      const code = codeOf(rel, text);
+      const raw = text.split('\n');
+      // miễn đúng thân hàm boundedNfkc của contracts (nơi duy nhất được gọi NFKC, có trần)
+      const allowed = [];
+      if (rel === 'packages/contracts/src/mcp.ts') {
+        for (const m of findAll(code, /\bfunction\s+boundedNfkc\s*\(/)) {
+          const open = code.indexOf(
+            '{',
+            m.index + m[0].length + balancedParen(code, m.index + m[0].length - 1).length - 1,
+          );
+          if (open >= 0) allowed.push([m.index, balancedBraceEnd(code, open)]);
+        }
+      }
+      return findAll(code, /\??\.normalize\s*\(/)
+        .filter((m) => !allowed.some(([a, b]) => m.index >= a && m.index < b))
+        .filter((m) => {
+          const line = lineOf(code, m.index);
+          return !/^\s*\/\/\s*lint-allow no-raw-normalize:\s*\S/.test(raw[line - 2] ?? '');
+        })
+        .map((m) => ({
+          line: lineOf(code, m.index),
+          msg: 'dùng boundedNfkc(s, max) của @ga/contracts — NFKC có thể phình 18× (L-36)',
+        }));
     },
   },
   {

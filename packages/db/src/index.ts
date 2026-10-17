@@ -9,6 +9,7 @@ export type { DB } from './generated/schema.ts';
 export { TABLES, VIEWS } from './generated/schema.ts';
 export { SYNC } from './generated/sync.ts';
 export * from './runner/index.ts';
+export * from './seed/ids.ts';
 export * from './seed/reference.ts';
 export * from './stamp.ts';
 
