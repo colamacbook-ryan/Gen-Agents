@@ -40,11 +40,18 @@ export function seedMinimal(conn: AppConnection): void {
   db.prepare(
     "INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, 'tenant', 'afi', 'Afi', '7K2Q')",
   ).run(TENANT_WS);
-  const actor = db.prepare(
-    "INSERT INTO actors (id, workspace_id, kind, system_key, label) VALUES (?, ?, 'system', 'system', 'System')",
-  );
-  actor.run(SYS_ACTOR, SYS_WS);
-  actor.run(TENANT_ACTOR, TENANT_WS);
+  // DB v2.3.5: actors có cổng người ghi — actor system đầu tiên của workspace tự đăng ký trong conn.bootstrap (app_actor() = chính nó)
+  for (const [ws, actor] of [
+    [SYS_WS, SYS_ACTOR],
+    [TENANT_WS, TENANT_ACTOR],
+  ] as const) {
+    conn.bootstrap({ workspaceId: ws, systemActorId: actor }, (w) =>
+      w.run(
+        "INSERT INTO actors (id, workspace_id, kind, system_key, label) VALUES (?, ?, 'system', 'system', 'System')",
+        [actor, ws],
+      ),
+    );
+  }
 }
 
 export function count(conn: AppConnection, sql: string, ...params: unknown[]): number {

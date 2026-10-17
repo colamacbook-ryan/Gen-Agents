@@ -88,7 +88,8 @@ SYS_ONLY_COLS = {          # khai ĐỘC LẬP với generator (fixture không �
                         'runtime_overhead_tokens', 'overhead_bare_session_id', 'overhead_shell_session_id', 'overhead_measured_at', 'login_started_at'},
     'engine_bindings': {'selection_state', 'selection_checked_at'},
     'telegram_bots': {'bot_tg_id', 'getme_ok_at', 'poll_offset', 'last_update_at', 'error', 'status'},
-    'tools': {'is_builtin', 'builtin_key', 'definition_tokens', 'tokenizer'}}
+    'tools': {'is_builtin', 'builtin_key', 'definition_tokens', 'tokenizer'},
+    'containers': {'image_ref', 'image_digest', 'cli_bundle', 'cpu_limit', 'mem_limit_mb', 'session_timeout_s'}}   # v2.3.5
 # giá trị mặc định mà người KHÔNG phải actor system được để khi tạo hàng (cột chỉ-system); cột khác trong SYS_ONLY_COLS: mặc định NULL
 SYS_COL_DEFAULTS = {'engine_accounts': {'login_status': ('unknown', 'in_progress'), 'quota_state': ('unknown',)},
                     'engine_bindings': {'selection_state': ('unknown',)},
@@ -96,6 +97,7 @@ SYS_COL_DEFAULTS = {'engine_accounts': {'login_status': ('unknown', 'in_progress
                     'tools': {'is_builtin': (0,), 'definition_tokens': (0,)}}
 # cột "người" mà trigger tra và buộc = app_actor() (v2.3.3): có trong bước ⇒ chính người đó là người ghi của bước
 CLAIM_COLS = ('proposed_by', 'recorded_by', 'confirmed_by')
+ROOT_NO_CB = {'workspaces', 'users', 'workspace_members', 'actors', 'engines'}   # v2.3.5: bảng gốc có cổng người ghi nhưng không có created_by
 _SAME = object()
 
 def _top_split(s, sep=','):
@@ -189,12 +191,63 @@ class RepoConn:
             return _SAME
         return params[sum(_qcount(v) for v in vals[:i])]
 
+    _DML = re.compile(r"^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(\w+)", re.I | re.S)
+
+    def _sys_of(self, ws):
+        r = self.raw.execute("SELECT id FROM actors WHERE workspace_id=? AND system_key='system'", (ws,)).fetchone()
+        return r[0] if r else None
+
+    def _root_actor(self, t, sql, params):
+        """v2.3.5: bước ghi bảng gốc (không có created_by) mà fixture không đặt actor ⇒ actor system (dựng workspace / khôi phục — đúng người app dùng):
+        workspace_members / actors ⇒ system của workspace của hàng (actor system đầu tiên tự đăng ký: chính id của hàng); workspaces ⇒ system của chính
+        workspace; users / engines ⇒ system của workspace hệ thống. Không đoán được ⇒ giữ ctx.actor (ca âm truyền actor tường minh qua D.raw)."""
+        if t in ('users', 'engines'):
+            return self._sys_of(SYS)
+        mi = self._INS.match(sql)
+        if mi and not isinstance(params, dict):
+            cols = [c.strip() for c in mi.group(2).split(',')]
+            i0, depth, j, q = mi.end(), 1, mi.end(), False
+            while depth and j < len(sql):
+                ch = sql[j]
+                if ch == "'":
+                    q = not q
+                elif not q:
+                    depth += {'(': 1, ')': -1}.get(ch, 0)
+                j += 1
+            vals = [v.strip() for v in _top_split(sql[i0:j - 1])]
+            row = {}
+            for k, (c, v) in enumerate(zip(cols, vals)):
+                if v == '?':
+                    row[c] = params[sum(_qcount(x) for x in vals[:k])]
+                elif v.startswith("'") and v.endswith("'"):
+                    row[c] = v[1:-1]
+            ws = row.get('id') if t == 'workspaces' else row.get('workspace_id')
+            sa = self._sys_of(ws)
+            if sa is None and t == 'actors' and row.get('system_key') == 'system':
+                return row.get('id')
+            return sa if sa is not None else _SAME
+        md = self._DML.match(sql)
+        rest = sql[md.end():]
+        w = _top_kw(rest, 'WHERE')
+        if w < 0 or isinstance(params, dict):
+            return _SAME
+        params = tuple(params)
+        k = _qcount(rest[:w])
+        col = 'id' if t == 'workspaces' else 'workspace_id'
+        wss = [x[0] for x in self.raw.execute(f"SELECT DISTINCT {col} FROM {t} WHERE {rest[w + 5:]}", params[k:]).fetchall()]
+        return self._sys_of(wss[0]) if len(wss) == 1 and self._sys_of(wss[0]) else _SAME
+
     def execute(self, sql, params=()):
         m = self._UPD.match(sql)
         if m and 'created_by' in self.cols(m.group(1)):
             return self._update(m.group(1), sql, m.end(), params)
         if sql.lstrip().upper().startswith(('INSERT', 'REPLACE')):
             a = self._insert_actor(sql, params)
+            if a is not _SAME:
+                return self._with_actor(a, lambda: self.raw.execute(sql, params))
+        md = self._DML.match(sql)
+        if md and md.group(1) in ROOT_NO_CB and self.ctx.actor is None:
+            a = self._root_actor(md.group(1), sql, params)
             if a is not _SAME:
                 return self._with_actor(a, lambda: self.raw.execute(sql, params))
         return self.raw.execute(sql, params)
@@ -347,27 +400,38 @@ def hkdf(key, info, length=32):
         t = hmac.new(prk, t + info + bytes([i]), hashlib.sha256).digest(); okm += t; i += 1
     return okm[:length]
 def audit_key(ws): return hkdf(MASTER, b"audit-chain:v1:" + ws.encode())
-AUDIT_COLS = ['id', 'workspace_id', 'display_seq', 'created_at', 'actor_id', 'action', 'result', 'entity_id', 'detail_json', 'reason']
+# v2.3.5 (review bảo mật MEDIUM, pG — v2.3.4 trở về trước HMAC chỉ phủ 10 cột ⇒ sửa after_json / before_json / actor_kind / channel… không bị phát hiện):
+# row_hash = HMAC-SHA256(audit_key(workspace), UTF-8(JCS(hàng))) — hàng = MỌI cột của audit_log TRỪ row_hash (kể cả prev_hash, hash_key_id), NULL ghi null,
+# số nguyên là số; JCS = khoá sắp xếp theo code unit, không khoảng trắng (= canonicalJson của contracts). Danh sách cột lấy từ PRAGMA table_info (cột mới
+# của audit_log tự vào HMAC). Bên ghi phải ghi TƯỜNG MINH mọi cột (giá trị đã băm = giá trị đã lưu). Chuỗi nối bằng cột prev_hash nằm trong hàng đã băm.
+AUDIT_HMAC_EXCLUDE = ('row_hash',)
+_AUDIT_COLS = []
+def audit_cols(db):
+    if not _AUDIT_COLS:
+        _AUDIT_COLS.extend(r[1] for r in db.execute("PRAGMA table_info(audit_log)") if r[1] not in AUDIT_HMAC_EXCLUDE)
+    return list(_AUDIT_COLS)
 def jcs(d): return json.dumps(d, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+def audit_mac(ws, row):
+    return hmac.new(audit_key(ws), jcs(row).encode('utf-8'), hashlib.sha256).hexdigest()
 def audit(D, ws, action, entity_id=None, detail=None, actor=None, reason=None):
     n = D.seq(ws, 'AU')
     prev = D.one("SELECT row_hash FROM audit_log WHERE workspace_id=? AND display_seq=?", ws, n - 1)
     rid = uid(f"au:{ws}:{n}")
-    row = dict(id=rid, workspace_id=ws, display_seq=n, created_at=now(), actor_id=actor or D.owner_actor(ws),
-               action=action, result='ok', entity_id=entity_id, detail_json=jcs(detail or {}), reason=reason)
-    rh = hmac.new(audit_key(ws), ((prev or '') + jcs({k: row[k] for k in AUDIT_COLS})).encode(), hashlib.sha256).hexdigest()
-    D.db.execute("""INSERT INTO audit_log(id,workspace_id,display_id,display_seq,created_at,created_by,actor_id,actor_label,actor_kind,
-                    action,result,entity_id,detail_json,reason,channel,request_id,hash_key_id,prev_hash,row_hash)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                 (rid, ws, f"AU-{n:05d}", n, row['created_at'], row['actor_id'], row['actor_id'], 'Ryan', 'user', action, 'ok',
-                  entity_id, row['detail_json'], reason, 'web', f"req-{n}", 'kek1', prev, rh))
+    who = actor or D.owner_actor(ws)
+    row = {c: None for c in audit_cols(D.raw)}
+    row.update(id=rid, workspace_id=ws, display_id=f"AU-{n:05d}", display_seq=n, created_at=now(), created_by=who, actor_id=who, actor_label='Ryan',
+               actor_kind='user', action=action, result='ok', entity_id=entity_id, detail_json=jcs(detail or {}), reason=reason, channel='web',
+               request_id=f"req-{n}", hash_key_id='kek1', prev_hash=prev)
+    rh = audit_mac(ws, row)
+    cols = list(row) + ['row_hash']
+    D.db.execute(f"INSERT INTO audit_log({','.join(cols)}) VALUES({','.join('?' * len(cols))})", [row[c] for c in row] + [rh])
     return rid, rh
 def verify_chain(D, ws):
     prev, bad = None, []
-    for r in D.db.execute(f"SELECT {','.join(AUDIT_COLS)}, prev_hash, row_hash FROM audit_log WHERE workspace_id=? ORDER BY display_seq", (ws,)):
-        row = dict(zip(AUDIT_COLS, r[:len(AUDIT_COLS)]))
-        exp = hmac.new(audit_key(ws), ((prev or '') + jcs(row)).encode(), hashlib.sha256).hexdigest()
-        if r[-1] != exp or r[-2] != prev:
+    cols = audit_cols(D.raw)
+    for r in D.db.execute(f"SELECT {','.join(cols)}, row_hash FROM audit_log WHERE workspace_id=? ORDER BY display_seq", (ws,)):
+        row = dict(zip(cols, r[:-1]))
+        if r[-1] != audit_mac(ws, row) or row['prev_hash'] != prev:
             bad.append(row['display_seq'])
         prev = r[-1]
     return bad, prev
@@ -521,16 +585,16 @@ def seed(with_fn=True):
     db.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (SYS, 'system', 'system', 'System', 'SYS0'))
     db.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (W, 'tenant', 'afi-labs', 'Afi Labs', '7K2Q'))
     db.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (W2, 'tenant', 'other', 'Other Co', 'ZZ99'))
+    A = {}
+    for ws in (SYS, W, W2):   # actor hệ thống seed theo TỪNG workspace (M6) — v2.3.5: TRƯỚC user / thành viên (dựng bằng actor system; 'system' tự đăng ký)
+        for k in ('system', 'interviewer', 'trainer', 'consolidator', 'judge', 'scheduler', 'gateway', 'telegram', 'updater', 'assistant'):
+            A[(ws, k)] = uid(f'actor:{ws}:{k}')
+            db.execute("INSERT INTO actors(id,workspace_id,kind,system_key,label) VALUES(?,?,?,?,?)", (A[(ws, k)], ws, 'system', k, k.title()))
     ryan = uid('user:ryan')
     db.execute("""INSERT INTO users(id,display_id,display_seq,username,display_name,password_hash,must_change_password,password_changed_at)
                   VALUES(?,?,?,?,?,?,0,?)""", (ryan, 'US-0001', 1, 'admin', 'Ryan', 'argon2id$x', now()))
     for ws in (W, W2):
         db.execute("INSERT INTO workspace_members(workspace_id,user_id,access_level) VALUES(?,?,?)", (ws, ryan, 'owner'))
-    A = {}
-    for ws in (SYS, W, W2):   # actor hệ thống seed theo TỪNG workspace (M6)
-        for k in ('system', 'interviewer', 'trainer', 'consolidator', 'judge', 'scheduler', 'gateway', 'telegram', 'updater', 'assistant'):
-            A[(ws, k)] = uid(f'actor:{ws}:{k}')
-            db.execute("INSERT INTO actors(id,workspace_id,kind,system_key,label) VALUES(?,?,?,?,?)", (A[(ws, k)], ws, 'system', k, k.title()))
     # danh mục engine = seed tham chiếu (migration 0013), có TRƯỚC mọi workspace — ST-0017 kiểm slug theo danh mục này
     # v2.2.6 (CONTRACT-r6 B1.2): codex = coming_soon ở MVP (PS §5) — vẫn nằm trong danh mục; Tùng/Khoa của seed demo đổi sang Claude Code
     # v2.2.7 (CNS-092): core_capable; v2.2.8 (Q-I5 [CHỐT — Ryan 2026-10-16], CONTRACT-r8 §C): antigravity = 1 (mặc định), claude-code = 1,
@@ -2630,12 +2694,12 @@ def _fresh_ws(D, tag, code, cli=True):
     ws = uid('ws:' + tag)
     db.execute("INSERT INTO workspaces(id,kind,slug,name,short_code) VALUES(?,?,?,?,?)", (ws, 'tenant', tag, tag.title(), code))
     ryan = D.one("SELECT id FROM users WHERE username='admin'")
-    db.execute("INSERT INTO workspace_members(workspace_id,user_id,access_level) VALUES(?,?,?)", (ws, ryan, 'owner'))
     A = {'owner': uid(f'actor:{ws}:owner')}
-    db.execute("INSERT INTO actors(id,workspace_id,kind,user_id,label) VALUES(?,?,?,?,?)", (A['owner'], ws, 'user', ryan, 'Ryan'))
-    for k in ('system', 'trainer', 'gateway'):
+    for k in ('system', 'trainer', 'gateway'):          # v2.3.5: actor system trước (dựng workspace bằng actor system; 'system' tự đăng ký)
         A[k] = uid(f'actor:{ws}:{k}')
         db.execute("INSERT INTO actors(id,workspace_id,kind,system_key,label) VALUES(?,?,?,?,?)", (A[k], ws, 'system', k, k.title()))
+    db.execute("INSERT INTO workspace_members(workspace_id,user_id,access_level) VALUES(?,?,?)", (ws, ryan, 'owner'))
+    db.execute("INSERT INTO actors(id,workspace_id,kind,user_id,label) VALUES(?,?,?,?,?)", (A['owner'], ws, 'user', ryan, 'Ryan'))
     if cli:                                     # v2.3.1 (CNS-137): bản cài đã tải CLI (install.sh) — cli=False: CLI chưa cài (thiếu hàng ⇒ not_installed)
         for slug, ver in INSTALLED_CLI:
             D.ins('engine_installs', workspace_id=ws, engine_slug=slug, install_state='installed', installed_version=ver, created_by=A['system'],
@@ -6978,9 +7042,13 @@ def t_v234_seed_reference():
                for r in D.raw.execute(f'SELECT id FROM "{t}" WHERE workspace_id IN (?, ?)', (WA, WB))]
     id_ok = (st17 == ids and ids[0] != ids[1] and all(ULID.match(i) for i in all_ids + [gsys]) and len(set(all_ids)) == len(all_ids)
              and G.seed_row_id(WA, 'settings:st-0017') == ids[0])
-    oc, oc_msg = expect_fail(D.raw, lambda: D.raw.execute(
-        "INSERT INTO engines(slug, name, vendor, cli_binary, priority_order, tos_risk, tos_notice_key, tos_notice_version) "
-        "VALUES('antigravity', 'x', 'x', 'x', 9, 'ok', 'k', '1') ON CONFLICT DO NOTHING"), re.escape(S.MSG_NO_REPLACE.format(t='engines')))
+    D.ctx.actor = gsys                                       # v2.3.5: danh mục engines chỉ actor system của workspace hệ thống ghi — ca chỉ thử chống REPLACE
+    try:
+        oc, oc_msg = expect_fail(D.raw, lambda: D.raw.execute(
+            "INSERT INTO engines(slug, name, vendor, cli_binary, priority_order, tos_risk, tos_notice_key, tos_notice_version) "
+            "VALUES('antigravity', 'x', 'x', 'x', 9, 'ok', 'k', '1') ON CONFLICT DO NOTHING"), re.escape(S.MSG_NO_REPLACE.format(t='engines')))
+    finally:
+        D.ctx.actor = None
     # --- đối chiếu seed() của bộ test
     D2, X2 = seed()
     W = X2['W']

@@ -171,7 +171,8 @@ describe('connection — ghi qua kết nối đọc bị từ chối; thiếu ap
         'DELETE FROM blobs',
         'CREATE TABLE x (a)',
       ]) {
-        expect(() => reader.db.exec(sql), sql).toThrow(/readonly|query_only|read-only/i);
+        // DB v2.3.5: workspaces có cổng người ghi (app_actor()) — kết nối đọc không có hàm này ⇒ câu lệnh không biên dịch được (cũng fail-closed)
+        expect(() => reader.db.exec(sql), sql).toThrow(/readonly|query_only|read-only|no such function: app_actor/i);
       }
       expect(count(writer, 'SELECT count(*) FROM blobs')).toBe(1);
     } finally {
