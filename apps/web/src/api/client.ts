@@ -63,13 +63,49 @@ export function serializeQuery(query: Record<string, unknown> | undefined): Reco
   return out;
 }
 
-/** `/api/v1/roles/{roleRef}` + `{roleRef: 'RL-0001'}` → `/api/v1/roles/RL-0001` (mỗi giá trị qua encodeURIComponent). */
-export function buildPath(route: Pick<Route, 'mount' | 'path' | 'id'>, params: Record<string, unknown> = {}): string {
+const unsafeParam = (route: Pick<Route, 'id'>, name: string, cause?: unknown): ApiError =>
+  new ApiError(
+    { code: 'validation.failed', httpStatus: 0, i18nKey: 'errors.validation.failed', routeId: route.id },
+    { cause: cause ?? new Error(`tham số đường dẫn không an toàn: ${name}`) },
+  );
+
+/**
+ * Hàng rào cuối cho một đoạn đường dẫn: `encodeURIComponent` KHÔNG mã hoá dấu chấm, nên `..` sẽ bị trình duyệt / proxy chuẩn hoá thành
+ * đường dẫn của route KHÁC (kèm CSRF của phiên). Từ chối giá trị rỗng, `.`, `..` (cả dạng `%2e%2e`), và mọi giá trị chứa `/` hay `\`
+ * (thô hoặc sau khi giải mã %). Luôn chạy — độc lập với cờ `validate`.
+ */
+function assertSafeSegment(route: Pick<Route, 'id'>, name: string, value: string): void {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch (cause) {
+    throw unsafeParam(route, name, cause);
+  }
+  for (const v of [value, decoded]) {
+    if (v === '' || v === '.' || v === '..' || /[\\/]/.test(v)) throw unsafeParam(route, name);
+  }
+}
+
+/**
+ * `/api/v1/roles/{roleRef}` + `{roleRef: 'RL-0001'}` → `/api/v1/roles/RL-0001`. FAIL-CLOSED, luôn chạy (kể cả bản phát hành):
+ * (1) tham số phải qua schema `params` của route (Ref / ULID / KeyStr đã loại `.` và `/`); (2) mỗi đoạn qua `assertSafeSegment`;
+ * (3) rồi mới `encodeURIComponent`. Vi phạm ⇒ ApiError('validation.failed'), không request nào được gửi.
+ */
+export function buildPath(
+  route: Pick<Route, 'mount' | 'path' | 'id' | 'request'>,
+  params: Record<string, unknown> = {},
+): string {
+  const schema = route.request.params;
+  if (schema) {
+    const r = schema.safeParse(params);
+    if (!r.success) throw unsafeParam(route, 'params', r.error);
+  }
   return fullPath(route).replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (_m, name: string) => {
     const v = params[name];
-    if (typeof v !== 'string' && typeof v !== 'number')
-      throw new TypeError(`${route.id}: thiếu tham số đường dẫn ${name}`);
-    return encodeURIComponent(String(v));
+    if (typeof v !== 'string' && typeof v !== 'number') throw unsafeParam(route, name);
+    const s = String(v);
+    assertSafeSegment(route, name, s);
+    return encodeURIComponent(s);
   });
 }
 

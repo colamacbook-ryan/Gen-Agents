@@ -1,6 +1,6 @@
 import { createI18n } from '@ga/i18n';
 import { describe, expect, it, vi } from 'vitest';
-import { createApiClient } from '../../src/api/client.ts';
+import { buildPath, createApiClient } from '../../src/api/client.ts';
 import { createCsrfStore } from '../../src/api/csrf.ts';
 import { ApiError, describeApiError, isApiError } from '../../src/api/error.ts';
 import type { ClientEvent } from '../../src/api/events.ts';
@@ -52,16 +52,15 @@ describe('đường dẫn + query từ registry', () => {
     expect(calls[0]?.headers.accept).toBe('application/json');
   });
 
-  it('giá trị tham số có ký tự đặc biệt không thoát được khỏi đoạn đường dẫn', () => {
-    const { api } = setup(() => json({}), { validate: false });
-    expect(api.urlOf('SYS-32', { params: { roleRef: 'RL/../../x?y#z' } })).toBe(
-      '/api/v1/roles/RL%2F..%2F..%2Fx%3Fy%23z',
-    );
+  it('mã hoá từng đoạn: ký tự dành riêng của URL không thoát được khỏi đoạn đường dẫn (route có schema params rộng)', () => {
+    const route = { id: 'X-00', mount: 'api', path: '/x/{a}/y', request: {} } as const;
+    expect(buildPath(route, { a: 'b c?d#e' })).toBe('/api/v1/x/b%20c%3Fd%23e/y');
+    expect(buildPath(route, { a: 'v1.2.3' })).toBe('/api/v1/x/v1.2.3/y');
   });
 
-  it('thiếu tham số đường dẫn hoặc route lạ là lỗi lập trình, không gửi request', async () => {
+  it('thiếu tham số đường dẫn: bị từ chối (validation.failed), không gửi request; route lạ là lỗi lập trình', async () => {
     const { api, calls } = setup(() => json({}), { validate: false });
-    await expect(api.call('SYS-32' as never, {} as never)).rejects.toThrow(/roleRef/);
+    expect((await failure(api.call('SYS-32' as never, {} as never))).code).toBe('validation.failed');
     await expect((api.call as (id: string) => Promise<unknown>)('SYS-99')).rejects.toThrow(/registry/);
     expect(calls).toHaveLength(0);
   });
@@ -306,5 +305,54 @@ describe('Idempotency-Key + thử lại', () => {
     await expect(api.call('OPS-32', undefined, { signal: ctrl.signal })).rejects.toMatchObject({ name: 'AbortError' });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.signal).toBe(ctrl.signal);
+  });
+});
+
+describe('chống path traversal phía client (fail-closed, luôn chạy)', () => {
+  const BAD = [
+    '..',
+    '.',
+    '%2e%2e',
+    '%2E%2E',
+    '%2e',
+    'a/b',
+    'a\\b',
+    '%2f',
+    '%5c',
+    '',
+    '../../auth/logout',
+    'RL-0001/..',
+  ];
+
+  for (const validate of [true, false]) {
+    it(`giá trị nguy hiểm ở mọi đoạn ⇒ validation.failed, KHÔNG có request nào (validate=${validate})`, async () => {
+      const { api, calls, seen } = setup(() => json({}), { validate });
+      for (const bad of BAD) {
+        const e = await failure(api.call('SYS-32', { params: { roleRef: bad } }));
+        expect(e, JSON.stringify(bad)).toMatchObject({ code: 'validation.failed', httpStatus: 0 });
+        const w = await failure(api.call('SYS-33', { params: { roleRef: bad }, body: {} } as never));
+        expect(w.code, JSON.stringify(bad)).toBe('validation.failed');
+      }
+      expect(calls).toHaveLength(0);
+      expect(seen).toEqual([]);
+    });
+  }
+
+  it('tham số sai schema params bị chặn kể cả khi tắt validate (hàng rào chính, không phụ thuộc cờ)', async () => {
+    const { api, calls } = setup(() => json({}), { validate: false });
+    const e = await failure(api.call('SYS-32', { params: { roleRef: 'khong-phai-ref' } }));
+    expect(e.code).toBe('validation.failed');
+    expect(calls).toHaveLength(0);
+    // tham số hợp lệ vẫn đi được
+    await api.call('SYS-32', { params: { roleRef: 'RL-0001' } });
+    expect(calls[0]?.url).toBe('/api/v1/roles/RL-0001');
+  });
+
+  it('lớp thứ hai (đoạn đường dẫn) chặn cả khi schema params của route rộng', () => {
+    const route = { id: 'X-00', mount: 'api', path: '/x/{a}/y', request: {} } as const;
+    for (const bad of BAD)
+      expect(() => buildPath(route, { a: bad }), JSON.stringify(bad)).toThrow(/api:X-00:validation.failed/);
+    expect(() => buildPath(route, { a: '%E0%A4%A' })).toThrow(/validation.failed/); // % hỏng
+    expect(() => buildPath(route, {})).toThrow(/validation.failed/);
   });
 });
