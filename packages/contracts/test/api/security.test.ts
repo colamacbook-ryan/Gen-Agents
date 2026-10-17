@@ -7,23 +7,8 @@ import {
   type SchemaNode,
   schemaViolations,
   secretFieldsOf,
-  stringHasCeiling,
 } from '../../src/api/introspect.ts';
-import {
-  EngineInstallStatus,
-  Json,
-  PtyClientMessage,
-  PtyServerMessage,
-  ROUTES,
-  routeById,
-  SecretInput,
-  SseEvent,
-  secretKindOf,
-  str,
-  TokenUsage,
-  TurnClassification,
-  UpdaterStatus,
-} from '../../src/index.ts';
+import { Json, ROUTES, routeById, SecretInput, SseEvent, secretKindOf, str } from '../../src/index.ts';
 
 // Contract test bảo mật (BACKEND-TRIAL §3.1 test 2; rà soát bảo mật 2026-10-17):
 //   - secret chỉ nằm trong BODY, không route GET nào nhận secret, mọi field secret có kiểu SecretInput;
@@ -32,23 +17,6 @@ import {
 
 type Part = 'params' | 'query' | 'headers' | 'body';
 const PARTS: Part[] = ['params', 'query', 'headers', 'body'];
-
-/** Schema M0 (đóng băng) dùng lại nguyên: chuỗi không trần của chúng được miễn — liệt kê để Gen thấy (báo cáo). */
-function m0UnboundedLeaves(): Set<z.ZodType> {
-  const out = new Set<z.ZodType>();
-  for (const root of [
-    EngineInstallStatus,
-    UpdaterStatus,
-    TurnClassification,
-    TokenUsage,
-    PtyClientMessage,
-    PtyServerMessage,
-  ]) {
-    for (const n of collectNodes(root)) if (n.type === 'string' && !stringHasCeiling(n.schema)) out.add(n.schema);
-  }
-  return out;
-}
-const M0_EXEMPT = m0UnboundedLeaves();
 
 describe('secret chỉ trong body', () => {
   it('không route nào nhận SecretInput qua path / query / header; route GET / WS không nhận secret', () => {
@@ -238,8 +206,6 @@ describe('route chạm credential = owner (touchesCredential, không ngoại l�
 });
 
 describe('trần độ dài, strict, không any / unknown', () => {
-  const skip = (s: z.ZodType) => M0_EXEMPT.has(s);
-
   it('mọi request: chuỗi / mảng có trần, object strict, không any / unknown / lazy', () => {
     for (const r of ROUTES) {
       for (const part of PARTS) {
@@ -249,35 +215,15 @@ describe('trần độ dài, strict, không any / unknown', () => {
     }
   });
 
-  it('mọi response JSON: cùng luật (trừ chuỗi của schema M0 đóng băng)', () => {
+  it('mọi response JSON: cùng luật, KHÔNG ngoại lệ (kể cả schema M0 dùng lại)', () => {
     for (const r of ROUTES) {
       const res = r.response;
-      if (res.kind === 'json') expect(schemaViolations(res.schema, r.id, { skip }), `${r.id} response`).toEqual([]);
+      if (res.kind === 'json') expect(schemaViolations(res.schema, r.id), `${r.id} response`).toEqual([]);
       if (res.kind === 'ws') {
-        expect(schemaViolations(res.client, r.id, { skip }), `${r.id} ws client`).toEqual([]);
-        expect(schemaViolations(res.server, r.id, { skip }), `${r.id} ws server`).toEqual([]);
+        expect(schemaViolations(res.client, r.id), `${r.id} ws client`).toEqual([]);
+        expect(schemaViolations(res.server, r.id), `${r.id} ws server`).toEqual([]);
       }
     }
-  });
-
-  it('chuỗi M0 không trần được dùng lại: danh sách cố định (đề xuất đặt trần ở PR "contract")', () => {
-    const where: string[] = [];
-    for (const [name, root] of Object.entries({ EngineInstallStatus, UpdaterStatus, TurnClassification })) {
-      for (const n of collectNodes(root)) if (M0_EXEMPT.has(n.schema)) where.push(`${name}${n.path.slice(1)}`);
-    }
-    expect(where.sort()).toEqual(
-      [
-        'EngineInstallStatus|1.version',
-        'EngineInstallStatus|2.installedAt',
-        'EngineInstallStatus|2.version',
-        'UpdaterStatus.currentVersion',
-        'UpdaterStatus.availableVersion',
-        'UpdaterStatus.checkedAt',
-        'UpdaterStatus.run.startedAt',
-        'UpdaterStatus.run.error',
-        'TurnClassification.resetAt',
-      ].sort(),
-    );
   });
 
   it('bộ phát hiện chạy được: schema mồi vi phạm bị bắt', () => {

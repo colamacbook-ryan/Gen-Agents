@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS } from '../bounds.ts';
 import { EngineInstallStatus } from '../engine.ts';
 import { FIXED_CODES } from '../ids.ts';
 import { Anchor } from '../mcp.ts';
@@ -59,7 +60,7 @@ import { UiActionRow } from './ui-actions.ts';
 const sys = defineLane('L-SYS');
 
 /** Trần độ dài tin chat người dùng (SYS-19). */
-export const CHAT_TEXT_MAX = 20_000;
+export const CHAT_TEXT_MAX = BOUNDS.chatText;
 /** Trần tin trả về (AI có thể dài hơn tin người dùng). */
 export const CHAT_CONTENT_MAX = 65_536;
 export const ATTACHMENT_PURPOSES = ['chat', 'knowledge', 'avatar', 'skill_import'] as const;

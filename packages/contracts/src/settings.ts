@@ -91,7 +91,7 @@ export const SETTINGS = {
   }),
   'economy.penalty.dissatisfaction_presets_bp': def({
     key: 'economy.penalty.dissatisfaction_presets_bp',
-    schema: z.array(bp).min(1),
+    schema: z.array(bp).min(1).max(16),
     default: [500, 1000, 2000, 3000],
     preseeded: true,
     writers: OWNER_ADMIN,

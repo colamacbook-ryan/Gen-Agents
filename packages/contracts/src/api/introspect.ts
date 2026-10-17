@@ -32,9 +32,38 @@ function checksOf(schema: z.ZodType): Array<Record<string, unknown>> {
   return checks.map((c) => c._zod.def);
 }
 
-/** Chuỗi có trần độ dài (`max_length` hoặc `length_equals`)? */
+/** Biên số lặp tối đa chấp nhận trong regex "có trần" (`{n,m}` với m ≤ giá trị này). */
+export const REGEX_BOUND_MAX_REPEAT = 4096;
+
+/**
+ * Regex có CHẶN độ dài chuỗi khớp? Điều kiện (bảo thủ, thiên về từ chối): neo `^…$`, không có lượng từ không biên
+ * (`*`, `+`, `{n,}`) ngoài lớp ký tự `[...]`, mọi `{n,m}` có m ≤ REGEX_BOUND_MAX_REPEAT, không có `.` không lượng từ lặp vô hạn
+ * (vì đã loại `*` / `+`). Regex chặn dài thì KHÔNG cần `.max()` dư.
+ */
+export function regexBoundsLength(re: RegExp): boolean {
+  const src = re.source;
+  if (!src.startsWith('^') || !src.endsWith('$') || src.endsWith('\\$')) return false;
+  // bỏ ký tự thoát (`\d`, `\.`, `\+`) và lớp ký tự `[...]` (trong đó + * là ký tự thường)
+  const stripped = src.replace(/\\./g, '_').replace(/\[(?:[^\]\\]|\\.)*\]/g, '_');
+  if (/[*+]/.test(stripped) || /\{\d+,\}/.test(stripped)) return false;
+  for (const m of stripped.matchAll(/\{(\d+)(?:,(\d+))?\}/g)) {
+    const hi = Number(m[2] ?? m[1]);
+    if (!Number.isFinite(hi) || hi > REGEX_BOUND_MAX_REPEAT) return false;
+  }
+  return true;
+}
+
+/** Chuỗi có trần độ dài: `max_length`, `length_equals`, hoặc regex neo chặn dài (`regexBoundsLength`). */
 export function stringHasCeiling(schema: z.ZodType): boolean {
-  return checksOf(schema).some((c) => c.check === 'max_length' || c.check === 'length_equals');
+  return checksOf(schema).some(
+    (c) =>
+      c.check === 'max_length' ||
+      c.check === 'length_equals' ||
+      (c.check === 'string_format' &&
+        c.format === 'regex' &&
+        c.pattern instanceof RegExp &&
+        regexBoundsLength(c.pattern)),
+  );
 }
 
 /** Mảng có trần số phần tử? */

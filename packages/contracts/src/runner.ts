@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS } from './bounds.ts';
 import { AUTH_METHODS, CAPABILITY_AUTH_MODES, ENGINE_SLUG_RE, NATIVE_MEMORY_POLICY, ProbeOutcome } from './engine.ts';
 import { ULID_RE } from './ids.ts';
 import { MEASURE_KINDS } from './sessions.ts';
@@ -71,7 +72,7 @@ export const PROMPT_DIR = 'prompt' as const;
 const PROMPT_PATH_SEGMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PROMPT_PATH_MAX_SEGMENTS = 4;
 /** Trần nội dung một tệp prompt (đơn vị UTF-16 của JS) — giới hạn trước khi xử lý. */
-export const PROMPT_FILE_MAX_CHARS = 4_000_000;
+export const PROMPT_FILE_MAX_CHARS = BOUNDS.blobText;
 
 export function isSafePromptPath(path: string): boolean {
   if (path.length === 0 || path.length > 255) return false;
@@ -271,7 +272,7 @@ export const RunnerReport = z.discriminatedUnion('command', [
     turnId: Ulid,
     exit: z.strictObject({
       exitCode: z.number().int().nullable(),
-      signal: z.string().nullable(),
+      signal: z.string().max(BOUNDS.signal).nullable(),
       timedOut: z.boolean(),
       durationMs: z.number().int().nonnegative(),
     }),
@@ -288,7 +289,7 @@ export const RunnerReport = z.discriminatedUnion('command', [
     $ga: z.literal('report'),
     command: z.literal('probe'),
     probeId: Ulid,
-    outcomes: z.array(ProbeOutcome).min(1),
+    outcomes: z.array(ProbeOutcome).min(1).max(BOUNDS.smallList),
     authGc: AuthGcResult,
   }),
 ]);
@@ -319,7 +320,7 @@ export const LOGIN_EXEC = {
 // ga-app) dùng parseRunnerStdout: fail-closed, chặn kích thước trước khi parse, chỉ nhận JSON dạng chuẩn (không khoá trùng).
 
 /** Trần một dòng CLI sau khi che (runner cắt / tách dòng dài hơn trước khi bọc). */
-export const RUNNER_CLI_LINE_MAX_CHARS = 262_144;
+export const RUNNER_CLI_LINE_MAX_CHARS = BOUNDS.streamText;
 /** Trần một dòng stdout (đã bọc) — kiểm TRƯỚC khi parse; đủ cho dòng CLI tối đa sau escape JSON (≤ 6 ký tự / ký tự). */
 export const RUNNER_STDOUT_LINE_MAX_CHARS = 6 * RUNNER_CLI_LINE_MAX_CHARS + 64;
 /** Trần số dòng một lần chạy. */

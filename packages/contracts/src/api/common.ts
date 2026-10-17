@@ -1,8 +1,7 @@
 import { z } from 'zod';
-import { DB_TIMESTAMP_RE } from '../clock.ts';
+import { BoundedJson, DbTimestamp, JSON_LIMITS } from '../bounds.ts';
 import { API_ERROR_CODES, type ApiErrorCode, DB_ERROR_CODES, type DbErrorCode } from '../errors.ts';
 import { ENTITY_TYPES, type EntityPrefix, formatDisplayId, parseDisplayId, ULID_RE } from '../ids.ts';
-import { TOOL_PAYLOAD_LIMITS } from '../mcp.ts';
 
 // Quy ước chung của hợp đồng API (BACKEND-TRIAL §3.0; L-API, M2). Mọi lane M2 dùng chung — KHÔNG định nghĩa lại kiểu ở lane.
 //
@@ -34,10 +33,10 @@ export const API_LIMITS = {
   /** Tên thực thể dài nhất cho ConfirmName (tên Role ≤ 60, workspace ≤ 80, nhãn tài khoản ≤ 60). */
   confirmChars: 200,
   /** `Json` tự do: mỗi chuỗi = trần chuỗi của gateway (mcp.ts); sâu ≤ 8; ≤ 1000 phần tử / khoá. */
-  jsonString: TOOL_PAYLOAD_LIMITS.maxStringChars,
-  jsonDepth: 8,
-  jsonItems: 1000,
-  jsonKeyChars: 128,
+  jsonString: JSON_LIMITS.string,
+  jsonDepth: JSON_LIMITS.depth,
+  jsonItems: JSON_LIMITS.items,
+  jsonKeyChars: JSON_LIMITS.keyChars,
 } as const;
 
 // ---------------------------------------------------------------- chuỗi có trần
@@ -81,7 +80,7 @@ export const Pct = z.number().int().min(0).max(100);
 
 // ---------------------------------------------------------------- thời gian
 /** Chuỗi UTC 24 ký tự (`toDbTimestamp`). */
-export const Ts = z.string().length(24).regex(DB_TIMESTAMP_RE).meta({ example: '2026-10-17T00:00:00.000Z' });
+export const Ts = DbTimestamp;
 
 /** IANA timezone: do `Intl` quyết (không tự viết danh sách). */
 export function isIanaTimezone(value: string): boolean {
@@ -98,25 +97,13 @@ export const IanaTimezone = str(64, 1)
   .meta({ example: 'Asia/Ho_Chi_Minh' });
 
 // ---------------------------------------------------------------- JSON tự do có trần
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-
-function jsonLevel(depth: number): z.ZodType<JsonValue> {
-  const leaves = [str(API_LIMITS.jsonString), z.number(), z.boolean(), z.null()] as const;
-  if (depth <= 0) return z.union([...leaves]);
-  const inner = jsonLevel(depth - 1);
-  return z.union([
-    ...leaves,
-    z.array(inner).max(API_LIMITS.jsonItems),
-    z
-      .record(str(API_LIMITS.jsonKeyChars), inner)
-      .refine((o) => Object.keys(o).length <= API_LIMITS.jsonItems, 'quá nhiều khoá'),
-  ]);
-}
+export type { JsonValue } from '../bounds.ts';
 /**
  * Giá trị JSON tự do — dùng cho `value` của DNA, `payload` ui_action, `before/after` change set… (hình dạng thật do
- * JSON Schema của miền kiểm ở tầng dịch vụ). Có trần: chuỗi, độ sâu, số phần tử. KHÔNG dùng `z.json()` (không trần).
+ * JSON Schema của miền kiểm ở tầng dịch vụ). Có trần: chuỗi, độ sâu, số phần tử (`BoundedJson` của bounds.ts). KHÔNG dùng
+ * `z.json()` (không trần).
  */
-export const Json = jsonLevel(API_LIMITS.jsonDepth);
+export const Json = BoundedJson;
 
 // ---------------------------------------------------------------- định danh
 export const Ulid = z.string().length(26).regex(ULID_RE).meta({ example: '01JABCDEFGHJKMNPQRSTVWXYZ0' });
