@@ -68,6 +68,27 @@ describe('bảng ánh xạ lỗi DB (G-03)', () => {
     expect(unused).toEqual([]);
   });
 
+  it('v2.3.5: mỗi họ chuỗi RAISE mới về ĐÚNG luật (không chỉ "khác unknown")', () => {
+    const family: [RegExp, string][] = [
+      [/^rowid \(v2\.3\.5\): /, 'identity.immutable'],
+      [/^actors \(v2\.3\.5\): kind \/ user_id/, 'identity.immutable'],
+      [/^NOT NULL \(v2\.3\.5, chống REPLACE\): /, 'sqlite.not_null'],
+      [/^[a-z_]+ \(v2\.3\.5\): xoá cứng /, 'permission.delete_gate'],
+      [/^[a-z_]+ \(v2\.3\.5\): bảng không có cột người ghi/, 'writer.actor_mismatch'],
+      [/^workspace_members \(v2\.3\.5\): workspace tenant phải còn ít nhất một owner/, 'workspace.owner_required'],
+      [/^workspace_members \(v2\.3\.5\): user đang là thành viên active/, 'workspace.membership_cross'],
+      [
+        /^(users|auth_sessions|engines|workspaces|schema_migrations) \(v2\.3\.5\): (?!xoá cứng)/,
+        'permission.writer_gate',
+      ],
+    ];
+    for (const [re, want] of family) {
+      const hits = messages.filter((m) => re.test(m));
+      expect(hits.length, String(re)).toBeGreaterThan(0);
+      for (const m of hits) expect(dbRuleOf(m), m.slice(0, 80)).toBe(want);
+    }
+  });
+
   it('code của DbRuleError = mapDbError của contracts cho MỌI chuỗi (vi phân, một nguồn)', () => {
     for (const m of messages) {
       const err = toDbRuleError(Object.assign(new Error(m), { name: 'SqliteError' })) as DbRuleError;

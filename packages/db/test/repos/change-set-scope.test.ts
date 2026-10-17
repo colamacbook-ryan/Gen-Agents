@@ -307,7 +307,8 @@ describe('ai được ÁP thay đổi chạm lõi / Nội quy (owner-only, bất
         }
         const wantAdmin = c.ownerGround ? 'permission.denied' : 'applied';
         if (adminResult !== wantAdmin) wrong.push(`${label}: admin áp ⇒ cần ${wantAdmin}, nhận ${adminResult}`);
-        if (c.ownerGround) {
+        // owner chỉ áp khi admin đã bị chặn (nếu admin lọt thì đã ghi vào `wrong` — không để ngoại lệ che dòng assert)
+        if (c.ownerGround && adminResult === 'permission.denied') {
           const ownerResult = applyAs(f.ownerActorId, id);
           if (ownerResult !== 'applied') wrong.push(`${label}: owner áp ⇒ ${ownerResult}`);
         }
