@@ -13,10 +13,25 @@ import { ENTITY_TYPES, type EntityPrefix, formatDisplayId, parseDisplayId, ULID_
 /** Base của mọi route (trừ WS `/term` của L-RT, gắn ở gốc edge). */
 export const API_BASE = '/api/v1' as const;
 
+/**
+ * Tên header CSRF — NGUỒN DUY NHẤT cho frontend / CLI (frontend không được import `@ga/security`). PHẢI trùng đúng
+ * `CSRF_HEADER` của `@ga/security` (packages/security/src/session.ts): giá trị sao chép từ mã nguồn đó, test golden ở cả hai nơi
+ * giữ không lệch. Chữ thường (HTTP header không phân biệt hoa thường). Thiếu / sai ở method ghi ⇒ `403 auth.csrf`.
+ */
+export const CSRF_HEADER = 'x-ga-csrf' as const;
+
+/**
+ * Tên cookie phiên — sao chép từ `SESSION` của `@ga/security` (session.ts): HTTPS (sau Caddy TLS) dùng `__Host-ga_sid` (+ Secure,
+ * trình duyệt cấm subdomain / HTTP ghi đè); HTTP thường (cài mặc định :7400) dùng `ga_sid`. Cả hai HttpOnly, SameSite=Strict, Path=/.
+ * (Đặc tả BACKEND-TRIAL §3.0 / §3.2 ghi `ga_session`: lệch với bản cài đặt đã duyệt; hợp đồng theo bản cài đặt.)
+ */
+export const SESSION_COOKIE_NAMES = { secure: '__Host-ga_sid', insecure: 'ga_sid' } as const;
+
 /** Cookie phiên + tên header dùng chung (HTTP header không phân biệt hoa thường: hợp đồng ghi chữ thường). */
 export const API_AUTH = {
-  sessionCookie: 'ga_session',
-  csrfHeader: 'x-ga-csrf',
+  sessionCookieSecure: SESSION_COOKIE_NAMES.secure,
+  sessionCookieInsecure: SESSION_COOKIE_NAMES.insecure,
+  csrfHeader: CSRF_HEADER,
   idempotencyHeader: 'idempotency-key',
   lastEventIdHeader: 'last-event-id',
   contentSha256Header: 'x-content-sha256',

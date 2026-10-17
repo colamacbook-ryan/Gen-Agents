@@ -5,7 +5,8 @@ import { defineLane, noContent, okNoStore, ws } from './define.ts';
 import { ShortCode } from './shapes.ts';
 
 // EXT-01…05 (BACKEND-TRIAL §3.2): đã có chủ ở M1 — liệt kê để hợp đồng đủ. EXT-01…04 = L-SEC (`src/auth/`), EXT-05 = L-RT.
-// Phiên = cookie `ga_session` (HttpOnly, SameSite=Strict) lấy từ EXT-01; mọi method ghi gửi `X-GA-CSRF` (trừ EXT-01).
+// Phiên = cookie `__Host-ga_sid` (HTTPS) / `ga_sid` (HTTP) (HttpOnly, SameSite=Strict) lấy từ EXT-01 (`SESSION_COOKIE_NAMES`); mọi method
+// ghi gửi header `x-ga-csrf` (`CSRF_HEADER`; trừ EXT-01).
 
 const sec = defineLane('L-SEC');
 const rt = defineLane('L-RT');
@@ -35,7 +36,7 @@ export const EXT_01 = sec({
   userPassword: true,
   o4: 'open',
   request: { body: z.strictObject({ username: str(64, 1), password: SecretInput('password') }) },
-  // Set-Cookie: ga_session. Mang csrfToken ⇒ no-store.
+  // Set-Cookie: phiên (`SESSION_COOKIE_NAMES`). Mang csrfToken ⇒ no-store.
   response: okNoStore(z.strictObject({ user: UserView, csrfToken: str(128, 16), mustChangePassword: z.boolean() })),
   // `auth.locked`: detail.retryAfterS (số giây).
   errors: ['auth.invalid_credentials', 'auth.locked'],
