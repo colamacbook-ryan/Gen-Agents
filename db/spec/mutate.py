@@ -26,7 +26,7 @@ Thoát 0 khi đối chứng xanh, không có đột biến sống (ngoài baseli
 import argparse, concurrent.futures, json, os, random, re, shutil, sqlite3, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FILES = ['schema_v2_2.py', 'schema_v2_2.sql', 'views_v2_2.sql', 'tests_v2_2.py']
+FILES = ['schema_v2_2.py', 'schema_v2_2.sql', 'views_v2_2.sql', 'tests_v2_2.py', 'gen_seed.py', 'seed_reference.json']   # v2.3.4: + seed tham chiếu (SEED-ref)
 TOTAL_RE = re.compile(r'^TỔNG: (\d+) / (\d+) PASS', re.M)
 FAIL_RE = re.compile(r'^FAIL (\S+)', re.M)
 

@@ -4,11 +4,11 @@
 name: ga-netcheck
 services:
   app-probe: # đóng vai ga-app: core (ra ngoài được) + roles (internal) — gateway :7410 lắng nghe trên roles
-    image: busybox:1.37
+    image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
     command: ["sh", "-c", "echo ok > /tmp/index.html && exec httpd -f -p 7410 -h /tmp"]
     networks: [core, roles]
   role-probe: # đóng vai container Role: CHỈ ở roles
-    image: busybox:1.37
+    image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
     command: ["sleep", "600"]
     networks: [roles]
 networks:

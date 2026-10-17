@@ -23,6 +23,12 @@ describe('lint-rules', () => {
         'db-write-only-via-write',
         'no-duplicate-component-names',
         'import-boundaries',
+        'engine-plans-only-in-runner',
+        'db-privileged-api-paths',
+        'db-actor-columns-from-context',
+        'no-invisible-chars',
+        'no-chibi-testing-import',
+        'no-raw-normalize',
       ]),
     );
   });
