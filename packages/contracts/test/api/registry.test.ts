@@ -182,7 +182,7 @@ describe('registry — quyền', () => {
     const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen.length > 0)
       .map((r) => r.id)
       .sort();
-    expect(withOwnerWhen).toEqual(['GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08', 'SYS-45', 'WRK-14']);
+    expect(withOwnerWhen).toEqual(['GW-10', 'GW-29', 'GW-31', 'OPS-03', 'OPS-07', 'OPS-08', 'SYS-45', 'WRK-14']);
     const ops03 = routeById('OPS-03');
     // Telegram allowlist (H2): thêm người = nới ⇒ cả WRK-03 và WRK-05 là O không điều kiện; WRK-05 không còn body `asOwner`.
     for (const id of ['WRK-03', 'WRK-05']) {
@@ -212,6 +212,17 @@ describe('registry — quyền', () => {
       expect(r && requiredAccess(r, { body: { [field]: 'deny' } }), `${id} deny`).toBe('A');
       expect(r && requiredAccess(r, { body: {} }), `${id} thiếu trường`).toBe('A');
     }
+    // GW-10: BẬT binding (gắn credential vào container) = nới ⇒ O; tắt / đổi model / effort = A.
+    const gw10 = routeById('GW-10');
+    expect(gw10 && requiredAccess(gw10, { body: { enabled: true } })).toBe('O');
+    expect(gw10 && requiredAccess(gw10, { body: { enabled: false } })).toBe('A');
+    expect(gw10 && requiredAccess(gw10, { body: { modelKey: 'model-1', effort: 'high' } })).toBe('A');
+    expect(gw10 && requiredAccess(gw10, { body: { modelKey: 'model-1', enabled: true } })).toBe('O');
+    // GW-20: đo trên binding của Role (bindingRef), không còn accountRef tuỳ ý.
+    const gw20body = routeById('GW-20')?.request.body;
+    expect(gw20body?.safeParse({ bindingRef: 'EB-0001' }).success).toBe(true);
+    expect(gw20body?.safeParse({ accountRef: 'EN-0001' }).success).toBe(false);
+    expect(gw20body?.safeParse({}).success).toBe(true);
     // SYS-45: đặt / gỡ hạn mức token và trần thưởng = nới ⇒ O; sửa tiêu đề / JD vẫn A. `null` (gỡ trần) cũng là nới.
     const sys45 = routeById('SYS-45');
     expect(sys45 && requiredAccess(sys45, { body: { dailyTokenQuota: 1000 } })).toBe('O');

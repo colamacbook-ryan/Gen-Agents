@@ -269,6 +269,9 @@ export const GW_10 = gw({
   method: 'PATCH',
   path: '/engine-bindings/{bindingRef}',
   auth: 'A',
+  // BẬT binding (`enabled = true`) gắn volume `/auth` của tài khoản vào container của Role = NỚI ⇒ owner; tắt / đổi model / effort
+  // giữ A. Binding phải thuộc đúng workspace (HANDLER-OBLIGATIONS #1, #2).
+  ownerWhen: { in: 'body', field: 'enabled', equals: true },
   o4: 'blocked',
   request: {
     params: z.strictObject({ bindingRef: Ref('EB') }),
@@ -455,10 +458,12 @@ export const GW_20 = gw({
   path: '/roles/{roleRef}/measure-prompt',
   auth: 'A',
   o4: 'blocked',
-  // Mặc định binding ưu tiên 1.
+  // Đo trên MỘT BINDING của chính Role (mặc định binding ưu tiên 1). Đặc tả cũ nhận `accountRef` (bất kỳ tài khoản): đổi sang
+  // `bindingRef` để không chạy phiên đo trên tài khoản Core agent hay tài khoản của Role khác (HANDLER-OBLIGATIONS #2: dịch vụ
+  // vẫn PHẢI kiểm binding ∈ bindings của Role này).
   request: {
     params: z.strictObject({ roleRef: Ref('RL') }),
-    body: z.strictObject({ accountRef: Ref('EN').optional() }),
+    body: z.strictObject({ bindingRef: Ref('EB').optional() }),
   },
   // Phiên `prompt_worst`.
   response: accepted(z.strictObject({ job: Job, session: IdOf('SS') })),
