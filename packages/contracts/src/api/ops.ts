@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ACTOR_KINDS } from '../actors.ts';
+import { parseDisplayId } from '../ids.ts';
 import { REMOTE_ANCHOR_URL_RE, SETTING_WRITERS } from '../settings.ts';
 import { UPDATE_STEPS, UpdaterStatus } from '../update.ts';
 import { READABLE_PREFIXES } from './access.ts';
@@ -26,7 +27,8 @@ import {
   str,
   Ts,
 } from './common.ts';
-import { accepted, binary, csv, defineLane, noContent, ok, sse } from './define.ts';
+import { accepted, binary, csv, defineLane, noContent, ok, type RequestParts, sse } from './define.ts';
+import { gridOfPrefix, gridSelectionIssues } from './grid-columns.ts';
 import { ColumnName, GRID_PAGE_MAX, GridInfo, GridKey, GridRowsPage, gridSelectShape } from './grids.ts';
 import { Redacted } from './masking.ts';
 import { LogLine, LogLineEvent } from './sse.ts';
@@ -669,6 +671,30 @@ export const OPS_31 = ops({
 // ---------------------------------------------------------------- OPS-32…36 lưới chung / Data Console, bản ghi, tìm kiếm
 const GridParams = z.strictObject({ gridKey: GridKey });
 
+/** Kiểm CHÉO (M8): `cols` / `sort` / `group` / tên trường trong `q` phải thuộc `GRID_COLUMNS[gridKey]`; tên lạ ⇒ lỗi. */
+function refineGridSelection(req: RequestParts): string[] {
+  const grid = GridKey.safeParse(req.params.gridKey);
+  if (!grid.success) return [];
+  const { q, sort, cols, group } = req.query as {
+    q?: string;
+    sort?: string[];
+    cols?: string[];
+    group?: string;
+  };
+  return gridSelectionIssues(grid.data, { q, sort, cols, group });
+}
+
+/** OPS-35: có `cols` thì phải biết lưới của bản ghi — mã hiển thị mang prefix; ULID không mang ⇒ handler kiểm lại sau khi tra prefix THẬT. */
+function refineRecordCols(req: RequestParts): string[] {
+  const { cols } = req.query as { cols?: string[] };
+  if (!cols) return [];
+  const parsed = parseDisplayId(String(req.params.recordRef));
+  if (!parsed) return [];
+  const grid = gridOfPrefix(parsed.prefix);
+  if (!grid) return [`cols: prefix ${parsed.prefix} không có lưới, không có whitelist cột`];
+  return gridSelectionIssues(grid, { cols });
+}
+
 export const OPS_32 = ops({
   id: 'OPS-32',
   method: 'GET',
@@ -694,6 +720,7 @@ export const OPS_33 = ops({
       group: ColumnName.optional(),
       ...pageQueryShape(GRID_PAGE_MAX),
     }),
+    refine: refineGridSelection,
   },
   // Keyset `(sort_col, display_seq)`, không OFFSET; ≤ 500 hàng / trang. Chạy connection chỉ đọc, trần thời gian 2 giây.
   response: ok(GridRowsPage),
@@ -708,7 +735,7 @@ export const OPS_34 = ops({
   auth: 'V',
   o4: 'blocked',
   // Chạy đúng cùng truy vấn với OPS-33, theo luồng; `text/csv` + `X-Content-SHA256`; ô công thức được thoát.
-  request: { params: GridParams, query: z.strictObject(gridSelectShape) },
+  request: { params: GridParams, query: z.strictObject(gridSelectShape), refine: refineGridSelection },
   response: csv(),
   errors: ['query.invalid'],
   cli: ['grid --csv'],
@@ -725,6 +752,7 @@ export const OPS_35 = ops({
     // `effectiveReadAuth(route, prefix)` (HANDLER-OBLIGATIONS #1, #8).
     params: z.strictObject({ recordRef: Ref(READABLE_PREFIXES) }),
     query: z.strictObject({ cols: queryList(ColumnName, 64, 'status').optional() }),
+    refine: refineRecordCols,
   },
   // Mọi prefix của `ENTITY_TYPES`. Thanh công thức / Inspector / giá trị đích của Soi.
   response: ok(

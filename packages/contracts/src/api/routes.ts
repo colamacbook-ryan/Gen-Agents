@@ -46,7 +46,14 @@ export function requestSchemaOf(route: Pick<Route, 'request'>): z.ZodType {
   if (r.query) shape.query = r.query;
   if (r.headers) shape.headers = r.headers;
   if (r.body) shape.body = r.body;
-  return z.strictObject(shape);
+  const refine = r.refine;
+  if (!refine) return z.strictObject(shape);
+  return z.strictObject(shape).superRefine((value, ctx) => {
+    const v = value as { params?: Record<string, unknown>; query?: Record<string, unknown>; body?: unknown };
+    for (const message of refine({ params: v.params ?? {}, query: v.query ?? {}, body: v.body })) {
+      ctx.addIssue({ code: 'custom', message });
+    }
+  });
 }
 
 /** Schema của response JSON (`null` nếu route trả 204 / luồng / tệp). */

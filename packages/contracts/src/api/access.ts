@@ -146,3 +146,9 @@ export function sseEventAllows(
   }
   return authAtLeast(viewer.auth, need);
 }
+
+/**
+ * Lưới mà dữ liệu là của RIÊNG người gọi (lọc `user_id = người dùng của phiên`, HANDLER-OBLIGATIONS #7, cùng gốc với SYS-83 / SYS-84
+ * `scope: 'self'`): OPS-33 / 34 / 35 trên các lưới này cũng phải lọc theo người dùng, không chỉ theo workspace.
+ */
+export const GRID_SELF_SCOPED: readonly GridKeyName[] = ['notifications'];

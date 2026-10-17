@@ -111,7 +111,7 @@ export const GRID_WRITE_ROUTES: Record<GridKeyName, GridWrite> = {
     remove: 'WRK-40',
     actions: { decision: 'WRK-38', restore: 'WRK-41' },
   },
-  tasks: { ...NONE, edit: { role: 'WRK-17', verification: 'WRK-19' }, actions: { stop: 'WRK-18' } },
+  tasks: { ...NONE, edit: { role: 'WRK-17', verified: 'WRK-19' }, actions: { stop: 'WRK-18' } },
   commitments: NONE,
   // Sổ ₲ chỉ-ghi-thêm: bút toán tạo bằng WRK-23…26 (có Idempotency-Key, không qua ô lưới); hành động theo hàng = đảo.
   ledger: { ...NONE, actions: { reverse: 'WRK-26' } },
@@ -137,7 +137,7 @@ export const GRID_WRITE_ROUTES: Record<GridKeyName, GridWrite> = {
   employee_cards: { ...NONE, actions: { suspend: 'SYS-77', resume: 'SYS-78', revoke: 'SYS-79' } },
   trial_runs: NONE,
   notifications: { ...NONE, actions: { read: 'SYS-84' } },
-  characters: { ...NONE, edit: { on: 'SYS-66' }, actions: { assign: 'SYS-65' } },
+  characters: { ...NONE, edit: { enabled: 'SYS-66' }, actions: { assign: 'SYS-65' } },
   avatars: { ...NONE, actions: { restore: 'SYS-69' } },
   sessions: { ...NONE, reads: ['GW-26', 'GW-27'] },
   permission_requests: { ...NONE, edit: { status: 'GW-29' }, reads: ['GW-28'] },
@@ -174,7 +174,7 @@ export const ColumnLetter = z
   .regex(/^[A-Z]{1,3}$/)
   .meta({ example: 'A' });
 export const QUERY_OPS = [':', '=', '!=', '>', '>=', '<', '<='] as const;
-export const COLUMN_TYPES = ['text', 'enum', 'int', 'money', 'ts', 'bool', 'json'] as const;
+export const COLUMN_TYPES = ['text', 'enum', 'int', 'real', 'money', 'ts', 'bool', 'json'] as const;
 /** `-cột` = giảm dần; tối đa 3 khoá, khoá hoà luôn là `display_seq` (keyset, không OFFSET). */
 export const SortKey = z
   .string()

@@ -3,6 +3,7 @@ export * from './access.ts';
 export * from './auth.ts';
 export * from './common.ts';
 export * from './coverage.ts';
+export * from './grid-columns.ts';
 export * from './grids.ts';
 export * from './gw.ts';
 export * from './hr.ts';

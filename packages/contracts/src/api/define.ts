@@ -77,6 +77,19 @@ export interface RequestSpec {
   headers?: z.ZodType;
   /** `multipart` = body là các phần form (tệp + trường văn bản của `body`). Mặc định `json`. */
   bodyKind?: 'json' | 'multipart';
+  /**
+   * Kiểm CHÉO các phần của request sau khi từng phần đã qua schema (vd `cols` của query phải thuộc whitelist của lưới trong
+   * `params`). Trả về danh sách vi phạm (rỗng = hợp lệ); mỗi vi phạm là một `400 query.invalid` / `validation`. Hàm thuần,
+   * không I/O. `requestSchemaOf` gắn nó vào schema tổng nên test và edge dùng chung một nguồn.
+   */
+  refine?: (req: RequestParts) => readonly string[];
+}
+
+/** Các phần request đã qua schema (đầu ra, sau transform). */
+export interface RequestParts {
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly query: Readonly<Record<string, unknown>>;
+  readonly body: unknown;
 }
 
 export type ResponseSpec =
