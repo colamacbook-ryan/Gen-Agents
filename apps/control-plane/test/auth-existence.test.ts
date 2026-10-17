@@ -34,16 +34,17 @@ async function setup(): Promise<Env> {
   const clock = new FakeClock();
   const conn = openWriter(join(dir, 'gen.sqlite'), { clock });
   migrate(conn, { dir: SQLITE_MIGRATIONS_DIR, appVersion: '0.0.0' });
-  conn.db
-    .prepare(
+  // DB v2.3.5: workspace / actor system đầu tiên chỉ tạo trong conn.bootstrap của chính workspace đó
+  conn.bootstrap({ workspaceId: SYSTEM_WORKSPACE_ID, systemActorId: SYS_ACTOR }, (w) => {
+    w.run(
       "INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, 'system', 'system', 'System', 'SYS0')",
-    )
-    .run(SYSTEM_WORKSPACE_ID);
-  conn.db
-    .prepare(
+      [SYSTEM_WORKSPACE_ID],
+    );
+    w.run(
       "INSERT INTO actors (id, workspace_id, kind, system_key, label) VALUES (?, ?, 'system', 'system', 'System')",
-    )
-    .run(SYS_ACTOR, SYSTEM_WORKSPACE_ID);
+      [SYS_ACTOR, SYSTEM_WORKSPACE_ID],
+    );
+  });
   const firstPath = join(dir, 'first-password');
   const service = new AuthService({
     store: new SqliteAuthStore(conn),
@@ -108,7 +109,9 @@ describe('đăng nhập không lộ sự tồn tại của tài khoản', () => 
   });
 
   it('user bị vô hiệu ≡ user lạ (không được trả locked theo DB thật, không đăng nhập được)', async () => {
-    env.conn.db.prepare("UPDATE users SET disabled_at = '2026-10-17T07:00:00.000Z' WHERE username = 'admin'").run();
+    env.conn.write(SYS_ACTOR, (w) =>
+      w.run("UPDATE users SET disabled_at = '2026-10-17T07:00:00.000Z' WHERE username = 'admin'"),
+    );
     const seq: Array<[string, string]> = [];
     for (let i = 1; i <= 6; i++) {
       const a = await attempt(env, 'admin', env.first, `10.5.0.${i}`);
