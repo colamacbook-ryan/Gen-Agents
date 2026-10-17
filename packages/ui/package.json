@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Thư viện giao diện Data Console (STD-07): token + font, primitives, shell, overlay, component dùng chung (BUILD-PLAN §D.1, §E.4).",
+  "description": "Thư viện giao diện Data Console (STD-07): token + font, primitives, shell, overlay, component dùng chung; DataGrid, thanh công thức, ô truy vấn (BUILD-PLAN §D.1, §E.4).",
   "exports": {
     ".": "./src/index.ts",
     "./styles": "./src/styles.ts",
@@ -12,18 +12,26 @@
     "./primitives": "./src/primitives/index.ts",
     "./shell": "./src/shell/index.ts",
     "./overlay": "./src/overlay/index.ts",
-    "./shared": "./src/shared/index.ts"
+    "./shared": "./src/shared/index.ts",
+    "./datagrid": "./src/datagrid/index.ts",
+    "./formula-bar": "./src/formula-bar/index.ts",
+    "./query-box": "./src/query-box/index.ts"
   },
   "scripts": {
-    "test": "node ../../scripts/vitest-run.mjs"
+    "test": "node ../../scripts/vitest-run.mjs",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@ga/contracts": "workspace:*",
     "@ga/i18n": "workspace:*",
+    "@tanstack/react-table": "8.21.3",
+    "@tanstack/react-virtual": "3.14.21",
     "lucide-react": "1.58.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
     "zustand": "5.0.15"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@testing-library/dom": "10.4.2",
@@ -31,6 +39,12 @@
     "@testing-library/user-event": "14.6.8",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "happy-dom": "21.0.3"
+    "axe-core": "4.14.0",
+    "happy-dom": "21.0.3",
+    "playwright-core": "1.56.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vite": "8.3.4",
+    "zod": "4.6.7"
   }
 }

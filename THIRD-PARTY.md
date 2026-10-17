@@ -3,7 +3,7 @@
 > SINH TỰ ĐỘNG bởi `pnpm license:check -- --write` (scripts/license-gate.mjs). Không sửa tay — CI đỏ nếu lệch.
 > License đọc từ chính tệp LICENSE của từng gói (STD-04 §6). Chính sách: `scripts/license-policy.json`.
 
-## Đi vào sản phẩm (28 gói, gồm phụ thuộc gián tiếp)
+## Đi vào sản phẩm (32 gói, gồm phụ thuộc gián tiếp)
 
 | Gói | Phiên bản | License | Nhận ra từ tệp LICENSE | Ghi chú |
 |---|---|---|---|---|
@@ -13,8 +13,12 @@
 | @tanstack/react-query | 5.104.3 | MIT | MIT |  |
 | @tanstack/react-router | 1.170.45 | MIT | MIT |  |
 | @tanstack/react-store | 0.11.2 | MIT | MIT |  |
+| @tanstack/react-table | 8.21.3 | MIT | MIT |  |
+| @tanstack/react-virtual | 3.14.21 | MIT | MIT |  |
 | @tanstack/router-core | 1.171.38 | MIT | MIT |  |
 | @tanstack/store | 0.11.2 | MIT | MIT |  |
+| @tanstack/table-core | 8.21.3 | MIT | MIT |  |
+| @tanstack/virtual-core | 3.19.6 | MIT | MIT |  |
 | @types/react | 19.3.0 | MIT | MIT |  |
 | better-sqlite3 | 13.0.3 | MIT | MIT |  |
 | cookie-es | 3.1.1 | MIT | MIT |  |
