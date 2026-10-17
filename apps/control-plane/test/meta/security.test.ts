@@ -39,8 +39,8 @@ it('meta-test không rỗng: có route public / V / A / O / ownerWhen / Ref path
   const has = (p: (r: Route) => boolean) => ROUTES.some(p);
   expect(has((r) => r.auth === 'public')).toBe(true);
   for (const a of ['V', 'A', 'O'] as const) expect(has((r) => r.auth === a)).toBe(true);
-  expect(has((r) => r.ownerWhen !== undefined && 'rule' in r.ownerWhen)).toBe(true);
-  expect(has((r) => r.ownerWhen !== undefined && 'in' in r.ownerWhen)).toBe(true);
+  expect(has((r) => r.ownerWhen.some((w) => 'rule' in w))).toBe(true);
+  expect(has((r) => r.ownerWhen.some((w) => 'in' in w))).toBe(true);
   for (const part of ['params', 'query', 'body'] as const) {
     expect(has((r) => tk.refFieldsOf(r).some((f) => f.part === part))).toBe(true);
   }
@@ -82,28 +82,32 @@ describe('phiên + quyền', () => {
     expect(ran).toBe(0);
   });
 
-  it.each(each.filter(([, r]) => r.ownerWhen !== undefined))(
-    '%s: ownerWhen đúng điều kiện ⇒ admin 403, owner qua quyền',
-    async (_id, r) => {
-      const w = r.ownerWhen;
-      if (!w) throw new Error('unreachable');
-      const input = validInput(r);
-      if ('rule' in w) {
+  const ownerWhenCases = HANDLERS.flatMap((h) =>
+    h.route.ownerWhen.map((w, i) => [`${h.route.id} ownerWhen[${i}]`, h, w] as const),
+  );
+  it.each(ownerWhenCases)('%s: điều kiện đúng ⇒ admin 403, owner qua quyền', async (_label, h, w) => {
+    const r = h.route;
+    const input = validInput(r);
+    if ('rule' in w) {
+      if (w.rule === 'setting_writers') {
         const ownerOnly = Object.keys(SETTINGS).find((k) => isSettingKey(k) && !settingWritableBy(k, 'admin'));
         if (!ownerOnly) throw new Error('registry SETTINGS không có khoá chỉ owner');
         input.params = { ...input.params, settingKey: ownerOnly };
-      } else if (w.in === 'body') {
-        input.body = { ...(input.body as Record<string, unknown>), [w.field]: w.equals };
-      } else {
-        input.query = { ...input.query, [w.field]: String(w.equals) };
+      } else if (h.stored) {
+        return; // trạng thái đã lưu do handler tra (hook `stored`) — lane tự có ca âm (HANDLER-OBLIGATIONS §3)
       }
-      const admin = await callCounted(r, 'A.admin', input);
-      expectError(admin.res, 403, 'auth.forbidden');
-      expect(admin.ran).toBe(0);
-      const owner = await callCounted(r, 'A.owner', input);
-      expect(owner.res.code).not.toBe('auth.forbidden');
-    },
-  );
+      // egress_loosen không hook `stored` ⇒ edge coi như khớp ⇒ O (fail-closed)
+    } else {
+      const value = 'equals' in w ? w.equals : 'equalsAny' in w ? w.equalsAny[0] : null;
+      if (w.in === 'body') input.body = { ...(input.body as Record<string, unknown>), [w.field]: value };
+      else input.query = { ...input.query, [w.field]: String(value) };
+    }
+    const admin = await callCounted(r, 'A.admin', input);
+    expectError(admin.res, 403, 'auth.forbidden');
+    expect(admin.ran).toBe(0);
+    const owner = await callCounted(r, 'A.owner', input);
+    expect(owner.res.code).not.toBe('auth.forbidden');
+  });
 
   it.each(each.filter(([, r]) => r.auth === 'V'))('%s: viewer qua được cổng quyền', async (_id, r) => {
     const { res } = await callCounted(r, 'A.viewer', validInput(r));

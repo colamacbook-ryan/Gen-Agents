@@ -1,4 +1,4 @@
-// Đồng hồ tiến độ `pnpm api:coverage` (owner xem): số route đã có handler production / 201 theo lane + route đã mount mà
+// Đồng hồ tiến độ `pnpm api:coverage` (owner xem): số route đã có handler production / tổng (202) theo lane + route đã mount mà
 // CHƯA có seeder chống IDOR cho một trường Ref (meta-test sẽ đỏ ở các route này).
 import { LANES, type Lane, ROUTES, type Route } from '@ga/contracts';
 import { refFieldsOf } from './sample.ts';

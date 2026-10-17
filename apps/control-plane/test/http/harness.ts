@@ -84,6 +84,7 @@ export function makeTestApp(opts: TestAppOptions): TestApp {
   const logger = memoryLogger();
   const calls = new Map<string, number>();
   const spied: Handler[] = opts.handlers.map((h) => ({
+    ...h,
     route: h.route,
     run: async (input, ctx) => {
       calls.set(h.route.id, (calls.get(h.route.id) ?? 0) + 1);

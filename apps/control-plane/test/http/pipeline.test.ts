@@ -1,5 +1,5 @@
 // Chuỗi middleware cố định (src/http/pipeline.ts): từng rào có ca âm riêng + đối chứng dương.
-import { API_LIMITS, routeById, TurnRejectedError } from '@ga/contracts';
+import { API_LIMITS, isSettingKey, routeById, SETTINGS, settingWritableBy, TurnRejectedError } from '@ga/contracts';
 import { DbRuleError } from '@ga/db/repos';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AuthenticateResult } from '../../src/auth/index.ts';
@@ -269,21 +269,37 @@ describe('lớp CSRF RIÊNG của edge (không dựa vào L-SEC)', () => {
 });
 
 describe('ownerWhen: thô + đã validate', () => {
-  it('WRK-05 asOwner=true ⇒ admin 403; false / thiếu ⇒ admin qua; "true" (chuỗi) ⇒ 400 (không lách được)', async () => {
-    const t = makeTestApp({ handlers: [demo('WRK-05')], world });
-    const params = { captureId: 'cap_0123456789abcdef' };
-    expect((await t.as('A.admin').call('WRK-05', { params, body: { asOwner: true } })).status).toBe(403);
-    expect((await t.as('A.owner').call('WRK-05', { params, body: { asOwner: true } })).status).toBe(200);
-    expect((await t.as('A.admin').call('WRK-05', { params, body: { asOwner: false } })).status).toBe(200);
-    expect((await t.as('A.admin').call('WRK-05', { params, body: {} })).status).toBe(200);
-    expect((await t.as('A.admin').call('WRK-05', { params, body: { asOwner: 'true' } })).status).toBe(400);
+  it('WRK-14 enabled=true ⇒ admin 403; false ⇒ admin qua; "true" (chuỗi) ⇒ 400 (không lách được)', async () => {
+    const t = makeTestApp({ handlers: [demo('WRK-14')], world });
+    const params = { roleRef: roleOf('A').displayId };
+    expect((await t.as('A.admin').call('WRK-14', { params, body: { enabled: true } })).status).toBe(403);
+    expect((await t.as('A.owner').call('WRK-14', { params, body: { enabled: true } })).status).toBe(200);
+    expect((await t.as('A.admin').call('WRK-14', { params, body: { enabled: false } })).status).toBe(200);
+    expect((await t.as('A.admin').call('WRK-14', { params, body: { enabled: 'true' } })).status).toBe(400);
+  });
+  it('OPS-08 egress_loosen (trạng thái ĐÃ LƯU): không hook ⇒ admin 403; hook allow ⇒ admin qua; hook deny ⇒ 403', async () => {
+    const del = (stored?: 'allow' | 'deny') =>
+      stored === undefined
+        ? defineHandler('OPS-08', () => undefined)
+        : defineHandler('OPS-08', () => undefined, { stored: () => ({ egressAction: stored }) });
+    const call = (h: Handler, who: 'A.admin' | 'A.owner') =>
+      makeTestApp({ handlers: [h], world })
+        .as(who)
+        .call('OPS-08', { params: { egressRef: 'EG-0001' } });
+    expect((await call(del(), 'A.admin')).status).toBe(403);
+    const ow = await call(del(), 'A.owner');
+    expect(ow.status, ow.text).toBe(204);
+    expect((await call(del('allow'), 'A.admin')).status).toBe(204);
+    expect((await call(del('deny'), 'A.admin')).status).toBe(403);
   });
   it('OPS-03 khoá admin không ghi được ⇒ admin 403; khoá admin ghi được ⇒ qua; khoá lạ ⇒ chỉ owner', async () => {
     const t = makeTestApp({ handlers: [demo('OPS-03')], world });
     const call = (who: 'A.admin' | 'A.owner', settingKey: string) =>
       t.as(who).call('OPS-03', { params: { settingKey }, body: { value: 1 } });
     expect((await call('A.admin', 'backup.remote_anchor')).status).toBe(403);
-    expect((await call('A.admin', 'purge.grace_days')).status).toBe(200);
+    const adminKey = Object.keys(SETTINGS).find((k) => isSettingKey(k) && settingWritableBy(k, 'admin'));
+    if (!adminKey) throw new Error('registry SETTINGS không có khoá admin ghi được');
+    expect((await call('A.admin', adminKey)).status).toBe(200);
     expect((await call('A.admin', 'no.such_key')).status).toBe(403);
     expect((await call('A.owner', 'no.such_key')).status).toBe(200);
   });

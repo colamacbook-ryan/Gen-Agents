@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm api:coverage — đồng hồ tiến độ API M2 (L-APP): số route có handler PRODUCTION / 201 theo lane + route đã mount mà
+// pnpm api:coverage — đồng hồ tiến độ API M2 (L-APP): số route có handler PRODUCTION / tổng (202) theo lane + route đã mount mà
 // CHƯA có seeder chống IDOR cho một trường Ref (meta-test chéo tenant sẽ đỏ ở đó).
 //   node scripts/api-coverage.mjs            in báo cáo
 //   node scripts/api-coverage.mjs --check    thêm: thiếu seeder ⇒ thoát 1

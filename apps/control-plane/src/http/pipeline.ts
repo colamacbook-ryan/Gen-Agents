@@ -63,6 +63,11 @@ export interface PipelineDeps {
 export type AppEnv = { Variables: { requestId: string; routeId: string } };
 
 /** HANDLER-OBLIGATIONS §15: phiên đang bắt đổi mật khẩu chỉ gọi được EXT-02 / 03 / 04 (+ đường cũ của L-SEC). */
+/** Điều kiện `ownerWhen` quyết theo trạng thái DB (không có trong request). */
+function isStoredRule(w: Route['ownerWhen'][number]): boolean {
+  return 'rule' in w && w.rule === 'egress_loosen';
+}
+
 export const PASSWORD_CHANGE_ROUTE_IDS: ReadonlySet<string> = new Set(['EXT-02', 'EXT-03', 'EXT-04']);
 
 export function allowedDuringPasswordChange(route: Route): boolean {
@@ -251,9 +256,12 @@ export async function runRoute(
     const rawQuery = queryObject(url);
     const rawParams = route.request.params ? (c.req.param() as Record<string, string>) : undefined;
 
-    // 6. ownerWhen trên input thô
-    if (actor !== null && route.ownerWhen) {
-      const need = requiredAccess(route, { params: rawParams, body: rawBody, query: rawQuery });
+    // 6. ownerWhen trên input thô (điều kiện theo TRẠNG THÁI ĐÃ LƯU: chỉ hoãn tới bước 9 khi handler có `stored`)
+    if (actor !== null && route.ownerWhen.length > 0) {
+      const rawRoute = handler.stored
+        ? { auth: route.auth, ownerWhen: route.ownerWhen.filter((w) => !isStoredRule(w)) }
+        : route;
+      const need = requiredAccess(rawRoute, { params: rawParams, body: rawBody, query: rawQuery });
       if (!authAtLeast(actor.authLevel, need)) throw new ApiError('auth.forbidden');
     }
 
@@ -287,12 +295,19 @@ export async function runRoute(
       headers: v.headers,
     });
 
-    // 9. ownerWhen trên input đã validate (coerce / transform không hạ được mức)
-    if (actor !== null && route.ownerWhen) {
+    const ctx =
+      actor === null
+        ? createPublicContext(deps, { requestId, route })
+        : createHandlerContext(deps, { requestId, route, actor });
+
+    // 9. ownerWhen trên input đã validate (coerce / transform không hạ được mức) + trạng thái đã lưu (hook `stored`)
+    if (actor !== null && route.ownerWhen.length > 0) {
+      const stored = handler.stored ? await handler.stored(input, ctx) : undefined;
       const need = requiredAccess(route, {
         params: input.params as Record<string, unknown> | undefined,
         body: input.body,
         query: input.query,
+        ...(stored ? { stored } : {}),
       });
       if (!authAtLeast(actor.authLevel, need)) throw new ApiError('auth.forbidden');
     }
@@ -340,10 +355,6 @@ export async function runRoute(
     }
 
     // 12. handler
-    const ctx =
-      actor === null
-        ? createPublicContext(deps, { requestId, route })
-        : createHandlerContext(deps, { requestId, route, actor });
     const out = await handler.run(input, ctx);
 
     // 13. validate response

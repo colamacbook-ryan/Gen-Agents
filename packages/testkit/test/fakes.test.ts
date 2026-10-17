@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { routeById, TurnRejectedError } from '@ga/contracts';
+import { ROUTES, routeById, TurnRejectedError } from '@ga/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   buildPath,
@@ -145,11 +145,12 @@ describe('client + seeder + coverage', () => {
     expect(missingSeederPrefixes(['RL'])).toEqual([]);
     expect(missingSeederPrefixes(['AT'])).toEqual(['AT']);
     const rep = coverageReport([route('SYS-34'), route('SYS-55'), route('OPS-01')]);
-    expect(rep.total).toBe(201);
+    expect(rep.total).toBe(ROUTES.length);
+    expect(rep.total).toBe(202);
     expect(rep.implemented).toBe(3);
     expect(rep.lanes.find((l) => l.lane === 'L-HR')?.implemented).toBe(2);
     expect(rep.missingSeeders.some((m) => m.routeId === 'SYS-55' && m.prefixes.includes('AT'))).toBe(true);
     expect(rep.missingSeeders.some((m) => m.routeId === 'SYS-34')).toBe(false);
-    expect(formatCoverage(rep)).toContain('3/201');
+    expect(formatCoverage(rep)).toContain('3/202');
   });
 });

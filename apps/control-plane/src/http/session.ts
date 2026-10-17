@@ -3,8 +3,9 @@
 //   - workspace = membership ĐANG hoạt động của user trong workspace tenant đang `active` (MVP: một user ↔ một tenant — repo
 //     `addMember` chặn kéo user sang tenant khác). Không có ⇒ 403; >1 (dữ liệu lệch) ⇒ 403 (fail-closed, không đoán).
 //   - KHÔNG BAO GIỜ lấy workspace / mức quyền từ body / query / header của request.
-//   - `access_level` → mức của registry qua `accessLevelToAuth` (owner→O, admin→A, viewer→V; khác ⇒ null ⇒ 403).
-import type { AuthLevel } from '@ga/contracts';
+//   - `access_level` → mức của registry qua `accessLevelToAuth` của contracts (owner→O, admin→A, viewer→V; operator / lạ
+//     ⇒ null ⇒ 403).
+import { type AuthLevel, accessLevelToAuth } from '@ga/contracts';
 import type { AppConnection } from '@ga/db';
 import type { AuthenticateResult, AuthRequestMeta } from '../auth/index.ts';
 
@@ -15,24 +16,6 @@ export interface SessionAuthenticator {
 
 export type MemberAccessLevel = 'owner' | 'admin' | 'viewer';
 export type ActorAuthLevel = Exclude<AuthLevel, 'public'>;
-
-/**
- * `workspace_members.access_level` → mức quyền của registry. CỤC BỘ, fail-closed — L-API đang thêm `accessLevelToAuth` vào
- * contracts (feat/m2-api); khi merge, thay hàm này bằng bản của contracts. `operator` (DB có, hợp đồng chưa định nghĩa) và
- * mọi giá trị lạ ⇒ null ⇒ 403.
- */
-export function accessLevelToAuth(level: string): ActorAuthLevel | null {
-  switch (level) {
-    case 'owner':
-      return 'O';
-    case 'admin':
-      return 'A';
-    case 'viewer':
-      return 'V';
-    default:
-      return null;
-  }
-}
 
 /** Người gọi của một request (đóng băng). `id` = actor ULID (= app_actor() khi ghi). */
 export interface Actor {

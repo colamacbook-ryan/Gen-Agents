@@ -2,9 +2,11 @@
 // meta-test (test/meta/) đỏ / xanh đúng. Route thật của lane thay thế bản demo cùng id (meta-test tự bỏ bản demo).
 //   public  OPS-01 · V: SYS-81 (open), SYS-41 (Ref path), SYS-16 (Ref query), GW-05 (core, Ref trong union của query)
 //   A: SYS-34 (Ref path + body), WRK-43 (Ref body, 202), WRK-24 (idempotent) · O: SYS-10 (GET), SYS-05 (DELETE 204, setup)
-//   ownerWhen: OPS-03 (setting_writers, PATCH), WRK-05 (body asOwner)
-import { formatDisplayId } from '@ga/contracts';
+//   ownerWhen: OPS-03 (setting_writers, PATCH), WRK-14 (body enabled = true; Ref path)
+import { formatDisplayId, type Route, responseSchemaOf, routeById } from '@ga/contracts';
+import type { z } from 'zod';
 import { defineHandler, type Handler } from '../../src/http/define-handler.ts';
+import { tk } from './harness.ts';
 
 export const DEMO_ULID = '01JDEM0DEM0DEM0DEM0DEM0DEM';
 
@@ -60,5 +62,9 @@ export const DEMO_HANDLERS: readonly Handler[] = [
     writable: true,
     locked: null,
   })),
-  defineHandler('WRK-05', () => ({ allowlist: { id: DEMO_ULID, displayId: 'AL-0001' }, ownerChange: null })),
+  defineHandler('WRK-14', ({ params }, ctx) => {
+    ctx.ref('RL', params.roleRef);
+    // thân hợp lệ sinh từ schema response của hợp đồng (bộ sinh mẫu của testkit)
+    return tk.sampleOf(responseSchemaOf(routeById('WRK-14') as Route) as z.ZodType) as never;
+  }),
 ];

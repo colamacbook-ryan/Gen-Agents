@@ -141,7 +141,12 @@ const MUTANTS = [
     id: 'M9-operator-accepted',
     desc: 'access_level operator được coi là admin',
     file: 'apps/control-plane/src/http/session.ts',
-    edits: [["    case 'admin':\n      return 'A';", "    case 'admin':\n    case 'operator':\n      return 'A';"]],
+    edits: [
+      [
+        'const authLevel = accessLevelToAuth(r.access_level);',
+        "const authLevel = accessLevelToAuth(r.access_level === 'operator' ? 'admin' : r.access_level);",
+      ],
+    ],
   },
   {
     id: 'M10-no-stream-byte-count',

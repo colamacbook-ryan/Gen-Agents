@@ -24,7 +24,8 @@ Status markers (L-APP skeleton, `apps/control-plane/src/{http,context,events}`):
    - OPS-07: `appliesTo` matches the target.
    (Seeders receive `seeded` — earlier refs of the same request — so the cross-tenant positive control can build consistent parent/child data.)
 3. **Permissions.** Wherever the permission depends on a flag the client sends, read the permission level from SERVER state instead. — **◐**
-   - ✓ auto: `route.auth` + `ownerWhen` (`requiredAccess`) checked on the raw AND the validated input; `operator` / unknown access level ⇒ 403.
+   - ✓ auto: `route.auth` + `ownerWhen` (`requiredAccess`, every condition of the list) checked on the raw AND the validated input; `operator` / unknown access level ⇒ 403 (`accessLevelToAuth` of contracts).
+   - ◐ conditions on STORED state (`egress_loosen`, OPS-08): the edge cannot see the DB ⇒ without a hook it treats them as matched ⇒ `O` (admin always 403). To let admin tighten, pass `defineHandler(id, fn, { stored: (input, ctx) => ({ egressAction }) })` — read via `ctx.ref` / `ctx.read`; test both directions.
    - ✗ lane: Example: WRK-05 uses the `capture.purpose` stored on the server, not `asOwner` from the body.
    - ✗ lane: captureId / ownerChangeId must belong to the right workspace and the right bot (they are OpaqueId, not Ref — `ctx.ref` does not cover them).
 4. **Recovery.** `isCoreAgentAccount` is computed from the DB, using the accountRef on the path or in the ticket. — **◐**
@@ -34,7 +35,7 @@ Status markers (L-APP skeleton, `apps/control-plane/src/{http,context,events}`):
 5. **Masking for V** (`confidential`). Applies to: SYS-23 snapshot, SYS-37, SYS-54 summary, WRK-34/35, OPS-21 (V sees only the list of keys, not before/after), OPS-33/34/35 cells, OPS-36 snippet. — **✗ lane** (`ctx.actor.authLevel === 'V'`).
 6. **SSE.** — **◐**
    - ✓ auto (`events/bus.ts`): filter each connection by workspace + audience (V/A/O/recipient) + recipient; replay buffer per workspace; replay re-checks the permission of the CURRENT connection; credential-like / off-schema events rejected; slow subscriber ⇒ `resync` + drop.
-   - ◐ audience table is LOCAL and fail-closed (everything `O`, `notification` = recipient) until `SSE_EVENT_AUDIENCE` lands in contracts.
+   - ✓ audience = `SSE_EVENT_AUDIENCE` + `sseEventAllows` of contracts (incl. `GRID_MIN_AUTH` for `grid.changed`).
    - ✗ L-SYS: cut the stream when a member is removed or downgraded — call `bus.disconnect(workspaceId, userId)`.
 7. **Per-user notifications.** SYS-83/84 and the SSE `notification` event filter on `user_id = the session's user`. — ◐ SSE: bus delivers `notification` only to `recipientUserId` (publish without it ⇒ rejected). ✗ lane: SYS-83/84 queries.
 8. **Data Console.** — **✗ lane** (L-OPS / L-DB)
@@ -65,3 +66,8 @@ Status markers (L-APP skeleton, `apps/control-plane/src/{http,context,events}`):
     - `must_change_password` ⇒ only EXT-02/03/04.
     - access_level `operator` ⇒ rejected (`accessLevelToAuth` fail-closed; local copy until contracts has it).
 16. **Engine install/pin.** Never interpolate a slug/version into a shell; use only `EXEC_ARGV`. — **✗ lane** (L-GW)
+17. **AI actor ≠ system actor.** Any worker/job that executes the RESULT OF AN LLM (consolidation, trial_run, Interviewer/Trainer/Judge proposals, Role turns) MUST write using that agent's actor (`systemActorId(conn, ws, '<agent_key>')` or the Role's actor). It must NEVER write as `'system'`. The `'system'` actor is only for deterministic platform code (migrations, purge on a schedule, applying a change set the owner approved). Mixing them up = handing AI system privileges (re-review of DB v2.3.5, 2026-10-17). — **◐** `ctx.write` of an HTTP handler always writes as the SESSION's actor (cannot pick another); ✗ lane: workers / jobs outside HTTP.
+18. **Grant expiry (GW-29 / GW-31).** Extending `expiresAt` of a tool grant loosens a fence ⇒ requires `O` (check in the handler on the stored grant; add a negative test for admin). — **✗ lane** (L-GW)
+19. **OPS-37 locate.** Same read permission as OPS-33 (`max(route.auth, RECORD_ACCESS[prefix], GRID_MIN_AUTH[grid])`); rows the caller can't read come back as `gone` (never their content, never "forbidden" — no existence oracle). — **✗ lane** (L-OPS)
+20. **OPS-35 record.** After looking up a ULID (which carries no prefix), re-check the REAL prefix/table of the row against `RECORD_ACCESS` before returning anything; a mismatch ⇒ 404. — **◐** `ctx.ref` already returns 404 for a ULID of another table; ✗ lane: `Ref('*')` lookups.
+21. **Self-scoped grid.** The `notifications` grid (`GRID_SELF_SCOPED`) is filtered by `user_id = session user` in OPS-33 / 34 / 35 / 37, not just by workspace. — **✗ lane** (L-OPS)

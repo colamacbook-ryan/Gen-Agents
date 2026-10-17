@@ -76,7 +76,7 @@ describe('định tuyến: MỌI route mount được của registry tới ĐÚN
     world = tk.makeWorld();
   });
   afterAll(() => world.close());
-  it('201 route (trừ edge / multipart): request mẫu của route X chạy handler X', async () => {
+  it('mọi route (202, trừ edge / multipart): request mẫu của route X chạy handler X', async () => {
     const hit: string[] = [];
     const mountable = ROUTES.filter(
       (r) => r.mount === 'api' && r.method !== 'WS' && r.request.bodyKind !== 'multipart',

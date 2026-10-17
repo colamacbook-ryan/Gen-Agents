@@ -9,6 +9,8 @@
   ⇒ lỗi biên dịch. Input ĐÃ validate strict. Output được kiểm `responseSchemaOf` trước khi gửi: thừa / sai trường ⇒ 500.
 - Không tự kiểm phiên / CSRF / quyền `route.auth` / `ownerWhen` / O4 / trần thân / idempotency — chuỗi `src/http/pipeline.ts`
   làm cho MỌI route, theo thứ tự cố định. Handler chỉ lo nghiệp vụ.
+- `ownerWhen` theo TRẠNG THÁI ĐÃ LƯU (OPS-08 `egress_loosen`): truyền `defineHandler(id, fn, { stored: (input, ctx) => ({ egressAction }) })`;
+  không truyền ⇒ edge coi như nới ⇒ chỉ owner (fail-closed).
 - `noContent()` ⇒ trả `undefined`; `sse` / `csv` / `binary` ⇒ trả `{ raw, filename? }` (không có schema ⇒ tự chịu nội dung).
 
 ## 2. `ctx` — mọi quyền lực đi qua đây
@@ -55,5 +57,5 @@ lý do O4 / 400 khoá lạ / 413 / CHÉO TENANT cho mọi trường Ref ở para
 - "Đường đi hợp lệ": owner + mẫu request từ hợp đồng ⇒ handler chạy và < 500 (handler không được 500 với input hợp lệ).
 
 ## 5. Lệnh
-`pnpm --filter @ga/control-plane test` · `pnpm api:coverage` (handler / 201 theo lane + route thiếu seeder) ·
+`pnpm --filter @ga/control-plane test` · `pnpm api:coverage` (handler / 202 theo lane + route thiếu seeder) ·
 `node apps/control-plane/test/meta/mutants.mjs` (đột biến trên worktree tạm).
