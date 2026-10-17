@@ -1,4 +1,4 @@
-// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v2.3.4) — KHÔNG SỬA TAY.
+// GENERATED bởi `pnpm db:gen` từ db/spec/schema_v2_2.sql (nguồn = repo, DB v2.3.5) — KHÔNG SỬA TAY.
 // Bảng: Generated<T> khi cột có DEFAULT hoặc là INTEGER PRIMARY KEY; union từ CHECK (col IN (…)).
 // View: chỉ đọc (ColumnType<T, never, never>); cột biểu thức không có kiểu khai báo ⇒ SqlValue.
 import type { ColumnType, Generated } from 'kysely';

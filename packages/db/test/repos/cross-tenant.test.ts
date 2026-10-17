@@ -3,6 +3,7 @@
 // 'repo.invalid_ref') — không thành công, không để DB chặn hộ. Actor của từng ca CÓ quyền với thao tác đó, nên lỗi đến
 // từ kiểm tenant chứ không phải kiểm quyền.
 // Độ phủ: mỗi khoá của tx.<họ> phải nằm trong READS hoặc có ca / lý do NO_REF — thêm hàm ghi mới mà không thêm ca ⇒ đỏ.
+import { SYSTEM_WORKSPACE_ID } from '@ga/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { addTenant, createFixture, type Fixture, type TenantHandle } from '../../src/repos/fixture/index.ts';
 import { DbRuleError, type RoleRow, type WriteTx } from '../../src/repos/index.ts';
@@ -138,6 +139,8 @@ let threadA: string;
 let taskA: string;
 
 const polaris = { expectedGainMinor: 0, rulesApplied: 'P1' };
+/** users / auth_sessions là bảng toàn cục (v2.3.5 SYS_SYS): actor tenant (owner / system tenant) bị chặn trước cả bước tra phạm vi. */
+const USERS_GLOBAL = ['permission.denied', 'repo.not_found', 'repo.invalid_ref'];
 
 beforeAll(() => {
   f = createFixture({ roles: 1 });
@@ -161,8 +164,10 @@ beforeAll(() => {
   const session = (
     sb((tx) => tx.sessions.start({ agentKind: 'role', trigger: 'chat', roleId: role.id })) as { id: string }
   ).id;
+  // v2.3.5: phiên đăng nhập do dịch vụ đăng nhập (actor system của workspace hệ thống) tạo
+  const sysSys = (fn: (tx: WriteTx) => unknown) => s.write(s.systemActorId(SYSTEM_WORKSPACE_ID), fn as never);
   const authSession = (
-    sb((tx) =>
+    sysSys((tx) =>
       tx.authSessions.create({ userId: t.ownerUserId, tokenHash: 'hb', expiresAt: '2027-01-01T00:00:00.000Z' }),
     ) as {
       id: string;
@@ -300,19 +305,31 @@ function cases(): Case[] {
       'users.setPassword',
       'system',
       (tx) => tx.users.setPassword(b.t.ownerUserId, { passwordHash: 'x', mustChangePassword: false }),
+      USERS_GLOBAL,
     ],
-    ['users.recordLoginSuccess', 'system', (tx) => tx.users.recordLoginSuccess(b.t.ownerUserId)],
-    ['users.recordLoginFailure', 'system', (tx) => tx.users.recordLoginFailure(b.t.ownerUserId, {})],
-    ['users.updateProfile', 'owner', (tx) => tx.users.updateProfile(b.t.ownerUserId, { displayName: 'x' })],
+    ['users.recordLoginSuccess', 'system', (tx) => tx.users.recordLoginSuccess(b.t.ownerUserId), USERS_GLOBAL],
+    ['users.recordLoginFailure', 'system', (tx) => tx.users.recordLoginFailure(b.t.ownerUserId, {}), USERS_GLOBAL],
+    [
+      'users.updateProfile',
+      'owner',
+      (tx) => tx.users.updateProfile(b.t.ownerUserId, { displayName: 'x' }),
+      USERS_GLOBAL,
+    ],
     [
       'authSessions.create',
       'system',
       (tx) =>
         tx.authSessions.create({ userId: b.t.ownerUserId, tokenHash: 'x', expiresAt: '2027-01-01T00:00:00.000Z' }),
+      USERS_GLOBAL,
     ],
-    ['authSessions.touch', 'system', (tx) => tx.authSessions.touch(b.authSession)],
-    ['authSessions.revoke', 'system', (tx) => tx.authSessions.revoke(b.authSession)],
-    ['authSessions.revokeAllForUser', 'system', (tx) => tx.authSessions.revokeAllForUser(b.t.ownerUserId)],
+    ['authSessions.touch', 'system', (tx) => tx.authSessions.touch(b.authSession), USERS_GLOBAL],
+    ['authSessions.revoke', 'system', (tx) => tx.authSessions.revoke(b.authSession), USERS_GLOBAL],
+    [
+      'authSessions.revokeAllForUser',
+      'system',
+      (tx) => tx.authSessions.revokeAllForUser(b.t.ownerUserId),
+      USERS_GLOBAL,
+    ],
     [
       'secrets.create',
       'owner',

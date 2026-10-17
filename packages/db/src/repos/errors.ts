@@ -23,6 +23,10 @@ export const DB_RULES = [
   'permission.system_only',
   'permission.owner_only',
   'permission.owner_admin',
+  /** v2.3.5: cổng người ghi bảng gốc phân quyền / định tuyến / bảng toàn cục (users, auth_sessions, engines…). */
+  'permission.writer_gate',
+  /** v2.3.5: xoá cứng không lỏng hơn luật ghi. */
+  'permission.delete_gate',
   'permission.confirm_owner_admin',
   'role.proposal_scope',
   // — bí mật, tenant, settings
@@ -90,6 +94,10 @@ export const DB_RULES = [
   'chat.attachment_too_large',
   'audit.chain',
   'workspace.restored_at',
+  /** v2.3.5: workspace tenant phải còn ít nhất một owner đang hoạt động. */
+  'workspace.owner_required',
+  /** v2.3.5: user đang là thành viên active của workspace khác. */
+  'workspace.membership_cross',
   // — lỗi ràng buộc dựng sẵn của SQLite + hợp đồng kết nối
   'sqlite.foreign_key',
   'sqlite.unique',
@@ -117,7 +125,32 @@ type Matcher = string | RegExp;
 /** Luật khớp chuỗi lỗi DB → mã. Chỉ dùng tiền tố hoặc regex neo `^` tuyến tính. */
 export const DB_RULE_MATCHERS: ReadonlyArray<{ rule: DbRule; match: readonly Matcher[] }> = [
   { rule: 'unique.duplicate', match: ['UNIQUE (chống REPLACE'] },
-  { rule: 'identity.immutable', match: ['immutable identity:'] },
+  {
+    rule: 'identity.immutable',
+    match: [
+      'immutable identity:',
+      // v2.3.5: rowid (và bí danh) bất biến — chặn REPLACE đổi rowid
+      'rowid (v2.3.5): ',
+      'actors (v2.3.5): kind / user_id / role_id / system_key / workspace_id bất biến',
+    ],
+  },
+  // v2.3.5: NOT NULL có DEFAULT không nhận NULL (chống OR REPLACE thay NULL bằng DEFAULT sau guard)
+  { rule: 'sqlite.not_null', match: ['NOT NULL (v2.3.5, chống REPLACE): ', 'NOT NULL constraint failed'] },
+  {
+    rule: 'workspace.owner_required',
+    match: ['workspace_members (v2.3.5): workspace tenant phải còn ít nhất một owner'],
+  },
+  {
+    rule: 'workspace.membership_cross',
+    match: ['workspace_members (v2.3.5): user đang là thành viên active của workspace khác'],
+  },
+  { rule: 'permission.delete_gate', match: [/^[a-z_]+ \(v2\.3\.5\): xoá cứng /] },
+  {
+    rule: 'writer.actor_mismatch',
+    match: [/^[a-z_]+ \(v2\.3\.5\): bảng không có cột người ghi — /],
+  },
+  // các cổng người ghi v2.3.5 còn lại (phân quyền / định tuyến / bảng toàn cục / bảo trì) — đặt SAU các luật cụ thể ở trên
+  { rule: 'permission.writer_gate', match: [/^[a-z_]+ \(v2\.3\.5\): /] },
   { rule: 'append_only', match: ['append-only'] },
   { rule: 'writer.stale_updated_at', match: [/^[a-z_]+: người ghi \(v2\.3\.3\) — updated_at phải đổi/] },
   {
@@ -255,7 +288,6 @@ export const DB_RULE_MATCHERS: ReadonlyArray<{ rule: DbRule; match: readonly Mat
   { rule: 'sqlite.foreign_key', match: ['FOREIGN KEY constraint failed'] },
   { rule: 'sqlite.unique', match: ['UNIQUE constraint failed'] },
   { rule: 'sqlite.check', match: ['CHECK constraint failed'] },
-  { rule: 'sqlite.not_null', match: ['NOT NULL constraint failed'] },
   { rule: 'sqlite.readonly', match: ['attempt to write a readonly database'] },
   { rule: 'connection.missing_function', match: ['no such function: app_'] },
 ];

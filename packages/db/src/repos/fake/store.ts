@@ -32,12 +32,15 @@ import type { AvatarRepo } from '../avatar.ts';
 import type { EngineRepo } from '../engines.ts';
 import { DbRuleError, invalidInput, notFound } from '../errors.ts';
 import type { ChangeItemInput, ChangeSetRepo, DnaReads, InstructionReads, RevisionReads, RoleRepo } from '../roles.ts';
+import { assertDnaInScope, assertLayerInScope, type CsScope } from '../scope.ts';
 import type { ChatRepo, SessionRepo } from '../sessions.ts';
 import type { CreatedTenant, CreateTenantInput, CreateUserInput, DataStore, ReadTx, WriteTx } from '../store.ts';
 import type { TelegramRepo } from '../telegram.ts';
 import type { ToolRepo } from '../tools.ts';
 import {
   type ActorRow,
+  type DnaFieldRow,
+  type InstructionRow,
   PAGE_DEFAULT,
   PAGE_MAX,
   type Page,
@@ -608,7 +611,10 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
           source_message_id: i.source?.messageId ?? null,
           source_session_id: i.source?.sessionId ?? null,
         });
-        const items = i.items.map((it) => fakeProposeItem(it, String(cs.id), i.roleId ?? null, i.positionId ?? null));
+        const scope: CsScope = { scope: i.scope, role_id: i.roleId ?? null, position_id: i.positionId ?? null };
+        const items = i.items.map((it) =>
+          fakeProposeItem(it, String(cs.id), i.roleId ?? null, i.positionId ?? null, scope),
+        );
         appendAudit({ action: 'change_set.propose', entity: { type: 'change_sets', id: String(cs.id) } });
         return { changeSet: cast(cs), items: cast(items) };
       },
@@ -681,9 +687,22 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
       csId: string,
       roleId: string | null,
       positionId: string | null,
+      scope: CsScope,
     ): MemRow {
       const by = requireWrite();
       const base = { id: newId(), workspace_id: ws, change_set_id: csId, op: it.op, reason: it.reason ?? null };
+      // cùng luật phạm vi với repo SQLite (repos/scope.ts)
+      if (it.target === 'dna') {
+        assertDnaInScope(
+          scope,
+          it.op === 'update' ? cast<DnaFieldRow>(mustGet('dna_fields', it.dnaFieldId)) : undefined,
+        );
+      } else if (it.op === 'create') {
+        assertLayerInScope(scope, it.layer);
+      } else {
+        const ins = cast<InstructionRow>(mustGet('instructions', it.instructionId));
+        assertLayerInScope(scope, ins.layer, ins);
+      }
       if (it.target === 'dna') {
         const fieldId =
           it.op === 'create'
@@ -1616,7 +1635,7 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
           evidence_audit_id: i.evidenceAuditId ?? null,
           reverses_entry_id: i.reversesEntryId ?? null,
           recorded_by: by,
-          approved_by: i.approvedBy ?? null,
+          approved_by: null,
           idempotency_key: i.idempotencyKey ?? null,
         });
         for (const [w, bal] of [
@@ -1651,7 +1670,7 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
         ),
       effectiveMode: (roleId, toolId) => {
         const tool = getOrNull('tools', toolId);
-        if (!tool || tool.status !== 'active' || tool.allowed_agents === 'system') return 'deny';
+        if (tool?.status !== 'active' || tool.allowed_agents === 'system') return 'deny';
         const g = live('tool_grants', (r) => r.tool_id === toolId && r.role_id === roleId).at(-1);
         return (g?.mode ?? tool.default_mode) as 'allow' | 'ask' | 'deny';
       },

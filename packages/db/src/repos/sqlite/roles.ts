@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@ga/contracts';
 import { displaySeqFor } from '../../ids/index.ts';
+import { markSearchDocumentDead, upsertSearchDocument } from '../../search/index.ts';
 import { foldVi } from '../../search/normalize.ts';
 import { DbRuleError, invalidInput, permissionDenied } from '../errors.ts';
 import type {
@@ -16,6 +17,7 @@ import type {
   RevisionReads,
   RoleRepo,
 } from '../roles.ts';
+import { assertDnaInScope, assertLayerInScope } from '../scope.ts';
 import type {
   ActorRow,
   ChangeSetItemRow,
@@ -35,6 +37,7 @@ import type {
   RoleView,
 } from '../types.ts';
 import {
+  accessOf,
   actorOf,
   allow,
   audited,
@@ -48,6 +51,7 @@ import {
   pageOf,
   ref,
   refEngine,
+  requireW,
   selectAll,
   selectOne,
   softDeleteRow,
@@ -94,6 +98,7 @@ export function roleRepo(ctx: Ctx): RoleRepo {
         prompt_budget_tokens: i.promptBudgetTokens,
       });
       insertRow<ActorRow>(ctx, 'actors', { kind: 'role', role_id: row.id, label: name });
+      indexRole(ctx, row);
       return audited(ctx, { action: 'role.create', table: 'roles', row, roleId: row.id });
     },
     update: (id, p, expectedVersion) => {
@@ -115,6 +120,7 @@ export function roleRepo(ctx: Ctx): RoleRepo {
         },
         { expectedVersion },
       );
+      indexRole(ctx, row);
       return audited(ctx, { action: 'role.update', table: 'roles', row, before, roleId: id });
     },
     setLifecycle: (id, to, o) => {
@@ -126,6 +132,7 @@ export function roleRepo(ctx: Ctx): RoleRepo {
         born_at: born ? nowTs(ctx) : undefined,
         registry_no: born ? (o?.registryNo ?? before.display_id) : undefined,
       });
+      indexRole(ctx, row);
       return audited(ctx, { action: 'role.lifecycle', table: 'roles', row, before, roleId: id });
     },
     setRuntimeState: (id, state, detail) => {
@@ -146,9 +153,22 @@ export function roleRepo(ctx: Ctx): RoleRepo {
       allow(ctx, 'roles.softDelete', OWNER_ADMIN);
       const before = mustGetRow<RoleRow>(ctx, 'roles', id);
       const row = softDeleteRow<RoleRow>(ctx, 'roles', id);
+      markSearchDocumentDead(requireW(ctx), ctx.ws, 'RL', id);
       audited(ctx, { action: 'role.delete', table: 'roles', row, before, roleId: id });
     },
   };
+}
+
+function indexRole(ctx: Ctx, row: RoleRow): void {
+  upsertSearchDocument(requireW(ctx), ctx.ws, {
+    entityType: 'RL',
+    entityId: row.id,
+    displayId: row.display_id,
+    roleId: row.id,
+    status: row.lifecycle_status,
+    title: row.name,
+    body: row.description,
+  });
 }
 
 export function dnaReads(ctx: Ctx): DnaReads {
@@ -257,7 +277,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
 
   function proposeItem(it: ChangeItemInput, cs: ChangeSetRow): ChangeSetItemRow {
     if (it.target === 'dna') {
-      if (cs.role_id === null) throw invalidInput('mục DN chỉ thuộc change set scope role');
+      assertDnaInScope(cs);
       let field: DnaFieldRow;
       let data: Record<string, unknown>;
       let base: number | null = null;
@@ -281,7 +301,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
         data = dnaData(field);
       } else {
         field = mustGetRow<DnaFieldRow>(ctx, 'dna_fields', it.dnaFieldId);
-        if (field.role_id !== cs.role_id) throw invalidInput('mục DN không thuộc Role của change set');
+        assertDnaInScope(cs, field);
         base = it.baseVersion;
         tokenDelta = it.tokenCount - field.token_count;
         data = dnaData({
@@ -314,6 +334,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
     let tokenDelta = it.tokenCount;
     if (it.op === 'create') {
       const layer = it.layer;
+      assertLayerInScope(cs, layer);
       const roleId = layer === 'position' || layer === 'house_rules' ? null : cs.role_id;
       const positionId = layer === 'position' ? cs.position_id : null;
       ins = insertRow<InstructionRow>(ctx, 'instructions', {
@@ -338,13 +359,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
       data = inData(ins);
     } else {
       ins = mustGetRow<InstructionRow>(ctx, 'instructions', it.instructionId);
-      const inScope =
-        ins.layer === 'house_rules'
-          ? cs.scope === 'workspace'
-          : ins.layer === 'position'
-            ? ins.position_id === cs.position_id
-            : ins.role_id === cs.role_id;
-      if (!inScope) throw invalidInput('khối IN không thuộc phạm vi của change set');
+      assertLayerInScope(cs, ins.layer, ins);
       base = it.baseVersion;
       tokenDelta = it.tokenCount - ins.token_count;
       const p = it.patch;
@@ -406,6 +421,16 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
     if (r.kind === 'dna') {
       const main = r.main as DnaFieldRow;
       const confirm = main.source === 'ai_inferred' && main.confirmed_at === null;
+      const def = ctx.r.get<{ key: string }>('SELECT key FROM dna_field_defs WHERE id = ?', [main.def_id]);
+      upsertSearchDocument(requireW(ctx), ctx.ws, {
+        entityType: 'DN',
+        entityId: main.id,
+        displayId: main.display_id,
+        roleId: main.role_id,
+        status: 'active',
+        title: def?.key ?? null,
+        body: typeof data.prose === 'string' ? data.prose : String(data.value_json ?? ''),
+      });
       updateRow(
         ctx,
         'dna_fields',
@@ -427,6 +452,17 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
       return;
     }
     const content = typeof data.content === 'string' ? data.content : (r.main as InstructionRow).content;
+    const ins = r.main as InstructionRow;
+    upsertSearchDocument(requireW(ctx), ctx.ws, {
+      entityType: 'IN',
+      entityId: ins.id,
+      displayId: ins.display_id,
+      roleId: ins.role_id,
+      positionId: ins.position_id,
+      status: 'active',
+      title: typeof data.name === 'string' ? data.name : ins.name,
+      body: content,
+    });
     updateRow(
       ctx,
       'instructions',
@@ -592,12 +628,26 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
         if (!pending.some((x) => x.id === w)) throw invalidInput(`mục ${w} không thuộc change set / không còn chờ`);
       }
       const resolved = pending.map(resolve);
+      // phạm vi kiểm lại lúc áp (mục có thể không đi qua propose của repo) — cùng luật với lúc đề xuất
+      for (const r of resolved) {
+        if (r.kind === 'dna') assertDnaInScope(cs, r.main as DnaFieldRow);
+        else assertLayerInScope(cs, (r.main as InstructionRow).layer, r.main as InstructionRow);
+      }
       const accept = resolved.filter((r) => wanted.has(r.item.id) && !r.stale);
       const stale = resolved.filter((r) => wanted.has(r.item.id) && r.stale);
       const reject = resolved.filter((r) => !wanted.has(r.item.id));
       if (accept.length === 0)
         throw invalidInput('không có mục nào được áp (mọi mục bị từ chối / đã cũ) — dùng reject');
       const isCore = accept.some((r) => r.isCore);
+      // Values > Nội quy > Polaris: ÁP mục chạm lõi (giá trị / tính cách, DN lõi) hoặc Nội quy ⇒ CHỈ owner, BẤT KỂ ai đề
+      // xuất (Gen 2026-10-17: admin nằm trong mô hình đe doạ của INTENT — admin vẫn đề xuất được, chỉ không tự áp).
+      // DB chưa có trigger tương ứng (đề xuất v2.3.6 cho lane DB) — repo là rào duy nhất tới khi trigger về.
+      const ownerGround = accept.some(
+        (r) => r.isCore || (r.kind === 'instruction' && (r.main as InstructionRow).layer === 'house_rules'),
+      );
+      if (ownerGround && accessOf(ctx) !== 'owner') {
+        throw permissionDenied(`changeSets.apply: ${cs.display_id} chạm lõi hoặc Nội quy — chỉ owner được áp`);
+      }
       const note = input.note?.trim() || null;
       if (isCore && note === null) throw invalidInput('chạm lõi (giá trị / tính cách) ⇒ bắt buộc lý do (note)');
 

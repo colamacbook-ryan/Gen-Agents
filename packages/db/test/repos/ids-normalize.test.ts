@@ -89,19 +89,25 @@ describe('foldVi', () => {
 
   it('chặn kích thước trước khi chuẩn hoá; tuyến tính (1 MiB / 256 KiB < 8)', () => {
     expect(() => foldVi('a'.repeat(FOLD_MAX_CHARS + 1))).toThrow(RangeError);
-    const time = (n: number) => {
-      const s = 'Đặng Thị Hoà '.repeat(Math.ceil(n / 13)).slice(0, n);
-      const runs: number[] = [];
-      foldVi(s); // làm nóng JIT trước khi đo
-      for (let i = 0; i < 3; i++) {
-        const t0 = performance.now();
-        foldVi(s);
-        runs.push(performance.now() - t0);
-      }
-      return runs.sort((a, b) => a - b)[1] as number;
+    const text = (n: number) => 'Đặng Thị Hoà '.repeat(Math.ceil(n / 13)).slice(0, n);
+    const [s256, s1m] = [text(256 * 1024), text(1024 * 1024)];
+    const once = (s: string) => {
+      const t0 = performance.now();
+      foldVi(s);
+      return performance.now() - t0;
     };
-    const small = time(256 * 1024);
-    const big = time(1024 * 1024);
+    once(s256); // làm nóng JIT trước khi đo
+    once(s1m);
+    // đo XEN KẼ nhỏ / lớn ⇒ hai cỡ chịu cùng mức tải máy (cổng chạy song song nhiều tệp test); trung vị của 3 lượt mỗi cỡ
+    const smallRuns: number[] = [];
+    const bigRuns: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      smallRuns.push(once(s256));
+      bigRuns.push(once(s1m));
+    }
+    const median = (xs: number[]) => xs.sort((a, b) => a - b)[1] as number;
+    const small = median(smallRuns);
+    const big = median(bigRuns);
     expect(big / Math.max(small, 0.01)).toBeLessThan(8);
     expect(big).toBeLessThan(2000);
   });

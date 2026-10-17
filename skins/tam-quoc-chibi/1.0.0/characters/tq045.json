@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "id": "tq045",
+  "name": "Trương Phi",
+  "han": "張飛",
+  "role": "Mãnh tướng",
+  "faction": "Thục",
+  "kind": "vo",
+  "gender": "nam",
+  "own": "#C64B4B",
+  "crop": [10, 0, 190],
+  "anim": {
+    "phase": "-0.9s",
+    "breath": "3.3s",
+    "blink": "4.6s",
+    "bdelay": "-1.7s"
+  },
+  "note": "hít sâu rồi hét làm rung mũ; chạy thì hét xông lên; lên #1 hét cười đấm ngực; lỗi cũng hét rung mũ (không diễn cảnh địch chết vì tiếng hét)",
+  "p": {
+    "skin": "#2D2B33",
+    "earSkin": "#E6B88F",
+    "jawSkin": "#E6B88F",
+    "mask": "black",
+    "whiteFx": "#E4E2EC",
+    "line": "#F2EFE8",
+    "hair": "#1D1A20",
+    "iris": "#2B1E2A",
+    "glow": "#7A5A3A",
+    "sclera": true,
+    "eyeRing": "#F2EFE8",
+    "robe": "#2F3A5E",
+    "trim": "#171A2B",
+    "sash": "#171A2B",
+    "inner": "#6F7A99",
+    "buckle": "#B8BEC8",
+    "sleeve": 34,
+    "crownY": 18,
+    "cap": "knot",
+    "capColor": "#2F3A5E",
+    "capAccent": "#C8463A",
+    "brow": "curl",
+    "browColor": "#F2EFE8",
+    "eyes": "ring",
+    "mouth": "calm",
+    "beard": "tiger",
+    "beardColor": "#17141A",
+    "prop": "serpent",
+    "armL": [-22, 40],
+    "armR": [34, 30],
+    "holdR": true
+  },
+  "identity": {
+    "p1": "face",
+    "must": [
+      {
+        "p": 1,
+        "label": "Mặt đen kiểu mặt nạ kinh kịch (mày trắng, viền mắt, hoa văn; tai + cằm da thật)",
+        "check": {
+          "all": [
+            {
+              "fill": "face",
+              "is": "dark"
+            },
+            {
+              "part": "mask-lines"
+            },
+            {
+              "part": "brow-white"
+            },
+            {
+              "part": "eye-ring"
+            },
+            {
+              "part": "jaw-skin"
+            }
+          ]
+        }
+      },
+      {
+        "p": 2,
+        "label": "Râu hổ dựng (虎鬚) + mắt tròn to (環眼)",
+        "check": {
+          "all": [
+            {
+              "part": "beard-tiger"
+            },
+            {
+              "part": "eyes-ring"
+            }
+          ]
+        }
+      },
+      {
+        "p": 3,
+        "label": "Xà mâu (丈八蛇矛), mũi lượn sóng",
+        "check": {
+          "part": "prop-serpent"
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Gag: hét to làm rung mũ (TQDN-042), không diễn địch chết",
+        "check": {
+          "all": [
+            {
+              "token": {
+                "state": "normal",
+                "has": "hatShake"
+              }
+            },
+            {
+              "phase": {
+                "state": "normal",
+                "where": {
+                  "mouth": "shout"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "colors": ["#2D2B33 đen (mặt nạ)", "#F2EFE8 trắng (mày, viền mắt)", "#2F3A5E xanh đen (áo)"],
+    "props": ["xà mâu"],
+    "face": "đen = uy mãnh, bộc trực (hắc kiểm kinh kịch); tiểu thuyết không nêu màu mặt",
+    "source": "TQDN-001, TQDN-042; kịch: taes.tp.edu.tw facial makeup, Jing role (research §4.1 #3, §6.1)"
+  }
+}

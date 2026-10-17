@@ -63,7 +63,6 @@ export function walletRepo(ctx: Ctx): WalletRepo {
       ref(ctx, 'skills', i.skillId);
       ref(ctx, 'employee_cards', i.cardId);
       ref(ctx, 'ledger_entries', i.reversesEntryId);
-      ref(ctx, 'actors', i.approvedBy);
       const actor = actorOf(ctx);
       if (!Number.isSafeInteger(i.amountMinor) || i.amountMinor <= 0)
         throw invalidInput('amountMinor phải là số nguyên > 0');
@@ -106,7 +105,7 @@ export function walletRepo(ctx: Ctx): WalletRepo {
         evidence_hash: evidence?.row_hash ?? null,
         reverses_entry_id: i.reversesEntryId ?? null,
         recorded_by: actor.id,
-        approved_by: i.approvedBy ?? null,
+        approved_by: null, // không nhận từ tham số — xem repos/wallet.ts
         idempotency_key: i.idempotencyKey ?? null,
       });
       return audited(ctx, {

@@ -5,6 +5,7 @@
     { "path": "apps/egress" },
     { "path": "apps/runner" },
     { "path": "apps/supervisor" },
+    { "path": "packages/chibi" },
     { "path": "packages/contracts" },
     { "path": "packages/db" },
     { "path": "packages/engines" },

@@ -1,6 +1,7 @@
 // Audit — chuỗi HMAC theo workspace (DATABASE §9.6). App nối chuỗi trong giao dịch ghi (writer duy nhất ⇒ thứ tự tất định):
 //   K_audit  = HKDF-SHA256(master_key, salt = "genagents-audit", info = "audit-chain:v1:" ‖ workspace_id), 32 byte;
-//   row_hash = HMAC-SHA256(K_audit, (prev_hash ?? '') ‖ JCS(MỌI cột trừ row_hash)), hex.
+//   row_hash = HMAC-SHA256(K_audit, UTF-8(JCS(MỌI cột trừ row_hash))), hex — CHANGELOG v2.3.5 (pG): prev_hash nằm TRONG hàng đã
+//   băm (không nối tiền tố riêng như bản §9 cũ); khớp audit_mac của bộ test Python.
 // JCS gồm MỌI cột của audit_log trừ row_hash — kể cả prev_hash và cột NULL (khoá vẫn có mặt, giá trị null), khoá sắp
 // theo JCS (Gen 2026-10-17, DB v2.3.5: "HMAC audit phủ MỌI cột trừ row_hash"; bỏ tập AUDIT_COLS rút gọn cũ của bộ test
 // Python). Test `audit-writer` đối chiếu danh sách cột với PRAGMA table_info(audit_log): thêm cột mà không thêm vào đây ⇒ đỏ.
@@ -93,11 +94,11 @@ export const AUDIT_HASHED_COLUMNS = [
 export type AuditHashedColumn = (typeof AUDIT_HASHED_COLUMNS)[number];
 export type AuditHashInput = { [K in AuditHashedColumn]: string | number | null };
 
-/** Thông điệp được ký: (prev_hash ?? '') ‖ JCS({mọi cột trừ row_hash}) — cột thiếu / undefined ⇒ null. */
+/** Thông điệp được ký: JCS({mọi cột trừ row_hash}) (prev_hash là một cột trong đó) — cột thiếu / undefined ⇒ null. */
 export function auditHashMessage(row: AuditHashInput): string {
   const body: Record<string, string | number | null> = {};
   for (const c of AUDIT_HASHED_COLUMNS) body[c] = row[c] ?? null;
-  return `${row.prev_hash ?? ''}${canonicalJson(body)}`;
+  return canonicalJson(body);
 }
 
 export function auditRowHash(key: Buffer, row: AuditHashInput): string {

@@ -74,8 +74,17 @@ export function accessOf(ctx: Ctx): Who | 'viewer' | null {
   let level: Who | 'viewer' | null = null;
   if (a.purged_at === null && a.workspace_id === ctx.ws) {
     if (a.kind === 'system') level = 'system';
-    else if (a.kind === 'role') level = a.role_id === null ? null : 'role';
-    else {
+    else if (a.kind === 'role') {
+      // Role phải còn sống và đang được phép làm việc (review bảo mật MEDIUM): xoá mềm / lưu trữ / tạm ngưng ⇒ mất quyền ghi
+      const r =
+        a.role_id === null
+          ? undefined
+          : ctx.r.get<{ ok: number }>(
+              "SELECT 1 AS ok FROM roles WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL AND lifecycle_status NOT IN ('archived', 'suspended')",
+              [a.role_id, ctx.ws],
+            );
+      level = r === undefined ? null : 'role';
+    } else {
       const m = ctx.r.get<{ access_level: Who | 'viewer' }>(
         'SELECT access_level FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND removed_at IS NULL',
         [ctx.ws, a.user_id],

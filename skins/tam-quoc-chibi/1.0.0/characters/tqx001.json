@@ -1,0 +1,174 @@
+{
+  "schema": 1,
+  "id": "tqx001",
+  "name": "Lính quèn",
+  "han": "小卒",
+  "role": "Lính quèn",
+  "faction": "Không phe",
+  "kind": "linh",
+  "gender": "nam",
+  "own": "#9AA3B2",
+  "crop": [8, -34, 210],
+  "anim": {
+    "phase": "-1.1s",
+    "breath": "3.0s",
+    "blink": "3.5s",
+    "bdelay": "-1.0s"
+  },
+  "note": "Lính quèn (小卒): mũ trụ to trượt lệch phải đỡ, giáo dài vướng; chăm chỉ làm đúng lệnh; thưởng mũ nảy mừng; lỗi mũ sụp che mặt; mặt trống: hai chấm mắt, miệng nhỏ",
+  "p": {
+    "skin": "#E8C39E",
+    "blush": "#E7A593",
+    "hair": "#2D2420",
+    "glow": "#7A5A3A",
+    "robe": "#8D95A3",
+    "trim": "#5E6573",
+    "sash": "#C8363B",
+    "inner": "#EBDDBE",
+    "buckle": "#B8BEC8",
+    "shoe": "#3A2F26",
+    "sleeve": 26,
+    "crownY": -6,
+    "cap": "helm",
+    "capColor": "#98A0AD",
+    "brow": "soft",
+    "eyes": "dot",
+    "mouth": "small",
+    "beard": "none",
+    "prop": "spearLong",
+    "armor": true,
+    "armorColor": "#9AA2AF",
+    "rope": true,
+    "ropeColor": "#C8363B",
+    "armL": [14, 40],
+    "armR": [34, 28],
+    "holdR": true
+  },
+  "identity": {
+    "p1": "cap-helm",
+    "must": [
+      {
+        "p": 1,
+        "label": "Mũ trụ 兜鍪 to quá khổ, lệch (trùm đỉnh tròn ghép mảnh, che má + gáy loe)",
+        "check": {
+          "all": [
+            {
+              "part": "cap-helm"
+            },
+            {
+              "part": "helm-cheek"
+            },
+            {
+              "part": "helm-neck"
+            }
+          ]
+        }
+      },
+      {
+        "p": 2,
+        "label": "Giáo dài hơn người, tua đỏ + cờ đỏ trơn không chữ",
+        "check": {
+          "all": [
+            {
+              "part": "prop-spearlong"
+            },
+            {
+              "part": "spear-tassel"
+            }
+          ]
+        }
+      },
+      {
+        "p": 3,
+        "label": "Giáp xám sắt + dây buộc đỏ + áo trong be",
+        "check": {
+          "all": [
+            {
+              "fill": "robe",
+              "is": "gray"
+            },
+            {
+              "part": "armor-cord"
+            }
+          ]
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Mặt trống: hai chấm mắt + miệng nhỏ, không râu, không dấu riêng",
+        "check": {
+          "all": [
+            {
+              "param": "eyes",
+              "is": "dot"
+            },
+            {
+              "not": {
+                "part": "beard-long"
+              }
+            },
+            {
+              "not": {
+                "part": "beard-short"
+              }
+            },
+            {
+              "not": {
+                "part": "beard-tiger"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "label": "Không lông trĩ, không miếng che mắt (tách khỏi tướng Ngụy giáp mũ)",
+        "check": {
+          "all": [
+            {
+              "not": {
+                "part": "plume"
+              }
+            },
+            {
+              "not": {
+                "part": "eye-patch"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "label": "Gag: mũ trượt lệch phải đỡ (normal); mũ sụp che mặt (error); không gag bị đánh / trúng tên / pháo hôi (research §6.11)",
+        "check": {
+          "all": [
+            {
+              "token": {
+                "state": "normal",
+                "has": "helmSlip"
+              }
+            },
+            {
+              "token": {
+                "state": "error",
+                "has": "helmDrop"
+              }
+            },
+            {
+              "noEmote": ["arrow", "blood", "dead", "skull"]
+            }
+          ]
+        }
+      }
+    ],
+    "colors": [
+      "#8D95A3 xám sắt (giáp)",
+      "#98A0AD xám sắt (mũ trụ)",
+      "#C8363B đỏ (dây buộc, tua giáo, cờ)",
+      "#EBDDBE be (áo trong)"
+    ],
+    "props": ["giáo dài hơn người"],
+    "face": "mặt trống, hai chấm mắt, miệng nhỏ; nhân vật không tên, không phe",
+    "source": "TQC-49, TQC-64; TQDN-001, TQDN-021, TQDN-060, TQDN-095; TQDN-Gj-030 (research §4.5 #32)"
+  }
+}
