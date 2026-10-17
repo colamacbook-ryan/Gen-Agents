@@ -5,6 +5,7 @@ import { type KeyboardEvent, type Ref, useId, useMemo, useState } from 'react';
 import { IconSearch } from '../datagrid/icons.tsx';
 import type { QueryBoxLabels } from '../datagrid/labels.ts';
 import { type QueryField, resolveQuery } from './fields.ts';
+import './query-box.css';
 import { clauseText, joinClauses, parseQuery, type QueryError, removeClause } from './parse.ts';
 
 export interface QueryBoxProps {

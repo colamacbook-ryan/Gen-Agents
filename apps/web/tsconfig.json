@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist/types",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src", "test", "vite.config.ts", "vite-csp-dev-styles.ts", "csp.ts"],
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/i18n" },
+    { "path": "../../packages/ui" }
+  ]
+}

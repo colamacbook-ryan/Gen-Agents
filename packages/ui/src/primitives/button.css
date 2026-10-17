@@ -1,0 +1,103 @@
+.ga-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ga-sp-1);
+  height: 28px;
+  padding: 0 var(--ga-sp-3);
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-bg-surface);
+  color: var(--ga-text-primary);
+  font-size: var(--ga-fs-meta);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background var(--ga-dur-fast) var(--ga-ease),
+    color var(--ga-dur-fast) var(--ga-ease);
+}
+
+.ga-btn:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--ga-border-subtle);
+}
+
+.ga-btn:disabled,
+.ga-btn[aria-disabled="true"] {
+  opacity: 0.5;
+}
+
+.ga-btn--sm {
+  height: 24px;
+  padding: 0 var(--ga-sp-2);
+}
+
+/* nút accent chính — tối đa 1 mỗi page header */
+.ga-btn--primary {
+  border-color: transparent;
+  background: var(--ga-accent);
+  color: var(--ga-on-accent);
+  font-weight: 600;
+}
+
+.ga-btn--primary:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--ga-accent-hover);
+}
+
+.ga-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ga-text-secondary);
+}
+
+.ga-btn--ghost:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--ga-bg-raised);
+  color: var(--ga-text-primary);
+}
+
+.ga-btn--danger {
+  border-color: var(--ga-danger);
+  background: transparent;
+  color: var(--ga-danger);
+}
+
+.ga-btn--danger:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--ga-danger-soft);
+}
+
+.ga-btn__kbd {
+  margin-left: var(--ga-sp-1);
+  font-family: var(--ga-font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.ga-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ga-r-control);
+  background: transparent;
+  color: var(--ga-text-secondary);
+}
+
+.ga-icon-btn:hover:not(:disabled) {
+  background: var(--ga-border-subtle);
+  color: var(--ga-text-primary);
+}
+
+.ga-icon-btn--sm {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ga-r-input);
+}
+
+.ga-spinner {
+  animation: ga-spin 900ms linear infinite;
+}

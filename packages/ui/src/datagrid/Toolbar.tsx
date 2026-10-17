@@ -1,6 +1,6 @@
 // Toolbar 36px của DataGrid (STD-07 §5 mục 1): chọn view · ô truy vấn · Lọc, Sắp xếp, Nhóm, Cột, Mật độ, Xuất CSV · "+ Thêm hàng".
 // Popover nhỏ tự dựng (L-DS sở hữu overlay chung; popover này chỉ sống trong lưới): Esc / bấm ra ngoài đóng, trả focus về nút mở.
-import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { DEFAULT_OPS, type QueryField, resolveQuery } from '../query-box/fields.ts';
 import { joinClauses, type QueryOp } from '../query-box/parse.ts';
 import { QueryBox } from '../query-box/QueryBox.tsx';
@@ -65,18 +65,22 @@ function Popover(props: {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [open, onClose, anchor]);
+  // neo mép phải popover vào mép phải nút mở (nút nằm bên phải toolbar) ⇒ không tràn khỏi panel (panel overflow: hidden);
+  // vị trí là biến CSS đặt bằng CSSOM trước khi vẽ (không style nội tuyến)
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const a = anchor.current;
+    const bar = a?.offsetParent as HTMLElement | null | undefined;
+    if (!el || !a || !bar) return;
+    el.style.setProperty('--ga-dg-pop-right', `${Math.max(0, bar.clientWidth - (a.offsetLeft + a.offsetWidth))}px`);
+  });
   if (!open) return null;
-  // neo mép phải popover vào mép phải nút mở (nút nằm bên phải toolbar) ⇒ không tràn khỏi panel (panel overflow: hidden)
-  const a = anchor.current;
-  const bar = a?.offsetParent as HTMLElement | null | undefined;
-  const right = a && bar ? Math.max(0, bar.clientWidth - (a.offsetLeft + a.offsetWidth)) : 0;
   return (
     <div
       ref={ref}
       className="ga-dg-pop"
       role="dialog"
       aria-label={props.label}
-      style={{ right }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.preventDefault();

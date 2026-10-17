@@ -1,0 +1,130 @@
+/* Khối giữa 360px cho màn đăng nhập / đổi mật khẩu lần đầu (FRONTEND-SPEC G1): logo, tagline serif, form; chân màn: version + VI | EN. */
+.ga-auth {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--ga-bg-canvas);
+}
+
+.ga-auth__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ga-sp-6) var(--ga-sp-4);
+}
+
+.ga-auth__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-4);
+  width: 360px;
+  max-width: 100%;
+}
+
+.ga-auth__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+}
+
+.ga-auth__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ga-r-input);
+  background: var(--ga-accent);
+}
+
+.ga-auth__mark::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--ga-on-accent);
+  transform: rotate(45deg);
+}
+
+.ga-auth__name {
+  font-size: var(--ga-fs-chat);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ga-auth__tagline {
+  color: var(--ga-text-secondary);
+  font-family: var(--ga-font-serif);
+  font-size: var(--ga-fs-title);
+  line-height: 1.35;
+}
+
+.ga-auth__title {
+  font-size: var(--ga-fs-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ga-auth__intro {
+  color: var(--ga-text-secondary);
+}
+
+.ga-auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-3);
+  padding: var(--ga-sp-4);
+  border: 1px solid var(--ga-border-subtle);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-bg-surface);
+}
+
+.ga-auth__error {
+  color: var(--ga-danger);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-auth__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-3);
+}
+
+.ga-auth__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ga-sp-3);
+  padding: var(--ga-sp-3) var(--ga-sp-4);
+  border-top: 1px solid var(--ga-border-subtle);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-auth__lang {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-input);
+}
+
+.ga-auth__lang button {
+  height: 22px;
+  padding: 0 var(--ga-sp-2);
+  border: 0;
+  background: transparent;
+  color: var(--ga-text-secondary);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-auth__lang button[aria-pressed="true"] {
+  background: var(--ga-bg-raised);
+  color: var(--ga-text-primary);
+}
+
+.ga-auth__version {
+  font-family: var(--ga-font-mono);
+}

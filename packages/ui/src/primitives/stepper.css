@@ -1,0 +1,137 @@
+.ga-stepper {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ga-stepper--h {
+  align-items: flex-start;
+  gap: var(--ga-sp-2);
+}
+
+.ga-stepper--v {
+  flex-direction: column;
+}
+
+.ga-step {
+  position: relative;
+  display: flex;
+  gap: var(--ga-sp-2);
+  min-width: 0;
+  color: var(--ga-text-muted);
+}
+
+.ga-stepper--h .ga-step {
+  flex: 1 1 auto;
+  align-items: flex-start;
+}
+
+.ga-stepper--h .ga-step:last-child {
+  flex: 0 0 auto;
+}
+
+.ga-stepper--v .ga-step:not(:last-child) {
+  padding-bottom: var(--ga-sp-4);
+}
+
+/* đường nối giữa các bước */
+.ga-stepper--v .ga-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 24px;
+  bottom: 0;
+  left: 11px;
+  width: 1px;
+  background: var(--ga-border-strong);
+}
+
+.ga-stepper--h .ga-step:not(:last-child)::after {
+  content: "";
+  flex: 1 1 16px;
+  min-width: 16px;
+  height: 1px;
+  margin-top: 12px;
+  background: var(--ga-border-strong);
+}
+
+.ga-step__marker {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--ga-border-strong);
+  border-radius: 50%;
+  background: var(--ga-bg-surface);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-step__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-right: var(--ga-sp-1);
+}
+
+.ga-step__label {
+  color: var(--ga-text-secondary);
+  font-size: var(--ga-fs-base);
+  font-weight: 500;
+}
+
+.ga-step__status {
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-step__detail {
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-step--running .ga-step__marker {
+  border-color: var(--ga-accent);
+  color: var(--ga-accent);
+}
+
+.ga-step--running .ga-step__label {
+  color: var(--ga-text-primary);
+}
+
+.ga-step--running .ga-step__status {
+  color: var(--ga-accent);
+}
+
+.ga-step--done .ga-step__marker {
+  border-color: var(--ga-ok);
+  color: var(--ga-ok);
+}
+
+.ga-step--done .ga-step__status {
+  color: var(--ga-ok);
+}
+
+.ga-step--error .ga-step__marker {
+  border-color: var(--ga-danger);
+  color: var(--ga-danger);
+}
+
+.ga-step--error .ga-step__label,
+.ga-step--error .ga-step__status {
+  color: var(--ga-danger);
+}
+
+/* rẽ nhánh (vd rollback sau khi cập nhật lỗi) */
+.ga-step--branch .ga-step__marker {
+  border-style: dashed;
+  border-color: var(--ga-warn);
+  color: var(--ga-warn);
+}
+
+.ga-step--branch .ga-step__status {
+  color: var(--ga-warn);
+}

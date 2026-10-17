@@ -289,8 +289,10 @@ describe.skipIf(!enabled)('DataGrid — ảo hoá, anchor, CSP, axe trong Chromi
     expect(await s.csp()).toEqual([]);
     expect(s.errors).toEqual([]);
     expect(await page.evaluate(() => document.querySelectorAll('style').length)).toBe(0);
-    expect(await page.evaluate(() => document.adoptedStyleSheets.length)).toBeGreaterThanOrEqual(2);
-    // style thật sự được áp (stylesheet constructable hoạt động)
+    // CSS của lưới đi qua tệp cùng origin (<link>), không thẻ <style>, không style nội tuyến
+    expect(await page.evaluate(() => document.querySelectorAll('link[rel="stylesheet"]').length)).toBe(1);
+    expect(await page.evaluate(() => document.querySelectorAll('.ga-dg [style]:not(.ga-dg)').length)).toBe(0);
+    // style thật sự được áp (tệp CSS + token của L-DS được áp)
     expect(await page.locator('.ga-dg').evaluate((e) => getComputedStyle(e).borderRadius)).toBe('6px');
     // ca âm: chèn style="" nội tuyến ⇒ bộ bắt PHẢI ghi nhận vi phạm (bộ bắt còn sống)
     await page.evaluate(() => {

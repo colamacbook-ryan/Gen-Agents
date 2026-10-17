@@ -35,6 +35,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { FormulaBar } from '../formula-bar/FormulaBar.tsx';
+import './datagrid.css';
 import { parseQuery } from '../query-box/parse.ts';
 import {
   anchorOf,
@@ -65,7 +66,6 @@ import { GRID_LABELS_VI, type GridLabels } from './labels.ts';
 import { GridLayout, groupKey } from './layout.ts';
 import { type Density, loadGridState, MAX_COL_WIDTH, MIN_COL_WIDTH, saveGridState } from './persist.ts';
 import { RowCache } from './row-cache.ts';
-import { adoptGridStyles, styleRootOf } from './styles.ts';
 import { Toolbar } from './Toolbar.tsx';
 import {
   type ActiveCell,
@@ -172,10 +172,6 @@ export function DataGrid<R>(props: DataGridProps<R>) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
-
-  useLayoutEffect(() => {
-    if (rootRef.current) adoptGridStyles(styleRootOf(rootRef.current));
-  }, []);
 
   // ------------------------------------------------------------ trạng thái nhớ được
   const columnIds = useMemo(() => columns.map((c) => c.id), [columns]);
@@ -1014,6 +1010,16 @@ export function DataGrid<R>(props: DataGridProps<R>) {
     items.length > 0
       ? Math.max(0, virtualizer.getTotalSize() - ((items[items.length - 1]?.end ?? HEADER_H) - HEADER_H))
       : 0;
+  // kích thước động (cột, chiều cao hàng, độ rộng bảng, đệm ảo hoá) = biến CSS đặt bằng CSSOM trước khi vẽ (không style nội tuyến)
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    el.style.setProperty('--ga-dg-cols', template);
+    el.style.setProperty('--ga-dg-row-h', `${rowH}px`);
+    el.style.setProperty('--ga-dg-width', `${tableWidth}px`);
+    el.style.setProperty('--ga-dg-pad-top', `${padTop}px`);
+    el.style.setProperty('--ga-dg-pad-bottom', `${padBottom}px`);
+  });
   const placeholder = props.queryPlaceholder ?? 'status:active tokens>200';
 
   // thanh công thức
@@ -1178,16 +1184,7 @@ export function DataGrid<R>(props: DataGridProps<R>) {
   const parsedQ = useMemo(() => parseQuery(q), [q]);
 
   return (
-    <div
-      ref={rootRef}
-      className="ga-dg"
-      data-table={table}
-      style={{
-        // biến CSS động (CSSOM — không vi phạm style-src)
-        ['--ga-dg-cols' as string]: template,
-        ['--ga-dg-row-h' as string]: `${rowH}px`,
-      }}
-    >
+    <div ref={rootRef} className="ga-dg" data-table={table}>
       <Toolbar<R>
         labels={labels}
         views={props.views ?? []}
@@ -1294,7 +1291,7 @@ export function DataGrid<R>(props: DataGridProps<R>) {
         onMouseDown={onGridMouseDown}
         onDoubleClick={onGridDoubleClick}
       >
-        <div className="ga-dg-table" style={{ width: tableWidth }}>
+        <div className="ga-dg-table">
           <div className="ga-dg-head" role="rowgroup">
             <div className="ga-dg-letters" aria-hidden="true">
               <span className="ga-dg-fz0" />
@@ -1317,10 +1314,10 @@ export function DataGrid<R>(props: DataGridProps<R>) {
                   onChange={toggleAll}
                 />
               </div>
-              <div role="columnheader" className="ga-dg-th ga-dg-fz1" aria-colindex={2}>
-                ID
+              <div role="columnheader" className="ga-dg-th ga-dg-fz1 ga-dg-id" aria-colindex={2}>
+                {labels.idHeader}
                 <span className="ga-dg-pk" aria-hidden="true">
-                  PK
+                  {labels.pkBadge}
                 </span>
               </div>
               {headers.map((h, i) => {
@@ -1375,7 +1372,7 @@ export function DataGrid<R>(props: DataGridProps<R>) {
               )}
             </div>
           </div>
-          <div className="ga-dg-body" role="rowgroup" style={{ paddingTop: padTop, paddingBottom: padBottom }}>
+          <div className="ga-dg-body" role="rowgroup">
             {body}
             {!loadingFirst && !hasErr && layout.count === 0 && (groupBy === null || groups !== null) && (
               <div role="row" className="ga-dg-emptyrow" aria-rowindex={2}>
@@ -1416,7 +1413,7 @@ export function DataGrid<R>(props: DataGridProps<R>) {
         <span className="ga-dg-footer-end">
           {(cache.loading || exporting) && <span>{exporting ? labels.exporting : labels.loading}</span>}
           {props.updatedLabel && <span>{props.updatedLabel}</span>}
-          {!parsedQ.ok && <span className="ga-sr">{labels.query.error(parsedQ.error.reason, '')}</span>}
+          {!parsedQ.ok && <span className="ga-sr-only">{labels.query.error(parsedQ.error.reason, '')}</span>}
         </span>
       </div>
     </div>

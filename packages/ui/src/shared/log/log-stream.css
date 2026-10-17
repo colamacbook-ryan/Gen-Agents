@@ -1,0 +1,119 @@
+.ga-log {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 160px;
+  overflow: hidden;
+  border: 1px solid var(--ga-border-subtle);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-bg-sunken);
+}
+
+.ga-log__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: var(--ga-toolbar-h);
+  padding: 0 var(--ga-sp-2);
+  border-bottom: 1px solid var(--ga-border-subtle);
+  background: var(--ga-bg-surface);
+}
+
+.ga-log__search {
+  flex: 1;
+  min-width: 80px;
+  height: 24px;
+  padding: 0 var(--ga-sp-2);
+  border: 1px solid var(--ga-border-subtle);
+  border-radius: var(--ga-r-input);
+  background: var(--ga-bg-sunken);
+  color: var(--ga-text-primary);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-log__level {
+  height: 24px;
+  border: 1px solid var(--ga-border-subtle);
+  border-radius: var(--ga-r-input);
+  background: var(--ga-bg-sunken);
+  color: var(--ga-text-secondary);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-log__pending {
+  color: var(--ga-accent);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-log__body {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: var(--ga-sp-1) 0;
+  overflow: auto;
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-meta);
+  line-height: var(--ga-lh-table);
+}
+
+.ga-log__line {
+  display: flex;
+  gap: var(--ga-sp-2);
+  padding: 0 var(--ga-sp-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ga-log__line:hover {
+  background: var(--ga-bg-surface);
+}
+
+.ga-log__time {
+  flex: none;
+  color: var(--ga-text-muted);
+}
+
+.ga-log__level-tag {
+  flex: none;
+  width: 5ch;
+  font-weight: 500;
+}
+
+.ga-log__level-tag--info {
+  color: var(--ga-info);
+}
+
+.ga-log__level-tag--warn {
+  color: var(--ga-warn);
+}
+
+.ga-log__level-tag--error {
+  color: var(--ga-danger);
+}
+
+.ga-log__level-tag--debug {
+  color: var(--ga-text-muted);
+}
+
+.ga-log__source {
+  flex: none;
+  color: var(--ga-entity, var(--ga-text-secondary));
+  font-weight: 500;
+}
+
+.ga-log__text {
+  min-width: 0;
+  color: var(--ga-text-primary);
+}
+
+.ga-log__text mark {
+  background: var(--ga-accent-soft);
+  color: var(--ga-accent);
+}
+
+.ga-log__empty {
+  padding: var(--ga-sp-4);
+  color: var(--ga-text-muted);
+}

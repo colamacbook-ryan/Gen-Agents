@@ -3,6 +3,7 @@
 // Hàng LÕI: thêm ô Lý do bắt buộc. Dùng chung cho DataGrid và panel chi tiết node của Sơ đồ (component độc lập, không biết lưới).
 import { type KeyboardEvent, type Ref, useId, useRef, useState } from 'react';
 import type { FormulaBarLabels } from '../datagrid/labels.ts';
+import './formula-bar.css';
 
 export interface FormulaBarProps {
   /** ô tham chiếu, vd 'IN-0003 · D'; null = chưa chọn ô */
@@ -45,7 +46,7 @@ export function FormulaBar(props: FormulaBarProps) {
       <div className="ga-fb-line">
         <span className="ga-fb-ref">{cellRef ?? '—'}</span>
         <span className="ga-fb-fx" aria-hidden="true">
-          fx
+          {labels.fx}
         </span>
         <span className="ga-fb-body">
           {cellRef === null ? (
@@ -106,7 +107,7 @@ function ExpandedBar(props: FormulaBarProps & { cellRef: string }) {
       <div className="ga-fb-line">
         <span className="ga-fb-ref">{cellRef}</span>
         <span className="ga-fb-fx" aria-hidden="true">
-          fx
+          {labels.fx}
         </span>
         <span className="ga-fb-body">
           {columnLabel && <span className="ga-fb-col">{columnLabel}</span>}

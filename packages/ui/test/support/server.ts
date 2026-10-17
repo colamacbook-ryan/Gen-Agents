@@ -39,7 +39,13 @@ export async function startServer(files: Bundle): Promise<TestServer> {
         res.writeHead(404).end('not found');
         return;
       }
-      headers['content-type'] = name.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'application/octet-stream';
+      headers['content-type'] = name.endsWith('.js')
+        ? 'text/javascript; charset=utf-8'
+        : name.endsWith('.css')
+          ? 'text/css; charset=utf-8'
+          : name.endsWith('.woff2')
+            ? 'font/woff2'
+            : 'application/octet-stream';
       res.writeHead(200, headers).end(body);
     } catch (e) {
       res.writeHead(500).end(String((e as Error).message));

@@ -3,6 +3,8 @@
 // Phơi ra window.__h cho test (handle của lưới, nguồn, sự kiện anchor, vi phạm CSP, lời gọi callback).
 // biome-ignore-all assist/source/organizeImports: zod-jitless PHẢI nạp trước mọi module dựng schema zod (thứ tự đánh giá ESM)
 import './zod-jitless.ts';
+// token + font tự host + nền của L-DS (ứng dụng chủ nạp một lần: `import '@ga/ui/styles'`)
+import '../../src/styles.ts';
 import { StrictMode, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import {

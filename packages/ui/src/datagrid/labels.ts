@@ -24,11 +24,16 @@ export interface FormulaBarLabels {
   lines: (n: string) => string;
   saving: string;
   hint: string;
+  /** ký hiệu ô "fx" (thuật ngữ bảng tính, không dịch nhưng vẫn đi qua nhãn) */
+  fx: string;
 }
 
 export interface GridLabels {
   /** BCP 47 cho định dạng số (vd 'vi-VN' ⇒ 1.284) */
   locale: string;
+  /** tiêu đề cột ID + badge khoá chính */
+  idHeader: string;
+  pkBadge: string;
   view: string;
   viewAll: string;
   query: QueryBoxLabels;
@@ -102,6 +107,8 @@ const QUERY_REASONS_EN: Record<string, string> = {
 
 export const GRID_LABELS_VI: GridLabels = {
   locale: 'vi-VN',
+  idHeader: 'ID',
+  pkBadge: 'PK',
   view: 'Chế độ xem',
   viewAll: 'Tất cả',
   query: {
@@ -125,6 +132,7 @@ export const GRID_LABELS_VI: GridLabels = {
     lines: (n) => `${n} dòng`,
     saving: 'Đang lưu…',
     hint: '⌘↵ lưu · Esc huỷ',
+    fx: 'fx',
   },
   filter: 'Lọc',
   sort: 'Sắp xếp',
@@ -202,6 +210,7 @@ export const GRID_LABELS_EN: GridLabels = {
     lines: (n) => `${n} lines`,
     saving: 'Saving…',
     hint: '⌘↵ save · Esc cancel',
+    fx: 'fx',
   },
   filter: 'Filter',
   sort: 'Sort',

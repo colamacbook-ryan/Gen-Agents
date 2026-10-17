@@ -16,6 +16,8 @@ export async function bundle(entry: string): Promise<Bundle> {
     root: PKG,
     logLevel: 'silent',
     mode: 'development',
+    // tài nguyên (CSS gom từ các `import './x.css'`, font woff2) phục vụ ở /bundle/<tên>, không nhúng data: (CSP)
+    base: '/bundle/',
     define: { 'process.env.NODE_ENV': JSON.stringify('development') },
     oxc: { jsx: { runtime: 'automatic', development: false } },
     build: {
@@ -25,9 +27,16 @@ export async function bundle(entry: string): Promise<Bundle> {
       modulePreload: false,
       emptyOutDir: false,
       reportCompressedSize: false,
+      assetsInlineLimit: 0,
+      cssCodeSplit: false,
       rollupOptions: {
         input: join(PKG, 'test', 'browser', `${entry}.tsx`),
-        output: { format: 'es', entryFileNames: '[name].js', chunkFileNames: '[name]-[hash].js' },
+        output: {
+          format: 'es',
+          entryFileNames: '[name].js',
+          chunkFileNames: '[name]-[hash].js',
+          assetFileNames: (a) => (a.names?.some((n) => n.endsWith('.css')) ? '[name].css' : '[name]-[hash][extname]'),
+        },
       },
     },
   });

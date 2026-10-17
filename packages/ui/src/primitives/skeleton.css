@@ -1,0 +1,109 @@
+.ga-skel {
+  display: block;
+  border-radius: var(--ga-r-input);
+  background: var(--ga-bg-raised);
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 5%), transparent);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: ga-shimmer 1.6s linear infinite;
+}
+
+/* shimmer nhẹ; tắt khi reduced-motion (base.css rút animation về 0) */
+@keyframes ga-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.ga-skel--text {
+  height: 12px;
+}
+
+.ga-skel--rect {
+  height: 28px;
+}
+
+.ga-skel--block {
+  height: 72px;
+}
+
+.ga-skel--circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.ga-skel--w-25 {
+  width: 25%;
+}
+
+.ga-skel--w-50 {
+  width: 50%;
+}
+
+.ga-skel--w-75 {
+  width: 75%;
+}
+
+.ga-skel--w-100 {
+  width: 100%;
+}
+
+.ga-skel-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-2);
+}
+
+/* skeleton của lưới: đúng hình DataGrid (toolbar 36 + header 28 + hàng 28) */
+.ga-skel-grid {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--ga-border-subtle);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-bg-surface);
+}
+
+.ga-skel-grid__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: var(--ga-toolbar-h);
+  padding: 0 var(--ga-sp-2);
+  border-bottom: 1px solid var(--ga-border-subtle);
+}
+
+.ga-skel-grid__row {
+  display: grid;
+  grid-template-columns: 84px repeat(var(--ga-skel-cols, 4), minmax(0, 1fr));
+  align-items: center;
+  gap: var(--ga-sp-3);
+  height: var(--ga-row-h);
+  padding: 0 var(--ga-sp-2);
+  border-bottom: 1px solid var(--ga-border-subtle);
+}
+
+.ga-skel-grid__row:last-child {
+  border-bottom: 0;
+}
+
+.ga-skel-grid__row .ga-skel--text {
+  height: 10px;
+}
+
+.ga-skel-grid--c3 {
+  --ga-skel-cols: 3;
+}
+
+.ga-skel-grid--c5 {
+  --ga-skel-cols: 5;
+}
+
+.ga-skel-grid--c6 {
+  --ga-skel-cols: 6;
+}

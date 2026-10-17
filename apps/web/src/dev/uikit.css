@@ -1,0 +1,33 @@
+.ga-kit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-6);
+}
+
+.ga-kit__title {
+  margin-bottom: var(--ga-sp-2);
+  font-size: var(--ga-fs-base);
+  font-weight: 600;
+}
+
+.ga-kit__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--ga-sp-3);
+}
+
+.ga-kit__wide {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.ga-kit__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-3);
+}
+
+.ga-kit__log {
+  height: 240px;
+}

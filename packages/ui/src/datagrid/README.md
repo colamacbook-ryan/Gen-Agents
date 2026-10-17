@@ -53,12 +53,12 @@ Hàng ngoài màn / chưa tải ⇒ hỏi `source.locate`; nhóm thu gọn / c�
 
 ## CSP (`style-src 'self'`, không `unsafe-inline`)
 
-- Stylesheet là constructable (`adoptedStyleSheets`), style động qua CSSOM — không thẻ `<style>`, không `style="…"` trong HTML.
-- Màu / font là biến `--ga-*` tên trung tính (mặc định = token tối STD-07 §8): `--ga-bg-surface`, `--ga-bg-raised`,
-  `--ga-bg-sunken`, `--ga-bg-grid-id`, `--ga-bg-hover`, `--ga-border-subtle`, `--ga-border-strong`, `--ga-text-primary|secondary|muted`,
-  `--ga-accent`, `--ga-accent-soft`, `--ga-on-accent`, `--ga-ok`, `--ga-danger`, `--ga-idle`, `--ga-font-sans|mono`.
-- `@ga/contracts` dùng zod 4: ứng dụng chủ phải gọi `z.config({ jitless: true })` TRƯỚC khi nạp `@ga/contracts` / `@ga/ui`
-  (zod dò `new Function` ⇒ vi phạm `script-src` dù bị bắt) — xem `test/browser/zod-jitless.ts`.
+- CSS nằm ở tệp cùng thư mục (`datagrid.css`, `../formula-bar/formula-bar.css`, `../query-box/query-box.css`), import
+  side-effect như component của L-DS: bản build ra `<link>`, dev server dùng plugin constructable stylesheet của apps/web.
+- Chỉ dùng token của `tokens.css` (`--ga-bg-*`, `--ga-border-*`, `--ga-text-*`, `--ga-accent*`, `--ga-sp-*`, `--ga-r-*`, …).
+- Kích thước động (`--ga-dg-cols`, `--ga-dg-row-h`, `--ga-dg-width`, `--ga-dg-pad-top|bottom`, `--ga-dg-pop-right`) là biến CSS
+  đặt bằng CSSOM (`element.style.setProperty`) trong layout effect — không prop `style` của React, không style nội tuyến.
+- Ứng dụng chủ gọi `z.config({ jitless: true })` trước khi nạp `@ga/contracts` / `@ga/ui` (apps/web: `src/bootstrap/zod.ts`).
 
 ## Test
 

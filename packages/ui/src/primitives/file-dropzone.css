@@ -1,0 +1,40 @@
+.ga-drop {
+  position: relative;
+  min-width: 0;
+}
+
+/* lớp phủ khi kéo tệp vào: viền đứt ember + tên đích */
+.ga-drop__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--ga-z-pop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed var(--ga-accent);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-accent-soft);
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+.ga-drop__target {
+  padding: var(--ga-sp-2) var(--ga-sp-3);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-bg-raised);
+  color: var(--ga-text-primary);
+  font-weight: 600;
+}
+
+.ga-drop__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  margin-top: var(--ga-sp-2);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-drop__error {
+  color: var(--ga-danger);
+}

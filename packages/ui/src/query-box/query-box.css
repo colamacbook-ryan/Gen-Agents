@@ -1,0 +1,116 @@
+/* Ô truy vấn (STD-07 §5 mục 1): mono 12px trên nền sunken, chip điều kiện đã áp dụng kèm nút ×, lỗi tại chỗ. */
+
+.ga-qb {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  min-width: 120px;
+  height: 26px;
+  padding: 0 var(--ga-sp-1) 0 var(--ga-sp-2);
+  border: 1px solid var(--ga-border-subtle);
+  border-radius: var(--ga-r-input);
+  background: var(--ga-bg-sunken);
+  cursor: text;
+}
+
+.ga-qb:focus-within {
+  border-color: var(--ga-accent);
+}
+
+.ga-qb[data-invalid] {
+  border-color: var(--ga-danger);
+}
+
+.ga-qb-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ga-text-muted);
+}
+
+.ga-qb-chips {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+
+.ga-qb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  height: 18px;
+  padding: 0 0 0 var(--ga-sp-2);
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-input);
+  background: var(--ga-bg-raised);
+  color: var(--ga-text-primary);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.ga-qb-chip[data-invalid] {
+  border-color: var(--ga-danger);
+}
+
+.ga-qb-x {
+  height: 16px;
+  padding: 0 var(--ga-sp-1);
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ga-text-secondary);
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.ga-qb-x:hover {
+  background: var(--ga-border-strong);
+  color: var(--ga-text-primary);
+}
+
+.ga-qb .ga-qb-input {
+  flex: 1;
+  min-width: 60px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ga-text-primary);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-qb .ga-qb-input:focus-visible {
+  outline: none;
+}
+
+.ga-qb-input::placeholder {
+  color: var(--ga-text-muted);
+}
+
+.ga-qb-error {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: -1px;
+  left: -1px;
+  z-index: var(--ga-z-pop);
+  padding: var(--ga-sp-1) var(--ga-sp-2);
+  border: 1px solid var(--ga-danger);
+  border-radius: var(--ga-r-input);
+  background: var(--ga-bg-raised);
+  box-shadow: var(--ga-shadow-pop);
+  color: var(--ga-text-primary);
+  font-family: var(--ga-font-sans);
+  font-size: var(--ga-fs-meta);
+  line-height: var(--ga-lh-text);
+}
