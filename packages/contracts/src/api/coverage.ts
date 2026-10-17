@@ -155,6 +155,11 @@ export interface CliGroup {
  * gọi OPS-01 / OPS-14 / OPS-15 / OPS-18 khi app sống. `api <METHOD> <path>` (body chỉ từ tệp / stdin) dùng được MỌI route.
  */
 export const CLI_GROUPS: readonly CliGroup[] = [
+  {
+    group: 'Host (bash)',
+    commands: ['status', 'update', 'rollback', 'backup', 'engines install'],
+    routes: ids('OPS-01', 'OPS-14', 'OPS-15', 'OPS-18', 'GW-02'),
+  },
   { group: 'Phiên', commands: ['auth login', 'auth logout', 'auth passwd', 'auth whoami'], routes: ids('EXT-01..04') },
   {
     group: 'Thiết lập',

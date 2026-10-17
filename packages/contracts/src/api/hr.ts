@@ -23,7 +23,18 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok } from './define.ts';
-import { Budget, EngineSlug, I18nParams, ROLE_RUNTIMES } from './shapes.ts';
+import {
+  ACCOUNT_LOGIN_STATUSES,
+  Budget,
+  EngineSlug,
+  I18nParams,
+  KNOWLEDGE_PROCESSING_STATES,
+  ROLE_RUNTIMES,
+  TAXONOMY_KINDS,
+  TAXONOMY_LEVELS,
+  TAXONOMY_STATUSES,
+  TRIAL_STATES,
+} from './shapes.ts';
 
 // L-HR — nhân sự: Role, DNA, revision, Position, đào tạo (Instruction / Skill / Knowledge), cây, Kho nhân vật + avatar, thẻ,
 // thử việc (BACKEND-TRIAL §3.3, SYS-30…79: 50 route). Tách khỏi L-SYS theo quyết định của Gen; thử việc gọi Judge qua dịch vụ
@@ -53,14 +64,16 @@ export const CARD_STATUSES = ['draft', 'issued', 'suspended', 'revoked', 'supers
 export const AVATAR_SOURCES = ['library', 'upload', 'monogram', 'generated'] as const;
 const BudgetState = z.enum(['green', 'yellow', 'red']);
 const CardCheckCode = z.enum(FIXED_CODES.cardChecks);
-const DNA_SOURCES = ['owner', 'inferred', 'system'] as const;
-const TRIAL_STATES = ['queued', 'running', 'passed', 'failed', 'skipped'] as const;
+/** `dna_fields.source` (đặc tả ghi `inferred`; DB là `ai_inferred` ⇒ theo DB). */
+export const DNA_SOURCES = ['owner', 'ai_inferred', 'system'] as const;
+/** `instructions.condition_kind`. */
+export const INSTRUCTION_CONDITION_KINDS = ['always', 'channel', 'task_tag', 'state', 'trigger'] as const;
 const PROMPT_TEXT_MAX = 65_536;
 /** Ghi chú lý do: bắt buộc khi sửa mục lõi (dịch vụ kiểm — `isCore` không có trong request). */
 const Reason500 = str(500, 1);
 
 const RoleColor = z.enum(ROLE_COLORS);
-const ConditionKind = z.strictObject({ kind: KeyStr, value: str(200) });
+const ConditionKind = z.strictObject({ kind: z.enum(INSTRUCTION_CONDITION_KINDS), value: str(200) });
 
 // ---------------------------------------------------------------- Role (A3, A1)
 const AvatarStateView = z.strictObject({
@@ -172,7 +185,7 @@ export const SYS_32 = hr({
           ...idShape('EB'),
           engineSlug: EngineSlug,
           priority: Nat,
-          loginStatus: z.enum(['logged_in', 'logged_out', 'expired', 'suspended', 'in_progress', 'unknown']),
+          loginStatus: z.enum(ACCOUNT_LOGIN_STATUSES),
         }),
         16,
       ),
@@ -652,7 +665,6 @@ export const SYS_53 = hr({
   cli: ['skill learn', 'skill disable'],
 });
 
-const KNOWLEDGE_STATES = ['reading', 'summarizing', 'indexing', 'ready', 'failed'] as const;
 export const KnowledgeRow = z.strictObject({
   ...idShape('KN'),
   fileName: str(255, 1),
@@ -660,7 +672,7 @@ export const KnowledgeRow = z.strictObject({
   sizeBytes: Nat,
   chunkCount: Nat,
   summary: str(4000).nullable(),
-  state: z.enum(KNOWLEDGE_STATES),
+  state: z.enum(KNOWLEDGE_PROCESSING_STATES),
   progressPct: z.number().int().min(0).max(100).nullable(),
   duplicateOf: IdOf('KN').nullable(),
   similarity: z.number().min(0).max(1).nullable(),
@@ -723,8 +735,6 @@ export const SYS_57 = hr({
 });
 
 // ---------------------------------------------------------------- Taxonomy + sơ đồ cây (A2 Sơ đồ)
-const TAXONOMY_KINDS = ['skill', 'knowledge'] as const;
-const TAXONOMY_LEVELS = ['group', 'subsystem', 'category'] as const;
 const TreeNodeId = z
   .string()
   .max(20)
@@ -745,7 +755,7 @@ export const SYS_58 = hr({
         level: z.enum(TAXONOMY_LEVELS),
         name: str(80, 1),
         parent: IdOf('TX').nullable(),
-        status: z.enum(['active', 'proposed']),
+        status: z.enum(TAXONOMY_STATUSES),
       }),
     ),
   ),

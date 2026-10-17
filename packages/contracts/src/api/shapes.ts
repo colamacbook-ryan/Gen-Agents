@@ -1,13 +1,90 @@
 import { z } from 'zod';
 import { AUTH_METHODS, ENGINE_INSTALL_STATES, LOGIN_CHECK_STATUSES } from '../engine.ts';
 import { EFFORT_RE, EngineSlugFormat, MODEL_ID_MAX, MODEL_ID_RE } from '../runner.ts';
-import { ObservedState, WorkspaceCode } from '../supervisor.ts';
+import { ObservedState } from '../supervisor.ts';
 import { IdOf, Int, idShape, KeyStr, Lang, Nat, Pct, str, Ts } from './common.ts';
 
 // Kiểu dùng chung giữa các lane (một nơi, không lặp). Kiểu của MỘT lane nằm trong tệp lane đó.
 
 /** Mức nghiêm trọng (= CHECK `notifications.severity`). */
 export const Severity = z.enum(['ok', 'info', 'warn', 'danger']);
+
+// ---------------------------------------------------------------- enum trùng CHECK của bảng DB
+// Quy ước M0: enum của contracts TRÙNG `CHECK (col IN (...))` của bảng (db/spec/schema_v2_2.sql); test `db-parity` đối chiếu.
+// Chỗ đặc tả BACKEND-TRIAL ghi tên khác DB (vd `pending` ↔ `queued`) thì LẤY THEO DB (Gen duyệt ở báo cáo L-API).
+
+/** `engine_accounts.login_status` (khác `LOGIN_CHECK_STATUSES` của probe: DB có `error`, không có `logged_out`). */
+export const ACCOUNT_LOGIN_STATUSES = ['logged_in', 'expired', 'suspended', 'error', 'unknown', 'in_progress'] as const;
+/** `chat_messages.author_kind`. */
+export const CHAT_AUTHOR_KINDS = [
+  'owner',
+  'user',
+  'role',
+  'interviewer',
+  'trainer',
+  'assistant',
+  'system',
+  'external',
+] as const;
+export const CHAT_CHANNELS = ['web', 'telegram', 'system'] as const;
+export const CHAT_MESSAGE_STATUSES = ['streaming', 'final', 'failed', 'redacted'] as const;
+/** `chat_threads.kind` ở MVP (DB còn `workspace` — GĐ2). */
+export const THREAD_KINDS = ['interview', 'training', 'assistant', 'telegram', 'tree'] as const;
+export const THREAD_STATUSES = ['open', 'paused', 'closed', 'archived'] as const;
+export const THREAD_AGENTS = ['interviewer', 'trainer', 'assistant', 'role'] as const;
+export const ANCHOR_KINDS = ['pin', 'reference', 'annotate', 'proposal', 'quote'] as const;
+export const ANCHOR_STATES = ['ok', 'changed', 'gone', 'unknown'] as const;
+/** `change_sets.status`. */
+export const CHANGE_SET_STATUSES = ['open', 'applied', 'partially_applied', 'rejected', 'expired'] as const;
+/** `change_set_items.op`. */
+export const CHANGE_ITEM_OPS = ['create', 'update', 'delete'] as const;
+export const TAXONOMY_KINDS = ['skill', 'knowledge'] as const;
+/** `taxonomy_nodes.level` / `.status`. */
+export const TAXONOMY_LEVELS = ['group', 'branch', 'category'] as const;
+export const TAXONOMY_STATUSES = ['active', 'proposed', 'obsolete'] as const;
+/** `knowledge_items.processing_state`. */
+export const KNOWLEDGE_PROCESSING_STATES = [
+  'uploaded',
+  'extracting',
+  'summarizing',
+  'indexing',
+  'ready',
+  'failed',
+] as const;
+/** `trial_runs.status` (đặc tả ghi `queued`; DB là `pending` ⇒ theo DB). */
+export const TRIAL_STATES = ['pending', 'running', 'passed', 'failed', 'skipped'] as const;
+/** `ledger_entries.entry_type`. */
+export const LEDGER_ENTRY_TYPES = [
+  'activation_grant',
+  'grant',
+  'reward',
+  'honesty_reward',
+  'penalty',
+  'token_cost',
+  'adjustment',
+  'reversal',
+  'transfer',
+  'opening',
+] as const;
+/** `notifications.kind`. */
+export const NOTIFICATION_KINDS = [
+  'failover',
+  'quota_low',
+  'update_available',
+  'role_error',
+  'field_pending',
+  'permission_request',
+  'memory_proposal',
+  'telegram_rejected',
+  'brain_drift',
+  'backup_failed',
+  'pii_in_history',
+  'integrity',
+  'role_wounded',
+  'lessons_proposed',
+  'native_memory',
+  'core_agent_incident',
+] as const;
 
 /** `roles.runtime_state` (= `role.state` của SSE). */
 export const ROLE_RUNTIMES = ['none', 'sleeping', 'starting', 'running', 'error', 'stopped'] as const;
@@ -27,7 +104,11 @@ export const ModelKey = z.string().max(MODEL_ID_MAX).regex(MODEL_ID_RE).meta({ e
 export const EffortKey = z.string().max(16).regex(EFFORT_RE).meta({ example: 'high' });
 
 /** `workspaces.short_code` (4 ký tự chữ / số). */
-export const ShortCode = WorkspaceCode.meta({ example: 'GA01' });
+export const ShortCode = z
+  .string()
+  .length(4)
+  .regex(/^[A-Za-z0-9]{4}$/)
+  .meta({ example: 'GA01' });
 
 /** Tham số i18n của một khoá hiển thị (`{count: 3, name: 'x'}`): API trả khoá + tham số, KHÔNG trả câu đã dịch (CNS-179). */
 export const I18nParams = z
@@ -108,7 +189,7 @@ export const AccountRow = z.strictObject({
   consumer: ConsumerView,
   isCoreAgent: z.boolean(),
   authMethod: z.enum(AUTH_METHODS),
-  loginStatus: z.enum(['logged_in', 'logged_out', 'expired', 'suspended', 'in_progress', 'unknown']),
+  loginStatus: z.enum(ACCOUNT_LOGIN_STATUSES),
   reloginRequired: z.boolean(),
   lastLoginCheck: z.strictObject({ probe: IdOf('PB'), status: z.enum(LOGIN_CHECK_STATUSES), at: Ts }).nullable(),
   /** Danh tính CLI tự in ra, ĐÃ CHE. */

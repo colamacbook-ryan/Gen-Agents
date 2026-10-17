@@ -27,16 +27,27 @@ import {
 import { accepted, defineLane, noContent, ok, sse } from './define.ts';
 import {
   AccountSummary,
+  ANCHOR_KINDS,
+  ANCHOR_STATES,
   Budget,
+  CHANGE_ITEM_OPS,
+  CHANGE_SET_STATUSES,
+  CHAT_AUTHOR_KINDS,
+  CHAT_CHANNELS,
+  CHAT_MESSAGE_STATUSES,
   ConsentInput,
   ContainerState,
   EffortKey,
   EngineSlug,
   I18nParams,
   ModelKey,
+  NOTIFICATION_KINDS,
   RouteIdRef,
   Severity,
   ShortCode,
+  THREAD_AGENTS,
+  THREAD_KINDS,
+  THREAD_STATUSES,
 } from './shapes.ts';
 import { StreamEvent } from './sse.ts';
 import { UiActionRow } from './ui-actions.ts';
@@ -392,14 +403,12 @@ export const SYS_15 = sys({
 });
 
 // ---------------------------------------------------------------- SYS-16…24 chat Ghim & Soi (ChatPanel)
-const THREAD_KINDS = ['interview', 'training', 'tree', 'assistant', 'telegram'] as const;
 const CREATABLE_THREAD_KINDS = ['interview', 'training', 'tree', 'assistant'] as const;
-const THREAD_STATUSES = ['open', 'paused', 'closed', 'archived'] as const;
 
 export const ThreadRow = z.strictObject({
   ...idShape('TH'),
   kind: z.enum(THREAD_KINDS),
-  agent: KeyStr,
+  agent: z.enum(THREAD_AGENTS),
   role: IdOf('RL').nullable(),
   title: str(200),
   status: z.enum(THREAD_STATUSES),
@@ -448,21 +457,20 @@ export const SYS_17 = sys({
 
 const MessageAnchorView = z.strictObject({
   anchor: Anchor,
-  kind: KeyStr,
+  kind: z.enum(ANCHOR_KINDS),
   entityDisplayId: str(20, 1).nullable(),
   column: str(8, 1).nullable(),
-  state: z.enum(['ok', 'changed', 'gone', 'unknown']),
+  state: z.enum(ANCHOR_STATES),
 });
 export const ATTACHMENT_SCAN_STATUSES = ['pending', 'clean', 'rejected', 'error'] as const;
-const MESSAGE_STATUSES = ['streaming', 'final', 'failed', 'redacted'] as const;
 
 export const MessageRow = z.strictObject({
   ...idShape('MSG'),
-  authorKind: KeyStr,
-  channel: z.enum(['web', 'telegram', 'system']),
+  authorKind: z.enum(CHAT_AUTHOR_KINDS),
+  channel: z.enum(CHAT_CHANNELS),
   // Đã che credential.
   content: str(CHAT_CONTENT_MAX),
-  status: z.enum(MESSAGE_STATUSES),
+  status: z.enum(CHAT_MESSAGE_STATUSES),
   contextTokens: Nat.nullable(),
   tokensIn: Nat.nullable(),
   tokensOut: Nat.nullable(),
@@ -631,7 +639,6 @@ export const SYS_24 = sys({
 });
 
 // ---------------------------------------------------------------- SYS-25…29 change set (khay "N đề xuất chờ duyệt")
-const CHANGE_SET_STATUSES = ['pending', 'applied', 'rejected'] as const;
 const BudgetState = z.enum(['green', 'yellow', 'red']);
 
 export const ChangeSetRow = z.strictObject({
@@ -679,7 +686,7 @@ export const SYS_26 = sys({
       items: list(
         z.strictObject({
           target: AnyId.nullable(),
-          op: z.enum(['insert', 'update', 'delete']),
+          op: z.enum(CHANGE_ITEM_OPS),
           field: str(128, 1),
           before: Json,
           after: Json,
@@ -818,7 +825,7 @@ export const SYS_83 = sys({
     PageOf(
       z.strictObject({
         ...idShape('NT'),
-        kind: KeyStr,
+        kind: z.enum(NOTIFICATION_KINDS),
         severity: Severity,
         params: I18nParams,
         target: AnyId.nullable(),

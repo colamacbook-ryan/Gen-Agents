@@ -24,7 +24,7 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok } from './define.ts';
-import { EngineSlug, I18nParams, ROLE_RUNTIMES, TgUserId } from './shapes.ts';
+import { EngineSlug, I18nParams, LEDGER_ENTRY_TYPES, ROLE_RUNTIMES, TgUserId } from './shapes.ts';
 
 // L-WORK — Telegram, chủ động, việc, kinh tế (₲), Polaris, Trọng thương, Brain (BACKEND-TRIAL §3.5: 43 route).
 // Bot Telegram KHÔNG gọi HTTP: nó gọi cùng dịch vụ (service layer) mà các route này dùng (§3.9) nên hành vi một nguồn.
@@ -35,9 +35,38 @@ import { EngineSlug, I18nParams, ROLE_RUNTIMES, TgUserId } from './shapes.ts';
 const work = defineLane('L-WORK');
 
 const MemoryScope = z.enum(['personal', 'position']);
-const MEMORY_KINDS = ['fact', 'lesson', 'person', 'commitment', 'procedure'] as const;
-const MEMORY_STATUSES = ['proposed', 'active', 'superseded', 'stale', 'deleted'] as const;
-const TASK_STATUSES = [
+export const MEMORY_KINDS = ['fact', 'lesson', 'person', 'commitment', 'procedure'] as const;
+/** `memories.status` (DB: active | proposed | superseded | obsolete) + `deleted` = `deleted_at` đặt (thùng rác, WRK-40/41). Đặc tả ghi `stale` ⇒ theo DB: `obsolete`. */
+export const MEMORY_STATUSES = ['active', 'proposed', 'superseded', 'obsolete', 'deleted'] as const;
+/** `memories.source_type`, `.sensitivity`. */
+export const MEMORY_SOURCE_TYPES = [
+  'conversation',
+  'owner',
+  'consolidation',
+  'training',
+  'system',
+  'reflection',
+] as const;
+export const SENSITIVITIES = ['normal', 'personal', 'confidential'] as const;
+/** `tasks.verification`. */
+export const TASK_VERIFICATIONS = ['unverified', 'verified', 'disputed', 'rejected'] as const;
+/** `commitments.status` / `.counterparty_kind`. */
+export const COMMITMENT_STATUSES = ['open', 'kept', 'missed', 'cancelled', 'renegotiated'] as const;
+export const COMMITMENT_COUNTERPARTIES = ['owner', 'user', 'external', 'role'] as const;
+/** `telegram_bots.status`, `telegram_allowlist.added_via`. */
+export const TELEGRAM_BOT_STATUSES = ['pending', 'active', 'paused', 'revoked', 'error'] as const;
+export const ALLOWLIST_ADDED_VIA = ['capture', 'manual', 'default_setting'] as const;
+/** `proactive_policies.break_quiet_level` (đặc tả ghi never | urgent | high ⇒ theo DB). */
+export const BREAK_QUIET_LEVELS = ['never', 'urgent_only', 'high_and_above'] as const;
+/**
+ * `proactive_sends.status` ở mức API: DB có `suppressed_quiet | suppressed_cap | suppressed_disabled | suppressed_wounded`;
+ * API gộp thành `blocked` + `blockReason` (quiet | cap | disabled | wounded) — ánh xạ một chiều, đối chiếu ở test db-parity.
+ */
+export const PROACTIVE_SEND_STATUSES = ['reserved', 'sent', 'failed', 'expired', 'blocked', 'test'] as const;
+export const SEND_BLOCK_REASONS = ['quiet', 'cap', 'disabled', 'wounded'] as const;
+/** `polaris_checks.subject_kind`. */
+export const POLARIS_CHECK_KINDS = ['proposal', 'permission_request', 'proactive', 'task_accept'] as const;
+export const TASK_STATUSES = [
   'todo',
   'queued',
   'running',
@@ -48,12 +77,18 @@ const TASK_STATUSES = [
   'failed',
   'cancelled',
 ] as const;
-const TASK_SOURCES = ['telegram', 'web', 'schedule', 'proactive', 'system', 'training'] as const;
-const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+export const TASK_SOURCES = ['telegram', 'web', 'schedule', 'proactive', 'system', 'training'] as const;
+export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 const RANGES = ['today', '7d', '30d'] as const;
-const PENALTY_CLASSES = ['self_reported', 'dissatisfaction', 'concealment', 'harness_violation'] as const;
+export const PENALTY_CLASSES = ['self_reported', 'dissatisfaction', 'concealment', 'harness_violation'] as const;
 const WOUND_CONDITION = z.enum(['normal', 'wounded']);
-const PROACTIVE_TRIGGERS = ['commitment_reminder', 'task_done', 'opportunity', 'incident', 'heartbeat_digest'] as const;
+export const PROACTIVE_TRIGGERS = [
+  'commitment_reminder',
+  'task_done',
+  'opportunity',
+  'incident',
+  'heartbeat_digest',
+] as const;
 /** Bằng chứng của án phạt: một việc (TK) hoặc một dòng audit (AU). */
 const EvidenceRef = Ref(['TK', 'AU']);
 const Reason500 = str(500, 1);
@@ -66,7 +101,7 @@ const AllowlistRow = z.strictObject({
   tgUserId: TgUserId,
   isOwner: z.boolean(),
   status: z.enum(['active', 'removed']),
-  addedVia: KeyStr,
+  addedVia: z.enum(ALLOWLIST_ADDED_VIA),
   addedAt: Ts,
 });
 const OWNER_CHANGE_STATES = ['captured', 'verifying', 'verified'] as const;
@@ -90,7 +125,7 @@ export const WRK_01 = work({
           username: str(64, 1),
           getMe: z.enum(['ok', 'error', 'unknown']),
           tokenLast4: str(4, 1),
-          status: KeyStr,
+          status: z.enum(TELEGRAM_BOT_STATUSES),
         })
         .nullable(),
       allowlist: list(AllowlistRow, 64),
@@ -254,7 +289,7 @@ const PolicyView = z.strictObject({
   maxPerDay: z.number().int().min(0).max(20),
   quietHours: z.strictObject({ start: MinuteOfDay, end: MinuteOfDay, weekend: QuietWindow.nullable() }),
   triggers: ProactiveTriggers,
-  breakQuiet: z.enum(['never', 'urgent', 'high']),
+  breakQuiet: z.enum(BREAK_QUIET_LEVELS),
   channel: z.literal('telegram'),
 });
 const PolicyResult = z.strictObject({ policy: PolicyView });
@@ -282,8 +317,8 @@ export const WRK_10 = work({
         z.strictObject({
           ...idShape('PN'),
           trigger: z.enum(PROACTIVE_TRIGGERS),
-          status: z.enum(['reserved', 'sent', 'expired', 'blocked', 'test']),
-          blockReason: KeyStr.nullable(),
+          status: z.enum(PROACTIVE_SEND_STATUSES),
+          blockReason: z.enum(SEND_BLOCK_REASONS).nullable(),
           at: Ts,
         }),
       ),
@@ -306,7 +341,7 @@ export const WRK_11 = work({
       maxPerDay: z.number().int().min(0).max(20),
       quietHours: z.strictObject({ start: MinuteOfDay, end: MinuteOfDay, weekend: QuietWindow.nullable() }),
       triggers: ProactiveTriggers,
-      breakQuiet: z.enum(['never', 'urgent', 'high']),
+      breakQuiet: z.enum(BREAK_QUIET_LEVELS),
     }),
   },
   // Version mới. `db.*`: Trọng thương khoá.
@@ -364,7 +399,7 @@ const TaskRow = z.strictObject({
   completedAt: Ts.nullable(),
   tokensTotal: Nat,
   engineSlug: EngineSlug.nullable(),
-  verification: KeyStr,
+  verification: z.enum(TASK_VERIFICATIONS),
   failureDisclosure: KeyStr.nullable(),
   pausedByWound: IdOf('RW').nullable(),
   penaltyAllowed: z.boolean(),
@@ -462,18 +497,18 @@ export const WRK_20 = work({
   path: '/commitments',
   auth: 'V',
   o4: 'blocked',
-  request: { query: z.strictObject({ roleRef: Ref('RL').optional(), status: KeyStr.optional() }) },
+  request: { query: z.strictObject({ roleRef: Ref('RL').optional(), status: z.enum(COMMITMENT_STATUSES).optional() }) },
   response: ok(
     list(
       z.strictObject({
         ...idShape('CM'),
         position: IdOf('PS'),
         promisedBy: IdOf('RL').nullable(),
-        counterpartyKind: KeyStr,
+        counterpartyKind: z.enum(COMMITMENT_COUNTERPARTIES),
         counterpartyLabel: str(120),
         statement: str(2000),
         dueAt: Ts,
-        status: KeyStr,
+        status: z.enum(COMMITMENT_STATUSES),
         progressPct: z.number().int().min(0).max(100).nullable(),
         rewardMinor: Minor.nullable(),
         nextReminderAt: Ts.nullable(),
@@ -486,7 +521,7 @@ export const WRK_20 = work({
 // ---------------------------------------------------------------- WRK-21…26 ví ₲, phạt, thưởng, đảo
 const LedgerEntry = z.strictObject({
   ...idShape('LG'),
-  entryType: KeyStr,
+  entryType: z.enum(LEDGER_ENTRY_TYPES),
   signedAmountMinor: SMinor,
   balanceAfterMinor: Minor,
   reason: str(500),
@@ -689,7 +724,7 @@ export const WRK_27 = work({
       checks: PageOf(
         z.strictObject({
           ...idShape('PC'),
-          kind: KeyStr,
+          kind: z.enum(POLARIS_CHECK_KINDS),
           subject: AnyId.nullable(),
           expectedMinor: SMinor,
           rule: str(64),
@@ -863,9 +898,9 @@ const MemoryRow = z.strictObject({
   status: z.enum(MEMORY_STATUSES),
   supersededBy: IdOf('MM').nullable(),
   confidence: z.number().min(0).max(1),
-  sourceType: KeyStr,
+  sourceType: z.enum(MEMORY_SOURCE_TYPES),
   session: IdOf('SS').nullable(),
-  sensitivity: KeyStr,
+  sensitivity: z.enum(SENSITIVITIES),
   createdAt: Ts,
   lastRecalledAt: Ts.nullable(),
   recallCount: Nat,
@@ -925,7 +960,7 @@ export const WRK_36 = work({
       scope: MemoryScope,
       kind: z.enum(MEMORY_KINDS),
       content: MemoryContent,
-      sensitivity: KeyStr.optional(),
+      sensitivity: z.enum(SENSITIVITIES).optional(),
     }),
   },
   response: ok(z.strictObject({ memory: IdOf('MM') })),
@@ -963,7 +998,7 @@ export const WRK_39 = work({
   o4: 'blocked',
   request: {
     params: MemoryParams,
-    body: z.strictObject({ scope: MemoryScope.optional(), status: z.literal('stale').optional() }),
+    body: z.strictObject({ scope: MemoryScope.optional(), status: z.literal('obsolete').optional() }),
   },
   response: ok(MemoryRow),
   cli: ['memory scope', 'memory stale'],

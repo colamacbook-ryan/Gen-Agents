@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { isSettingKey, settingWritableBy } from '../settings.ts';
 import { AUTH_ROUTES } from './auth.ts';
 import { ALL_ERROR_CODES, API_BASE, COMMON_ERROR_CODES, type ErrorCode, type RouteErrorCode } from './common.ts';
@@ -32,6 +33,33 @@ export const M2_ROUTES: readonly Route[] = ROUTES.filter((r) => !r.id.startsWith
 const BY_ID = new Map(ROUTES.map((r) => [r.id, r] as const));
 export function routeById(id: string): Route | undefined {
   return BY_ID.get(id);
+}
+
+/**
+ * Schema của TOÀN BỘ request một route: `{params?, query?, headers?, body?}` — chỉ gồm phần route khai báo, strict (phần
+ * route không khai báo mà client gửi ⇒ từ chối, vd body ở route không nhận body). Dùng cho edge và contract test.
+ */
+export function requestSchemaOf(route: Pick<Route, 'request'>): z.ZodType {
+  const r = route.request;
+  const shape: Record<string, z.ZodType> = {};
+  if (r.params) shape.params = r.params;
+  if (r.query) shape.query = r.query;
+  if (r.headers) shape.headers = r.headers;
+  if (r.body) shape.body = r.body;
+  return z.strictObject(shape);
+}
+
+/** Schema của response JSON (`null` nếu route trả 204 / luồng / tệp). */
+export function responseSchemaOf(route: Pick<Route, 'response'>): z.ZodType | null {
+  const res = route.response;
+  switch (res.kind) {
+    case 'json':
+      return res.schema;
+    case 'ws':
+      return z.union([res.client, res.server]);
+    default:
+      return null;
+  }
 }
 
 /** Đường dẫn đầy đủ: `/api/v1` + path (route `mount: 'edge'` ở gốc edge). */

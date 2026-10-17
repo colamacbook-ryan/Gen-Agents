@@ -17,7 +17,6 @@ import {
 } from '../sessions.ts';
 import { DesiredState, ObservedState, PTY } from '../supervisor.ts';
 import {
-  AnyId,
   ConfirmName,
   IdOf,
   idShape,
@@ -56,18 +55,33 @@ const gw = defineLane('L-GW');
 const ENGINE_COMPAT = ['tested', 'untested', 'unknown'] as const;
 const TOOL_MODES = ['allow', 'ask', 'deny'] as const;
 const SELECTION_STATES = ['valid', 'stale', 'unavailable', 'unknown'] as const;
-const PROMPT_SEGMENT_KINDS = [
+/** `compiled_prompt_segments.layer` / `.source_kind` (đặc tả ghi một `kind` gộp; DB tách `layer` + `source_kind` + `is_conditional` ⇒ theo DB). */
+export const PROMPT_SEGMENT_LAYERS = [
   'values',
   'house_rules',
   'persona',
   'style',
   'drive',
   'position',
+  'skills',
+  'polaris',
+  'frame',
+] as const;
+export const PROMPT_SEGMENT_SOURCE_KINDS = [
+  'dna_field',
+  'instruction',
   'skill_index',
-  'conditional',
   'polaris_rules',
   'polaris',
+  'frame',
 ] as const;
+/** `tools.kind` / `.risk_level` / `.allowed_agents` / `.status`. */
+export const TOOL_KINDS = ['gateway_builtin', 'mcp_server', 'integration'] as const;
+export const TOOL_RISK_LEVELS = ['low', 'medium', 'high'] as const;
+export const TOOL_ALLOWED_AGENTS = ['role', 'system', 'both'] as const;
+export const TOOL_STATUSES = ['active', 'disabled'] as const;
+/** Trạng thái một lượt probe (= `probe.result` của SSE). */
+const PROBE_STATUSES = ['running', 'ok', 'partial', 'failed'] as const;
 const PERMISSION_STATUSES = ['pending', 'approved', 'denied', 'expired', 'cancelled'] as const;
 /** `consumer` ở query: AI Hệ thống (`system`) hoặc một Role. */
 const ConsumerFilter = z.union([z.literal('system'), Ref('RL')]);
@@ -172,7 +186,12 @@ export const GW_06 = gw({
         100,
       ),
       probes: list(
-        z.strictObject({ ...idShape('PB'), kind: z.enum(['login_check', 'capability_scan']), status: KeyStr, at: Ts }),
+        z.strictObject({
+          ...idShape('PB'),
+          kind: z.enum(['login_check', 'capability_scan']),
+          status: z.enum(PROBE_STATUSES),
+          at: Ts,
+        }),
         100,
       ),
       bindings: list(IdOf('EB'), 64),
@@ -468,8 +487,11 @@ export const GW_21 = gw({
       segments: list(
         z.strictObject({
           ordinal: Nat,
-          kind: z.enum(PROMPT_SEGMENT_KINDS),
-          source: AnyId.nullable(),
+          layer: z.enum(PROMPT_SEGMENT_LAYERS),
+          sourceKind: z.enum(PROMPT_SEGMENT_SOURCE_KINDS),
+          isConditional: z.boolean(),
+          // `source_display`: display_id của DN / IN / SK, hoặc nhãn khối (`frame`, `polaris`).
+          source: str(64, 1),
           text: str(200_000),
           tokens: Nat,
         }),
@@ -631,7 +653,7 @@ const PermissionRow = z.strictObject({
 });
 const GrantRow = z.strictObject({
   ...idShape('GR'),
-  tool: z.strictObject({ slug: KeyStr, kind: KeyStr, riskLevel: KeyStr }),
+  tool: z.strictObject({ slug: KeyStr, kind: z.enum(TOOL_KINDS), riskLevel: z.enum(TOOL_RISK_LEVELS) }),
   mode: z.enum(TOOL_MODES),
   via: z.enum(['role', 'position']),
   expiresAt: Ts.nullable(),
@@ -709,13 +731,14 @@ export const GW_32 = gw({
         ...idShape('TL'),
         slug: KeyStr,
         name: str(120, 1),
-        kind: KeyStr,
-        riskLevel: KeyStr,
+        kind: z.enum(TOOL_KINDS),
+        riskLevel: z.enum(TOOL_RISK_LEVELS),
         defaultMode: z.enum(TOOL_MODES),
-        allowedAgents: list(KeyStr, 16),
+        // `tools.allowed_agents`: một giá trị (đặc tả ghi mảng; DB là enum role | system | both ⇒ theo DB).
+        allowedAgents: z.enum(TOOL_ALLOWED_AGENTS),
         definitionTokens: Nat,
         isBuiltin: z.boolean(),
-        status: KeyStr,
+        status: z.enum(TOOL_STATUSES),
       }),
     ),
   ),

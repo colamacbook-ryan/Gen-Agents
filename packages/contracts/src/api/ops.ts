@@ -36,6 +36,18 @@ import { LogLine, LogLineEvent } from './sse.ts';
 
 const ops = defineLane('L-OPS');
 
+/** `secrets.kind`, `egress_rules.applies_to`, `audit_log.result`. */
+export const SECRET_ROW_KINDS = [
+  'engine_api_key',
+  'telegram_bot_token',
+  'backup_target',
+  'integration_token',
+  'mfa_totp',
+  'anchor_remote_token',
+] as const;
+export const EGRESS_APPLIES_TO = ['all_roles', 'role', 'position', 'tool'] as const;
+export const AUDIT_RESULTS = ['ok', 'denied', 'error'] as const;
+
 const SETTING_SECTIONS = [
   'general',
   'access',
@@ -149,7 +161,7 @@ export const OPS_05 = ops({
     list(
       z.strictObject({
         ...idShape('SEC'),
-        kind: KeyStr,
+        kind: z.enum(SECRET_ROW_KINDS),
         label: str(120),
         last4: str(4, 1),
         allowedHost: str(253, 1).nullable(),
@@ -166,7 +178,7 @@ const EgressRow = z.strictObject({
   ...idShape('EG'),
   domainPattern: str(253, 1),
   port: z.number().int().min(1).max(65_535).nullable(),
-  appliesTo: KeyStr,
+  appliesTo: z.enum(EGRESS_APPLIES_TO),
   target: AnyId.nullable(),
   action: z.enum(['allow', 'deny']),
   isBuiltin: z.boolean(),
@@ -196,7 +208,7 @@ export const OPS_07 = ops({
     body: z.strictObject({
       domainPattern: DomainPattern,
       port: z.number().int().min(1).max(65_535).optional(),
-      appliesTo: KeyStr,
+      appliesTo: z.enum(EGRESS_APPLIES_TO),
       roleRef: Ref('RL').optional(),
       positionRef: Ref('PS').optional(),
       toolSlug: KeyStr.optional(),
@@ -418,7 +430,7 @@ const AuditFilters = {
   // Cho phép `*` cuối: `dna_field.*` → `LIKE 'dna\_field.%'`.
   action: str(128, 1).optional(),
   tool: str(64, 1).optional(),
-  result: KeyStr.optional(),
+  result: z.enum(AUDIT_RESULTS).optional(),
   from: Ts.optional(),
   to: Ts.optional(),
 } as const;
@@ -430,7 +442,7 @@ const AuditRow = z.strictObject({
   actor: z.strictObject({ kind: z.enum(ACTOR_KINDS), display: str(120) }),
   action: str(128, 1),
   tool: str(64, 1).nullable(),
-  result: KeyStr,
+  result: z.enum(AUDIT_RESULTS),
   tokens: Nat.nullable(),
   costMicroUsd: Nat.nullable(),
 });

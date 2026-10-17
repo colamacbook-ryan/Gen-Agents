@@ -3,7 +3,15 @@ import { SseEvent } from '../events.ts';
 import { TURN_REJECTIONS } from '../sessions.ts';
 import { DisplayId, Int, KeyStr, Nat, Pct, str, Ts, Ulid } from './common.ts';
 import { GridKey } from './grids.ts';
-import { TgUserId } from './shapes.ts';
+import {
+  CHANGE_SET_STATUSES,
+  CHAT_AUTHOR_KINDS,
+  CHAT_MESSAGE_STATUSES,
+  KNOWLEDGE_PROCESSING_STATES,
+  LEDGER_ENTRY_TYPES,
+  TgUserId,
+  TRIAL_STATES,
+} from './shapes.ts';
 
 // Sự kiện SSE `GET /api/v1/stream` (BACKEND-TRIAL §3.7): 26 loại. 13 loại đầu đã có ở `events.ts` (dùng lại NGUYÊN, không
 // định nghĩa trùng); 12 loại mới ở đây + `log.line` (chỉ trên `/logs/stream`).
@@ -64,7 +72,6 @@ export const CARD_STEPS = [
   'grant',
   'rollback',
 ] as const;
-export const KNOWLEDGE_STATES = ['reading', 'summarizing', 'indexing', 'ready', 'failed'] as const;
 
 export const NewSseEvent = z.discriminatedUnion('type', [
   z.strictObject({
@@ -73,8 +80,8 @@ export const NewSseEvent = z.discriminatedUnion('type', [
     threadId: Ulid,
     messageId: Ulid,
     messageDisplayId: DisplayId('MSG'),
-    authorKind: KeyStr,
-    status: z.enum(['streaming', 'final', 'failed', 'redacted']),
+    authorKind: z.enum(CHAT_AUTHOR_KINDS),
+    status: z.enum(CHAT_MESSAGE_STATUSES),
   }),
   z.strictObject({
     ...base,
@@ -89,7 +96,7 @@ export const NewSseEvent = z.discriminatedUnion('type', [
     type: z.literal('changeset.state'),
     changeSetDisplayId: DisplayId('CS'),
     roleId: Ulid.nullable(),
-    state: z.enum(['pending', 'applied', 'rejected']),
+    state: z.enum(CHANGE_SET_STATUSES),
     tokenDelta: Int.nullable(),
   }),
   z.strictObject({
@@ -121,14 +128,15 @@ export const NewSseEvent = z.discriminatedUnion('type', [
     trialRunDisplayId: DisplayId('TR'),
     caseIndex: Nat,
     caseCount: Nat,
-    state: z.enum(['queued', 'running', 'passed', 'failed', 'skipped']),
+    state: z.enum(TRIAL_STATES),
     score: z.number().min(0).max(1).nullable(),
   }),
   z.strictObject({
     ...base,
     type: z.literal('knowledge.progress'),
     knowledgeDisplayId: DisplayId('KN'),
-    state: z.enum([...KNOWLEDGE_STATES, 'duplicate']),
+    // `duplicate` = `duplicate_of_id` đặt (không phải processing_state của DB).
+    state: z.enum([...KNOWLEDGE_PROCESSING_STATES, 'duplicate']),
     progressPct: Pct.nullable(),
   }),
   z.strictObject({
@@ -146,7 +154,7 @@ export const NewSseEvent = z.discriminatedUnion('type', [
     roleId: Ulid,
     balanceMinor: Nat,
     ledgerDisplayId: DisplayId('LG'),
-    entryType: KeyStr,
+    entryType: z.enum(LEDGER_ENTRY_TYPES),
     rank: Nat.nullable(),
   }),
   z.strictObject({
