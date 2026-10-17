@@ -136,6 +136,41 @@ describe.skipIf(!enabled)('DataGrid — ảo hoá, anchor, CSP, axe trong Chromi
     expect(errors).toEqual([]);
   });
 
+  it('khi đã có ô chọn: "sẵn sàng" chỉ phát SAU khi ô đích thật sự được chọn (aria-activedescendant + getActiveCell đúng ngay lúc resolve)', async () => {
+    const { page } = await lab.open('fixture=instructions');
+    await page.click('[data-anchor="grid:instructions/row:IN-0001/col:C"]');
+    for (const [id, col] of [
+      ['IN-0004', 'D'],
+      ['IN-0002', 'B'],
+      ['IN-0011', 'G'],
+    ] as const) {
+      const r = await page.evaluate(
+        async ({ id, col }) => {
+          const g = (
+            window as unknown as {
+              __grid: {
+                current: {
+                  scrollToId(i: string, c: string): Promise<{ status: string; element: HTMLElement | null }>;
+                  getActiveCell(): { id: string; col: string | null } | null;
+                };
+              };
+            }
+          ).__grid.current;
+          const d = await g.scrollToId(id, col);
+          const grid = document.querySelector('[role="grid"]');
+          return {
+            status: d.status,
+            active: g.getActiveCell(),
+            desc: grid?.getAttribute('aria-activedescendant') === d.element?.id,
+            ref: document.querySelector('.ga-fb-ref')?.textContent,
+          };
+        },
+        { id, col },
+      );
+      expect(r).toEqual({ status: 'ready', active: { id, col }, desc: true, ref: `${id} · ${col}` });
+    }
+  });
+
   it('navigate khi nguồn chậm (locate + tải khối có độ trễ) vẫn chờ tới khi ô dựng xong; select:false không đổi ô chọn', async () => {
     const { page } = await lab.open('fixture=audit&n=10000&latency=40');
     const r = await navigate(page, 'AU-09000', 'D');

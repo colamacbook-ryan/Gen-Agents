@@ -166,6 +166,16 @@ function CellContent<R>(props: {
       </>
     );
   }
+  if (col.kind === 'enum' && props.editable) {
+    return (
+      <>
+        <span className="ga-dg-text">{text}</span>
+        <span className="ga-dg-chev" aria-hidden="true">
+          <IconChevron open />
+        </span>
+      </>
+    );
+  }
   if (col.kind === 'number' && typeof col.value(row) === 'number' && !col.format) {
     return <span className="ga-dg-text">{props.fmtNum(col.value(row) as number)}</span>;
   }
@@ -183,7 +193,9 @@ export interface GridRowProps<R> {
   activeCol: string | null;
   checked: boolean;
   edit: EditState | null;
-  meta: GridRowMeta | null;
+  /** trạng thái hàng (giá trị nguyên thuỷ để memo không vỡ khi rowMeta trả đối tượng mới mỗi lần) */
+  metaKind: GridRowMeta['kind'];
+  supersededBy: string | null;
   hasMeta: boolean;
   canEdit: boolean;
   canApply: boolean;
@@ -211,7 +223,7 @@ function GridRowInner<R>(p: GridRowProps<R>) {
       </div>
     );
   }
-  const kind = p.meta?.kind ?? 'normal';
+  const kind = p.metaKind;
   return (
     <div
       role="row"
@@ -312,15 +324,15 @@ function GridRowInner<R>(p: GridRowProps<R>) {
               )}
             </>
           )}
-          {kind === 'superseded' && p.meta?.supersededBy && (
+          {kind === 'superseded' && p.supersededBy && (
             <button
               type="button"
               className="ga-dg-link"
               tabIndex={-1}
               onKeyDown={metaKey(p.actions)}
-              onClick={() => p.actions.goto(p.meta?.supersededBy as string)}
+              onClick={() => p.actions.goto(p.supersededBy as string)}
             >
-              {labels.supersededBy(p.meta.supersededBy)}
+              {labels.supersededBy(p.supersededBy)}
             </button>
           )}
         </div>

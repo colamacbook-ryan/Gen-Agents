@@ -78,6 +78,12 @@ describe.skipIf(!enabled)('DataGrid — tương tác trong Chromium thật', { t
     await page.keyboard.press('/');
     expect((await gridState(page)).focused).toBe('Truy vấn bảng');
     expect(await page.inputValue('.ga-qb-input')).toBe('');
+    // handle cho phím `/` toàn cục của shell
+    await page.locator('[role="grid"]').focus();
+    await page.evaluate(() =>
+      (window as unknown as { __grid: { current: { focusQuery(): void } } }).__grid.current.focusQuery(),
+    );
+    expect((await gridState(page)).focused).toBe('Truy vấn bảng');
     expect(errors).toEqual([]);
   });
 
@@ -176,6 +182,39 @@ describe.skipIf(!enabled)('DataGrid — tương tác trong Chromium thật', { t
     expect(errors).toEqual([]);
   });
 
+  it('lỗi tải: banner + "Thử lại" tải lại được; truy vấn bị nguồn từ chối (query.invalid) ⇒ banner + "Xoá truy vấn"', async () => {
+    const { page } = await lab.open('fixture=instructions&failFetch=1');
+    const banner = page.locator('.ga-dg-banner[role="alert"]');
+    await banner.waitFor();
+    expect(await banner.textContent()).toContain('Không tải được dữ liệu của lưới.');
+    expect(await page.locator('[role="grid"]').getAttribute('aria-rowcount')).toBe('-1');
+    // onError đúng một lần cho mỗi lỗi (StrictMode gắn effect hai lần ⇒ có thể là 1 hoặc 2 lần tải, mỗi lần một lỗi riêng)
+    const errs = (await h(page)).errors;
+    expect(errs.length).toBeGreaterThanOrEqual(1);
+    expect(new Set(errs)).toEqual(new Set(['mô phỏng lỗi mạng']));
+    // "Thử lại" khi mạng vẫn hỏng: lỗi mới được báo, vẫn banner, rồi KHÔNG tự gọi lại (không vòng lặp)
+    const n0 = errs.length;
+    await banner.locator('button', { hasText: 'Thử lại' }).click();
+    await expect.poll(async () => (await h(page)).errors.length).toBe(n0 + 1);
+    await banner.waitFor();
+    const before = (await h(page)).errors.length;
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 300)));
+    expect((await h(page)).errors.length).toBe(before);
+    await page.evaluate(() => (window as unknown as { __h: { heal(): void } }).__h.heal());
+    await banner.locator('button', { hasText: 'Thử lại' }).click();
+    await expect.poll(async () => (await gridState(page)).footer).toBe('12 hàng · 0 đã chọn');
+    expect(await banner.count()).toBe(0);
+    // handle.setQuery đi thẳng tới nguồn (không qua kiểm của ô truy vấn) ⇒ nguồn từ chối như máy chủ
+    await page.evaluate(() =>
+      (window as unknown as { __grid: { current: { setQuery(q: string): void } } }).__grid.current.setQuery('abc:1'),
+    );
+    await banner.waitFor();
+    expect(await banner.textContent()).toContain('Máy chủ từ chối truy vấn: cột không tồn tại trong lưới này');
+    expect(await page.locator('.ga-qb-chip[data-invalid]').count()).toBe(1);
+    await banner.locator('button', { hasText: 'Xoá truy vấn' }).click();
+    await expect.poll(async () => (await gridState(page)).footer).toBe('12 hàng · 0 đã chọn');
+  });
+
   it('lỗi lưu: banner danger + onError, dữ liệu không đổi, editor giữ nháp', async () => {
     const { page } = await lab.open('fixture=instructions&failSave=1');
     await page.click(cell('IN-0005', 'C'));
@@ -230,6 +269,28 @@ describe.skipIf(!enabled)('DataGrid — tương tác trong Chromium thật', { t
     await sdlg.locator('button', { hasText: 'Bỏ sắp xếp' }).click();
     await expect.poll(async () => (await gridState(page)).ids[0]).toBe('IN-0001');
     expect(errors).toEqual([]);
+  });
+
+  it('kéo đổi độ rộng cột (header + ô cùng đổi), nhấp đúp về mặc định', async () => {
+    const { page } = await lab.open('fixture=instructions');
+    const width = () =>
+      page.evaluate(
+        () =>
+          document.querySelector('[data-anchor="grid:instructions/row:IN-0001/col:C"]')?.getBoundingClientRect().width,
+      );
+    expect(await width()).toBe(168);
+    const handle = page.locator('[role="columnheader"][title="C · Tên khối"] .ga-dg-resize');
+    const box = await handle.boundingBox();
+    if (!box) throw new Error('không thấy tay kéo');
+    await page.mouse.move(box.x + 3, box.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 63, box.y + 10, { steps: 5 });
+    await page.mouse.up();
+    expect(await width()).toBe(228);
+    const head = await page.locator('[role="columnheader"][title="C · Tên khối"]').boundingBox();
+    expect(head?.width).toBe(228);
+    await handle.dblclick();
+    expect(await width()).toBe(168);
   });
 
   it('ẩn cột: chữ cột và anchor của cột còn lại KHÔNG đổi; luôn giữ ít nhất một cột', async () => {
@@ -421,7 +482,18 @@ describe.skipIf(!enabled)('DataGrid — tương tác trong Chromium thật', { t
     await paste('999');
     await page.click(cell('IN-0003', 'D'));
     await paste('ghi đè lõi');
+    // focus ở ô truy vấn: dán là của ô truy vấn, lưới KHÔNG ghi ô đang chọn
+    await page.click(cell('IN-0002', 'C'));
+    await page.locator('.ga-qb-input').focus();
+    await page.evaluate(() => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', 'không được ghi');
+      document
+        .querySelector('.ga-qb-input')
+        ?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    });
     expect((await h(page)).updates.map((u) => u.column)).toEqual(['name']);
+    expect((await rowOf(page, 'IN-0002'))?.name).toBe('Giữ bí mật nội bộ');
   });
 
   it('+ Thêm hàng: tạo qua nguồn, cuộn tới hàng mới và chọn ô sửa được đầu tiên', async () => {

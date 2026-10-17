@@ -127,13 +127,13 @@ function controlled(total: number) {
       }),
     locate: async () => ({ state: 'gone' }),
   };
-  const answer = (i: number, tag = '') => {
+  const answer = (i: number, tag = '', tot = total) => {
     const p = pending[i];
     if (!p) throw new Error(`không có yêu cầu ${i}`);
-    const rows = Array.from({ length: Math.max(0, Math.min(p.req.limit, total - p.req.start)) }, (_, k) => ({
+    const rows = Array.from({ length: Math.max(0, Math.min(p.req.limit, tot - p.req.start)) }, (_, k) => ({
       id: `${tag}${auditId(p.req.start + k + 1)}`,
     }));
-    p.resolve({ start: p.req.start, rows, total });
+    p.resolve({ start: p.req.start, rows, total: tot, aggregates: { tokens: tot * 10 } });
   };
   return { src, pending, answer };
 }
@@ -166,9 +166,24 @@ describe('RowCache', () => {
     cache.setQuery(Q('b'));
     expect(c.pending[0]?.req.signal.aborted).toBe(true);
     expect(c.pending[1]?.req.query.q).toBe('b');
-    c.answer(0, 'OLD');
+    // phản hồi trễ của truy vấn cũ (tổng khác) về TRƯỚC: không được đè tổng / Σ / hàng của truy vấn mới
+    c.answer(0, 'OLD', 77);
+    await tick();
+    expect(cache.total).toBeNull();
+    expect(cache.aggregates).toEqual({});
     c.answer(1);
     await tick();
+    expect(cache.row(0)?.id).toBe('AU-00001');
+    expect(cache.total).toBe(500);
+    // … và về SAU phản hồi mới: vẫn bị bỏ (yêu cầu 2 = truy vấn c, 3 = truy vấn d)
+    cache.setQuery(Q('c'));
+    cache.setQuery(Q('d'));
+    expect(c.pending.map((p) => p.req.query.q)).toEqual(['a', 'b', 'c', 'd']);
+    c.answer(3);
+    c.answer(2, 'OLD', 77);
+    await tick();
+    expect(cache.total).toBe(500);
+    expect(cache.aggregates).toEqual({ tokens: 5000 });
     expect(cache.row(0)?.id).toBe('AU-00001');
   });
 

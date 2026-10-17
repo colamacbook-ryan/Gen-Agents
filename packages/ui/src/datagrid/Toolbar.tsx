@@ -66,14 +66,17 @@ function Popover(props: {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open, onClose, anchor]);
   if (!open) return null;
-  const left = anchor.current ? Math.max(0, anchor.current.offsetLeft - 120) : 0;
+  // neo mép phải popover vào mép phải nút mở (nút nằm bên phải toolbar) ⇒ không tràn khỏi panel (panel overflow: hidden)
+  const a = anchor.current;
+  const bar = a?.offsetParent as HTMLElement | null | undefined;
+  const right = a && bar ? Math.max(0, bar.clientWidth - (a.offsetLeft + a.offsetWidth)) : 0;
   return (
     <div
       ref={ref}
       className="ga-dg-pop"
       role="dialog"
       aria-label={props.label}
-      style={{ left }}
+      style={{ right }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.preventDefault();

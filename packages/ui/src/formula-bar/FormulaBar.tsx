@@ -16,6 +16,8 @@ export interface FormulaBarProps {
   tokens?: string | null;
   /** cho phép mở editor */
   canEdit: boolean;
+  /** chữ của nút mở (mặc định labels.openEditor; ô ngắn dùng labels.edit) */
+  openLabel?: string;
   /** đang ở chế độ editor nhiều dòng */
   expanded: boolean;
   /** hàng LÕI: bắt nhập lý do */
@@ -60,7 +62,7 @@ export function FormulaBar(props: FormulaBarProps) {
               {kindLabel && <span className="ga-fb-badge">{kindLabel}</span>}
               {canEdit && (
                 <button type="button" className="ga-fb-btn" onClick={props.onOpen}>
-                  {labels.openEditor}
+                  {props.openLabel ?? labels.openEditor}
                 </button>
               )}
             </>
@@ -88,7 +90,8 @@ function ExpandedBar(props: FormulaBarProps & { cellRef: string }) {
     props.onSave(draft, requireReason ? reason.trim() : null);
   };
   const onKey = (e: KeyboardEvent<HTMLElement>): void => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    // ⌘↵ (STD-07 §5) và ⌘S (phím Lưu toàn cục, FRONTEND-SPEC §2.4) đều lưu ô; chặn hộp thoại Lưu của trình duyệt
+    if ((e.key === 'Enter' || e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       save();
     } else if (e.key === 'Escape') {

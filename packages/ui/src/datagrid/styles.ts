@@ -140,6 +140,7 @@ export const GRID_CSS = `
 .ga-dg-check:checked::after{content:"";width:6px;height:3px;border-left:1.5px solid ${T.onAccent};border-bottom:1.5px solid ${T.onAccent};transform:translateY(-1px) rotate(-45deg)}
 .ga-dg-check:indeterminate{background:${T.accent};border-color:${T.accent}}
 .ga-dg-check:indeterminate::after{content:"";width:6px;height:1.5px;background:${T.onAccent}}
+.ga-dg-chev{margin-left:auto;flex:0 0 auto;display:inline-flex;color:${T.muted}}
 .ga-dg-tok{font:400 10px/16px ${T.mono};color:${T.secondary};background:${T.raised};border-radius:4px;padding:0 4px;flex:0 0 auto}
 .ga-dg-switch{position:relative;width:26px;height:14px;border-radius:7px;border:1px solid ${T.strong};background:${T.raised};padding:0;cursor:pointer;flex:0 0 auto}
 .ga-dg-switch::after{content:"";position:absolute;top:1px;left:1px;width:10px;height:10px;border-radius:50%;background:${T.secondary}}

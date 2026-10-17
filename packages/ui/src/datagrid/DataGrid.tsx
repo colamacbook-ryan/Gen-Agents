@@ -109,6 +109,8 @@ export interface DataGridProps<R> {
   labels?: GridLabels;
   /** chữ "Cập nhật 14:02" (màn tự định dạng theo múi giờ workspace) */
   updatedLabel?: string;
+  /** nội dung thêm ở footer sau Σ (vd thước ngân sách token của màn — số do view DB tính, lưới không tự cộng) */
+  footerExtra?: ReactNode;
   blockSize?: number;
   /** Enter trên hàng: mở inspector / trang chi tiết */
   onOpenRow?: (row: R) => void;
@@ -818,6 +820,7 @@ export function DataGrid<R>(props: DataGridProps<R>) {
     (): DataGridHandle => ({
       scrollToId,
       focus: focusGrid,
+      focusQuery: () => queryInputRef.current?.focus(),
       getActiveCell: () => {
         const { layout: l, cache: c, colInfo: ci } = live.current;
         const a = activeRef.current;
@@ -1091,7 +1094,8 @@ export function DataGrid<R>(props: DataGridProps<R>) {
         activeCol={null}
         checked={false}
         edit={null}
-        meta={null}
+        metaKind="normal"
+        supersededBy={null}
         hasMeta={hasMeta}
         canEdit={false}
         canApply={false}
@@ -1134,6 +1138,7 @@ export function DataGrid<R>(props: DataGridProps<R>) {
       }
       const row = cache.row(li.index);
       const id = row !== undefined ? getId(row) : undefined;
+      const meta = row !== undefined && rowMeta ? rowMeta(row) : null;
       const isActive = active?.v === it.index;
       return (
         <GridRow<R>
@@ -1148,7 +1153,8 @@ export function DataGrid<R>(props: DataGridProps<R>) {
           activeCol={isActive ? (active?.col ?? null) : null}
           checked={id !== undefined && isChecked(id)}
           edit={edit && edit.v === it.index ? edit : null}
-          meta={row !== undefined && rowMeta ? rowMeta(row) : null}
+          metaKind={meta?.kind ?? 'normal'}
+          supersededBy={meta?.supersededBy ?? null}
           hasMeta={hasMeta}
           canEdit={source.updateCell !== undefined}
           canApply={props.onApplyProposal !== undefined}
@@ -1230,6 +1236,11 @@ export function DataGrid<R>(props: DataGridProps<R>) {
         kindLabel={fbCol ? labels.kinds[fbCol.kind] : null}
         tokens={fbTokens != null ? fmtNum(fbTokens) : null}
         canEdit={fbEditable && fbCol?.kind !== 'bool'}
+        openLabel={
+          fbCol?.kind === 'longtext' || (fbRow !== undefined && fbCol?.requireReason?.(fbRow))
+            ? labels.formula.openEditor
+            : labels.formula.edit
+        }
         expanded={fb.expanded && activeId !== null}
         requireReason={fbRow !== undefined && fbCol?.requireReason?.(fbRow) === true}
         saving={fb.saving}
@@ -1401,6 +1412,7 @@ export function DataGrid<R>(props: DataGridProps<R>) {
             {labels.sum(c.col.header)} <span className="ga-dg-sumval">{fmtNum(cache.aggregates[c.col.id] ?? 0)}</span>
           </span>
         ))}
+        {props.footerExtra}
         <span className="ga-dg-footer-end">
           {(cache.loading || exporting) && <span>{exporting ? labels.exporting : labels.loading}</span>}
           {props.updatedLabel && <span>{props.updatedLabel}</span>}

@@ -54,6 +54,7 @@ document.addEventListener(ANCHOR_READY_EVENT, (e) => {
 // window (sau mọi listener ở document, kể cả của lưới) ⇒ đọc được dữ liệu lưới vừa đặt
 window.addEventListener('copy', (e) => copied.push(e.clipboardData?.getData('text/plain') ?? ''));
 
+const network = { down: params.get('failFetch') === '1' };
 const calls = {
   updates: [] as GridUpdateRequest[],
   applied: [] as string[],
@@ -70,6 +71,11 @@ function wrap<R>(src: GridDataSource<R>): GridDataSource<R> {
   const out: GridDataSource<R> = { ...src };
   // getter fetchCount của nguồn bộ nhớ không đi qua spread
   Object.defineProperty(out, 'fetchCount', { get: () => (src as unknown as { fetchCount: number }).fetchCount });
+  // failFetch=1: mọi lần tải lỗi (mạng) tới khi test gọi __h.heal() — nút "Thử lại" phải tải lại được
+  out.fetchRange = async (req) => {
+    if (network.down) throw new Error('mô phỏng lỗi mạng');
+    return src.fetchRange(req);
+  };
   if (update) {
     out.updateCell = async (req) => {
       calls.updates.push({ ...req });
@@ -184,4 +190,7 @@ createRoot(rootEl).render(
   calls,
   source,
   rows: () => (fixture === 'audit' ? auditSource.all() : instrSource.all()),
+  heal: () => {
+    network.down = false;
+  },
 };

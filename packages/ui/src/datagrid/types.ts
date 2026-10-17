@@ -165,6 +165,8 @@ export interface DataGridHandle {
   /** cuộn tới hàng (và cột) theo display_id, kể cả hàng ngoài màn; resolve khi phần tử đã dựng (kèm sự kiện ANCHOR_READY_EVENT) */
   scrollToId(id: string, col?: string | null, opts?: ScrollToIdOptions): Promise<AnchorReadyDetail>;
   focus(): void;
+  /** focus ô truy vấn (phím `/` toàn cục của shell — FRONTEND-SPEC §2.4) */
+  focusQuery(): void;
   getActiveCell(): ActiveCell | null;
   /** tải lại với truy vấn hiện tại (vd sau sự kiện SSE) */
   refresh(): void;
