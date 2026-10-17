@@ -29,8 +29,9 @@ export const ALLOWED_DURING_PASSWORD_CHANGE: ReadonlySet<string> = new Set([
 ]);
 
 interface ErrorExtra {
-  i18nKey?: string;
+  /** ⇒ `error.detail.retryAfterS` + header `Retry-After`. */
   retryAfterSeconds?: number;
+  /** ⇒ `error.detail.reason` (khoá enum, không chuỗi tự do). */
   reason?: string;
   setCookie?: string | null;
 }
@@ -46,12 +47,21 @@ export function errorResponse(status: number, code: ApiErrorCode, extra: ErrorEx
   const headers: Record<string, string> = {};
   if (extra.retryAfterSeconds !== undefined) headers['retry-after'] = String(extra.retryAfterSeconds);
   if (extra.setCookie) headers['set-cookie'] = extra.setCookie;
+  // Phong bì đúng `ApiErrorEnvelope` của contracts (strict): i18nKey suy từ mã, phần phụ nằm trong `error.detail`
+  // (L-APP sửa ánh xạ mã lỗi theo yêu cầu Gen 2026-10-17 — logic xác thực không đổi).
+  const detail = {
+    ...(extra.retryAfterSeconds !== undefined ? { retryAfterS: extra.retryAfterSeconds } : {}),
+    ...(extra.reason !== undefined ? { reason: extra.reason } : {}),
+  };
   return json(
     status,
     {
-      error: { code, i18nKey: extra.i18nKey ?? i18nKeyFor(code), requestId: randomUUID() },
-      ...(extra.retryAfterSeconds !== undefined ? { retryAfterSeconds: extra.retryAfterSeconds } : {}),
-      ...(extra.reason !== undefined ? { reason: extra.reason } : {}),
+      error: {
+        code,
+        i18nKey: i18nKeyFor(code),
+        requestId: randomUUID(),
+        ...(Object.keys(detail).length > 0 ? { detail } : {}),
+      },
     },
     headers,
   );
@@ -61,12 +71,9 @@ export function errorResponse(status: number, code: ApiErrorCode, extra: ErrorEx
 function failureResponse(f: AuthFailure): Response {
   switch (f.code) {
     case 'invalid_credentials':
-      return errorResponse(401, 'auth.required', { i18nKey: 'errors.auth.invalid_credentials' });
+      return errorResponse(401, 'auth.invalid_credentials');
     case 'locked':
-      return errorResponse(429, 'auth.rate_limited', {
-        i18nKey: 'errors.auth.locked',
-        retryAfterSeconds: f.retryAfterSeconds,
-      });
+      return errorResponse(403, 'auth.locked', { retryAfterSeconds: f.retryAfterSeconds });
     case 'rate_limited':
       return errorResponse(429, 'auth.rate_limited', { retryAfterSeconds: f.retryAfterSeconds });
     case 'bad_request':
@@ -184,7 +191,7 @@ export function createAuthHandlers(opts: AuthHttpOptions) {
     });
     if (r.ok) return json(200, { csrfToken: r.csrfToken }, { 'set-cookie': r.setCookie });
     if (r.code === 'weak_password') {
-      return errorResponse(400, 'validation.failed', { i18nKey: `errors.auth.password.${r.reason}`, reason: r.reason });
+      return errorResponse(422, 'auth.weak_password', { reason: r.reason });
     }
     return failureResponse(r);
   }

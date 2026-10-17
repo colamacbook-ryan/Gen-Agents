@@ -182,7 +182,11 @@ describe('auth owner', () => {
     const during = await env.service.login({ username: 'admin', password: first, ip: '10.1.1.1', userAgent: null });
     expect(during).toMatchObject({ ok: false, code: 'locked' });
     const res = await env.http.login(post('/api/auth/login', { username: 'admin', password: first }), '10.1.1.2');
-    expect(res.status).toBe(429);
+    // mã của hợp đồng: `auth.locked` (403) + detail.retryAfterS (L-APP sửa ánh xạ 2026-10-17)
+    expect(res.status).toBe(403);
+    const locked = (await res.json()) as { error: { code: string; detail?: { retryAfterS?: number } } };
+    expect(locked.error.code).toBe('auth.locked');
+    expect(locked.error.detail?.retryAfterS).toBeGreaterThan(0);
     expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
     env.clock.advance(31_000);
     expect((await env.service.login({ username: 'admin', password: first, ip: '10.1.1.3', userAgent: null })).ok).toBe(
@@ -301,8 +305,11 @@ describe('auth owner', () => {
       [first, 'same_as_current'],
     ] as const) {
       const r = await change(first, pw);
-      expect(r.status, pw).toBe(400);
-      expect(((await r.json()) as { reason: string }).reason).toBe(reason);
+      // mã của hợp đồng: `auth.weak_password` (422) + detail.reason (L-APP sửa ánh xạ 2026-10-17)
+      expect(r.status, pw).toBe(422);
+      const body = (await r.json()) as { error: { code: string; detail?: { reason?: string } } };
+      expect(body.error.code).toBe('auth.weak_password');
+      expect(body.error.detail?.reason).toBe(reason);
     }
     expect(existsSync(env.firstPath)).toBe(true);
   });
