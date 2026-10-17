@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "id": "tq031",
+  "name": "Hoa Đà",
+  "han": "華佗",
+  "role": "Thầy thuốc",
+  "faction": "Khác",
+  "kind": "van",
+  "gender": "nam",
+  "own": "#5BB58A",
+  "crop": [6, 0, 190],
+  "anim": {
+    "phase": "-1.9s",
+    "breath": "4.0s",
+    "blink": "4.7s",
+    "bdelay": "-0.6s"
+  },
+  "note": "bắt mạch phóng đại (tim đập tùng tùng); thưởng: thế \"hạc\" ngũ cầm hí; ngủ mơ thấy hổ; hết quota thì nhăn mặt uống thuốc đắng (không diễn mổ xẻ)",
+  "p": {
+    "skin": "#F2D6B4",
+    "hair": "#E9E6E2",
+    "browColor": "#ECE9E4",
+    "glow": "#8A6A3A",
+    "robe": "#CFE3DF",
+    "trim": "#D9CBA8",
+    "sash": "#4C9C74",
+    "inner": "#F3EFE8",
+    "buckle": "#E0B04A",
+    "sleeve": 36,
+    "crownY": 6,
+    "cap": "sqcap",
+    "capColor": "#7FB7AA",
+    "capAccent": "#F2EFE6",
+    "brow": "wisp",
+    "eyes": "small",
+    "mouth": "smile",
+    "beard": "long2",
+    "beardColor": "#ECE9E4",
+    "prop": "none",
+    "front": "bag",
+    "armL": [6, 42],
+    "armR": [24, 34]
+  },
+  "identity": {
+    "p1": "prop-bag",
+    "must": [
+      {
+        "p": 1,
+        "label": "Túi xanh đeo tay (臂挽青囊)",
+        "check": {
+          "part": "prop-bag"
+        }
+      },
+      {
+        "p": 2,
+        "label": "Khăn vuông, áo rộng, tóc râu bạc (方巾闊服)",
+        "check": {
+          "all": [
+            {
+              "part": "cap-sqcap"
+            },
+            {
+              "part": "beard-long"
+            }
+          ]
+        }
+      },
+      {
+        "p": 3,
+        "label": "Ngũ cầm hí (hổ, hạc...) và bắt mạch",
+        "check": {
+          "all": [
+            {
+              "phase": {
+                "state": "reward",
+                "where": {
+                  "emote": "crane"
+                }
+              }
+            },
+            {
+              "phase": {
+                "state": "sleep",
+                "where": {
+                  "emote": "tiger"
+                }
+              }
+            },
+            {
+              "phase": {
+                "state": "normal",
+                "where": {
+                  "emote": "pulse"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Xanh nhạt + trắng be (青囊 là túi xanh)",
+        "check": {
+          "any": [
+            {
+              "fill": "robe",
+              "is": "paleBlue"
+            },
+            {
+              "fill": "robe",
+              "is": "green"
+            },
+            {
+              "fill": "robe",
+              "is": "gHigh"
+            }
+          ]
+        }
+      },
+      {
+        "label": "Không diễn cạo xương / mổ sọ (research §6.5): không có emote mổ xẻ",
+        "check": {
+          "noEmote": ["knife", "blood", "saw", "skull"]
+        }
+      }
+    ],
+    "colors": ["#CFE3DF xanh nhạt (áo)", "#4C9C74 xanh lục (túi)", "#D9CBA8 trắng be (viền)", "#E9E6E2 bạc (tóc râu)"],
+    "props": ["túi xanh 青囊"],
+    "face": "chưa kiểm; mặt thường, lão nhân",
+    "source": "TQDN-075, TQDN-078; TQC-29 (research §4.4 #30, §6.5)"
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "id": "tq043",
+  "name": "Lưu Bị",
+  "han": "劉備",
+  "role": "Chủ công",
+  "faction": "Thục",
+  "kind": "chu_cong",
+  "gender": "nam",
+  "own": "#E0A43A",
+  "crop": [6, 0, 190],
+  "anim": {
+    "phase": "-1.2s",
+    "breath": "3.7s",
+    "blink": "4.0s",
+    "bdelay": "-0.9s"
+  },
+  "note": "nhân hậu mít ướt; nghe sấm thì rơi đũa, cúi nhặt rồi chữa cháy trơn tru; mừng quá cũng khóc nước mắt thác; sợ sấm khi lỗi",
+  "p": {
+    "skin": "#F8E0C4",
+    "blush": "#F29A8E",
+    "hair": "#2A1F22",
+    "robe": "#C8A04A",
+    "trim": "#2F5A3E",
+    "sash": "#2F5A3E",
+    "inner": "#EFE4C8",
+    "buckle": "#E8B93C",
+    "sleeve": 30,
+    "glow": "#9A6A3A",
+    "crownY": 2,
+    "ears": "long",
+    "cap": "crownbun",
+    "brow": "soft",
+    "eyes": "round",
+    "mouth": "smile",
+    "beard": "none",
+    "prop": "chopsticks",
+    "front": "twinswords",
+    "armL": [6, 64],
+    "armR": [26, 58]
+  },
+  "identity": {
+    "p1": "ears-long",
+    "must": [
+      {
+        "p": 1,
+        "label": "Tai to dài chấm vai (兩耳垂肩)",
+        "check": {
+          "part": "ears-long"
+        }
+      },
+      {
+        "p": 2,
+        "label": "Tay dài quá gối (雙手過膝)",
+        "check": {
+          "part": "arm-long"
+        }
+      },
+      {
+        "p": 3,
+        "label": "Song kiếm (雙股劍)",
+        "check": {
+          "part": "prop-twinswords"
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Mặt trắng ngọc, không râu (khuyến nghị tránh giành râu của Quan Vũ)",
+        "check": {
+          "all": [
+            {
+              "not": {
+                "fill": "face",
+                "is": "white"
+              }
+            },
+            {
+              "not": {
+                "part": "beard-long"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "label": "Vàng đất + lục sẫm [ĐX]",
+        "check": {
+          "all": [
+            {
+              "fill": "robe",
+              "is": "earthYellow"
+            },
+            {
+              "trim": "robe",
+              "is": "green"
+            }
+          ]
+        }
+      },
+      {
+        "label": "Gag rơi đũa khi sấm (TQDN-021): thunder + đũa rơi",
+        "check": {
+          "all": [
+            {
+              "token": {
+                "state": "normal",
+                "has": "dropB"
+              }
+            },
+            {
+              "phase": {
+                "state": "normal",
+                "where": {
+                  "emote": "thunder"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "colors": ["#C8A04A vàng đất (áo)", "#2F5A3E lục sẫm (viền, đai)", "#E8B93C vàng (mũ miện)"],
+    "props": ["song kiếm", "đũa (gag)"],
+    "face": "lão sinh [K], mặt thường trắng ngọc, không vẽ mặt nạ",
+    "source": "TQDN-001, TQDN-021; TQC-32 (research §4.1 #1)"
+  }
+}

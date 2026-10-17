@@ -59,6 +59,7 @@ Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — s
 | pathe | 2.0.3 | MIT | MIT |  |
 | picocolors | 1.1.1 | ISC | ISC |  |
 | picomatch | 4.0.7 | MIT | MIT |  |
+| playwright-core | 1.56.1 | Apache-2.0 | Apache-2.0 |  |
 | postcss | 8.5.30 | MIT | MIT |  |
 | rolldown | 1.2.14 | MIT | MIT |  |
 | siginfo | 2.0.0 | ISC | ISC |  |
