@@ -334,7 +334,7 @@ export const RULES = [
     id: 'no-owner-name',
     why: 'không hardcode tên owner cụ thể trong apps/, packages/, skins/ — fixtures được miễn (INT-12, STD-06, CNS-161)',
     applies: (rel) => TEXT_EXT.test(rel) && /^(apps|packages|skins)\//.test(rel) && !/(^|\/)fixtures\//.test(rel),
-    /** Bản sinh từ DB spec: chỉ cảnh báo — sửa tại nguồn (Second-Brain, lane DB) rồi `pnpm db:sync`. */
+    /** Bản sinh từ DB spec: chỉ cảnh báo — sửa tại nguồn `db/spec/` (lane DB; test SQL-noname chặn ở đó) rồi `pnpm db:sync && pnpm db:gen`. */
     warnOnly: (rel) => /^packages\/db\/(migrations|src\/generated)\//.test(rel),
     check(_rel, text) {
       return findAll(text, OWNER_NAMES).map((m) => ({ line: lineOf(text, m.index), msg: `"${m[0]}"` }));

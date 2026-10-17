@@ -1,0 +1,1444 @@
+{
+  "format": "ga.seed-reference.v1",
+  "databaseVersion": "2.3.4",
+  "source": {
+    "repo": "colamacbook-ryan/gen-agents",
+    "rev": "22009034d765cd6579ed8a5a3899ff063ba79faf",
+    "generator": "db/spec/gen_seed.py"
+  },
+  "global": [
+    {
+      "table": "workspaces",
+      "conflictKey": [
+        "id"
+      ],
+      "rows": [
+        {
+          "id": "00000000000000000000000000",
+          "kind": "system",
+          "slug": "system",
+          "name": "System",
+          "short_code": "SYS0"
+        }
+      ]
+    },
+    {
+      "table": "actors",
+      "conflictKey": [
+        "workspace_id",
+        "system_key"
+      ],
+      "rows": [
+        {
+          "id": "0000000000JY3Q219GT5VRY2MR",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "system",
+          "label": "System"
+        },
+        {
+          "id": "0000000000A7JVRYNFWQK2Z2Q1",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "interviewer",
+          "label": "Interviewer"
+        },
+        {
+          "id": "0000000000YR3ED3CHWF48RSKM",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "trainer",
+          "label": "Trainer"
+        },
+        {
+          "id": "0000000000196FKKA120D1M4P4",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "consolidator",
+          "label": "Consolidator"
+        },
+        {
+          "id": "00000000006A1KGRCYDH54MSDK",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "judge",
+          "label": "Judge"
+        },
+        {
+          "id": "0000000000J3JBG7M7VQXG9T1H",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "scheduler",
+          "label": "Scheduler"
+        },
+        {
+          "id": "0000000000DCFPNY5TK5HR9ZZ7",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "gateway",
+          "label": "Gateway"
+        },
+        {
+          "id": "0000000000J368VNS4QAWWK224",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "updater",
+          "label": "Updater"
+        },
+        {
+          "id": "0000000000WK7HH87B8ZGECVV7",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "telegram",
+          "label": "Telegram"
+        },
+        {
+          "id": "0000000000QVJNTAXFPYNH8S0Q",
+          "workspace_id": "00000000000000000000000000",
+          "kind": "system",
+          "system_key": "assistant",
+          "label": "Assistant"
+        }
+      ]
+    },
+    {
+      "table": "engines",
+      "conflictKey": [
+        "slug"
+      ],
+      "rows": [
+        {
+          "slug": "antigravity",
+          "name": "Antigravity",
+          "vendor": "google",
+          "cli_binary": "agy",
+          "adapter_status": "ready",
+          "priority_order": 1,
+          "tos_risk": "high",
+          "requires_consent": 1,
+          "core_capable": 1,
+          "tos_notice_key": "tos.antigravity",
+          "tos_notice_version": "1"
+        },
+        {
+          "slug": "claude-code",
+          "name": "Claude Code",
+          "vendor": "anthropic",
+          "cli_binary": "claude",
+          "adapter_status": "ready",
+          "priority_order": 2,
+          "tos_risk": "grey",
+          "requires_consent": 0,
+          "core_capable": 1,
+          "tos_notice_key": "tos.claude-code",
+          "tos_notice_version": "1"
+        },
+        {
+          "slug": "codex",
+          "name": "Codex",
+          "vendor": "openai",
+          "cli_binary": "codex",
+          "adapter_status": "coming_soon",
+          "priority_order": 3,
+          "tos_risk": "grey",
+          "requires_consent": 0,
+          "core_capable": 0,
+          "tos_notice_key": "tos.codex",
+          "tos_notice_version": "1"
+        },
+        {
+          "slug": "openclaw",
+          "name": "OpenClaw",
+          "vendor": "openclaw",
+          "cli_binary": "openclaw",
+          "adapter_status": "coming_soon",
+          "priority_order": 4,
+          "tos_risk": "grey",
+          "requires_consent": 0,
+          "core_capable": 1,
+          "tos_notice_key": "tos.openclaw",
+          "tos_notice_version": "1"
+        }
+      ]
+    },
+    {
+      "table": "dna_field_defs",
+      "conflictKey": [
+        "workspace_id",
+        "key"
+      ],
+      "rows": [
+        {
+          "id": "0000000000YAB7RHCHJZ7PB01X",
+          "workspace_id": "00000000000000000000000000",
+          "key": "identity.name",
+          "field_group": "identity",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.identity.name",
+          "is_core": 0,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 1
+        },
+        {
+          "id": "0000000000H6018EWNP5279GH9",
+          "workspace_id": "00000000000000000000000000",
+          "key": "identity.address_style",
+          "field_group": "identity",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.identity.address_style",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000YZCFTX0Z9MK1AZNW",
+          "workspace_id": "00000000000000000000000000",
+          "key": "identity.voice",
+          "field_group": "identity",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.identity.voice",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000YNRQ5RSAB2DDF1ZQ",
+          "workspace_id": "00000000000000000000000000",
+          "key": "identity.class",
+          "field_group": "identity",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.identity.class",
+          "is_core": 0,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000R5YT173RG8ERPDHZ",
+          "workspace_id": "00000000000000000000000000",
+          "key": "persona.traits.openness",
+          "field_group": "persona",
+          "tier": 1,
+          "value_type": "scale",
+          "label_key": "dna.persona.traits.openness",
+          "is_core": 1,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000M9XT398GQBKV5BQB",
+          "workspace_id": "00000000000000000000000000",
+          "key": "persona.traits.extraversion",
+          "field_group": "persona",
+          "tier": 1,
+          "value_type": "scale",
+          "label_key": "dna.persona.traits.extraversion",
+          "is_core": 1,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000EKK1G7D42M4MKX99",
+          "workspace_id": "00000000000000000000000000",
+          "key": "persona.traits.agreeableness",
+          "field_group": "persona",
+          "tier": 1,
+          "value_type": "scale",
+          "label_key": "dna.persona.traits.agreeableness",
+          "is_core": 1,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000J2TWWHV3P586S3VD",
+          "workspace_id": "00000000000000000000000000",
+          "key": "persona.traits.stability",
+          "field_group": "persona",
+          "tier": 1,
+          "value_type": "scale",
+          "label_key": "dna.persona.traits.stability",
+          "is_core": 1,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000EPA07KD8FGT7YKJC",
+          "workspace_id": "00000000000000000000000000",
+          "key": "persona.traits.conscientiousness",
+          "field_group": "persona",
+          "tier": 1,
+          "value_type": "scale",
+          "label_key": "dna.persona.traits.conscientiousness",
+          "is_core": 1,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000VEFFZWFPPQGRWTWR",
+          "workspace_id": "00000000000000000000000000",
+          "key": "persona.traits.proactivity",
+          "field_group": "persona",
+          "tier": 1,
+          "value_type": "scale",
+          "label_key": "dna.persona.traits.proactivity",
+          "is_core": 1,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000F98MH09R47E4H6SR",
+          "workspace_id": "00000000000000000000000000",
+          "key": "values.honesty",
+          "field_group": "values",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.values.honesty",
+          "is_core": 1,
+          "prompt_layer": "values",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000PQ2B943YB0843V5N",
+          "workspace_id": "00000000000000000000000000",
+          "key": "values.transparency",
+          "field_group": "values",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.values.transparency",
+          "is_core": 1,
+          "prompt_layer": "values",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000EH74MX5BS3XHP087",
+          "workspace_id": "00000000000000000000000000",
+          "key": "values.privacy",
+          "field_group": "values",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.values.privacy",
+          "is_core": 1,
+          "prompt_layer": "values",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "000000000099K17CBMB92ZC6TQ",
+          "workspace_id": "00000000000000000000000000",
+          "key": "style.tone",
+          "field_group": "style",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.style.tone",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000S9KV36CRQWNF952Q",
+          "workspace_id": "00000000000000000000000000",
+          "key": "style.report_length",
+          "field_group": "style",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.style.report_length",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "00000000001M0GY3NTY48CE1VF",
+          "workspace_id": "00000000000000000000000000",
+          "key": "style.language",
+          "field_group": "style",
+          "tier": 1,
+          "value_type": "enum",
+          "label_key": "dna.style.language",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000XZW6BMWD51KMAVEY",
+          "workspace_id": "00000000000000000000000000",
+          "key": "rules.ask_when_unclear",
+          "field_group": "routine",
+          "tier": 2,
+          "value_type": "text",
+          "label_key": "dna.rules.ask_when_unclear",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000XAS75EBRV1HG2CXH",
+          "workspace_id": "00000000000000000000000000",
+          "key": "rules.no_number_guessing",
+          "field_group": "routine",
+          "tier": 2,
+          "value_type": "text",
+          "label_key": "dna.rules.no_number_guessing",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000NKFAE5QE2MPXE3R2",
+          "workspace_id": "00000000000000000000000000",
+          "key": "rules.escalation",
+          "field_group": "routine",
+          "tier": 2,
+          "value_type": "text",
+          "label_key": "dna.rules.escalation",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000KE2PF479N1VE6B73",
+          "workspace_id": "00000000000000000000000000",
+          "key": "drive.goal",
+          "field_group": "drive",
+          "tier": 1,
+          "value_type": "enum",
+          "label_key": "dna.drive.goal",
+          "is_core": 0,
+          "prompt_layer": "drive",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 1
+        },
+        {
+          "id": "0000000000P4MNKDQSPA447TYY",
+          "workspace_id": "00000000000000000000000000",
+          "key": "senses.telegram.bot",
+          "field_group": "senses",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.senses.telegram.bot",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000BRXWZ93XPF20D7XZ",
+          "workspace_id": "00000000000000000000000000",
+          "key": "senses.email",
+          "field_group": "senses",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.senses.email",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000T5TYHBJJAW8CS6TA",
+          "workspace_id": "00000000000000000000000000",
+          "key": "senses.calendar",
+          "field_group": "senses",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.senses.calendar",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000S691T3HGJ0AAC06Z",
+          "workspace_id": "00000000000000000000000000",
+          "key": "identity.gender",
+          "field_group": "identity",
+          "tier": 1,
+          "value_type": "enum",
+          "label_key": "dna.identity.gender",
+          "is_core": 0,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 1
+        },
+        {
+          "id": "00000000005ZQBB0PWE7T69SGG",
+          "workspace_id": "00000000000000000000000000",
+          "key": "identity.birth_date",
+          "field_group": "identity",
+          "tier": 1,
+          "value_type": "date",
+          "label_key": "dna.identity.birth_date",
+          "is_core": 0,
+          "prompt_layer": "persona",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 1
+        },
+        {
+          "id": "0000000000RPG57N337EKSH97A",
+          "workspace_id": "00000000000000000000000000",
+          "key": "values.red_lines",
+          "field_group": "values",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.values.red_lines",
+          "is_core": 1,
+          "prompt_layer": "values",
+          "schema_version": "1",
+          "is_list": 1,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "000000000004Y16PC13T5383NN",
+          "workspace_id": "00000000000000000000000000",
+          "key": "values.hierarchy",
+          "field_group": "values",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.values.hierarchy",
+          "is_core": 1,
+          "prompt_layer": "values",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "00000000001ZQPJX5R33VSR6YF",
+          "workspace_id": "00000000000000000000000000",
+          "key": "senses.telegram.allowlist",
+          "field_group": "senses",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.senses.telegram.allowlist",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "00000000001HZA83M5Z2JH37MG",
+          "workspace_id": "00000000000000000000000000",
+          "key": "style.max_words",
+          "field_group": "style",
+          "tier": 1,
+          "value_type": "number",
+          "label_key": "dna.style.max_words",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "00000000001HQM84QFK69AXNRA",
+          "workspace_id": "00000000000000000000000000",
+          "key": "style.format",
+          "field_group": "style",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.style.format",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        },
+        {
+          "id": "0000000000VMQFB90KVJJRQ7BB",
+          "workspace_id": "00000000000000000000000000",
+          "key": "style.signature_opening",
+          "field_group": "style",
+          "tier": 1,
+          "value_type": "text",
+          "label_key": "dna.style.signature_opening",
+          "is_core": 0,
+          "prompt_layer": "style",
+          "schema_version": "1",
+          "is_list": 0,
+          "is_identity_locked": 0
+        }
+      ]
+    }
+  ],
+  "perWorkspace": [
+    {
+      "table": "actors",
+      "conflictKey": [
+        "workspace_id",
+        "system_key"
+      ],
+      "rows": [
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "system"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "system",
+          "label": "System"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "interviewer"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "interviewer",
+          "label": "Interviewer"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "trainer"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "trainer",
+          "label": "Trainer"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "consolidator"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "consolidator",
+          "label": "Consolidator"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "judge"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "judge",
+          "label": "Judge"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "scheduler"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "scheduler",
+          "label": "Scheduler"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "gateway"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "gateway",
+          "label": "Gateway"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "updater"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "updater",
+          "label": "Updater"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "telegram"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "telegram",
+          "label": "Telegram"
+        },
+        {
+          "id": {
+            "$ref": "actor",
+            "key": "assistant"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "kind": "system",
+          "system_key": "assistant",
+          "label": "Assistant"
+        }
+      ]
+    },
+    {
+      "table": "settings",
+      "conflictKey": [
+        "workspace_id",
+        "display_seq"
+      ],
+      "rows": [
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0002"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0002",
+          "display_seq": 2,
+          "key": "economy.initial_grant_minor",
+          "value_json": "100000"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0003"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0003",
+          "display_seq": 3,
+          "key": "economy.penalty.self_reported_max_bp",
+          "value_json": "1000"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0004"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0004",
+          "display_seq": 4,
+          "key": "economy.penalty.concealment_min_bp",
+          "value_json": "5000"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0005"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0005",
+          "display_seq": 5,
+          "key": "economy.penalty.harness_bp",
+          "value_json": "10000"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0006"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0006",
+          "display_seq": 6,
+          "key": "economy.penalty.dissatisfaction_presets_bp",
+          "value_json": "[500,1000,2000,3000]"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0007"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0007",
+          "display_seq": 7,
+          "key": "economy.revive_suggest_minor",
+          "value_json": "50000"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0008"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0008",
+          "display_seq": 8,
+          "key": "economy.wound_commitment_horizon_hours",
+          "value_json": "72"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0009"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0009",
+          "display_seq": 9,
+          "key": "economy.reflection_max_runs",
+          "value_json": "3"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0015"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0015",
+          "display_seq": 15,
+          "key": "budget.runtime_overhead_estimate_tokens",
+          "value_json": "250"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0016"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0016",
+          "display_seq": 16,
+          "key": "economy.penalty.self_confessed_harness_as_self_reported",
+          "value_json": "true"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0017"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0017",
+          "display_seq": 17,
+          "key": "system.core_agent_engine",
+          "value_json": "\"antigravity\""
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "settings:st-0018"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "ST-0018",
+          "display_seq": 18,
+          "key": "chat.attachment_max_bytes",
+          "value_json": "26214400"
+        }
+      ]
+    },
+    {
+      "table": "positions",
+      "conflictKey": [
+        "workspace_id",
+        "display_seq"
+      ],
+      "rows": [
+        {
+          "id": {
+            "$ref": "id",
+            "key": "positions:ps-0001"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "PS-0001",
+          "display_seq": 1,
+          "title": "Trợ lý",
+          "title_template": "Trợ lý của {owner_name}",
+          "is_default": 1
+        }
+      ]
+    },
+    {
+      "table": "wallets",
+      "conflictKey": [
+        "workspace_id",
+        "display_seq"
+      ],
+      "rows": [
+        {
+          "id": {
+            "$ref": "id",
+            "key": "wallets:wl-0001"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "WL-0001",
+          "display_seq": 1,
+          "owner_kind": "treasury",
+          "allow_negative": 1
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "wallets:wl-0002"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "WL-0002",
+          "display_seq": 2,
+          "owner_kind": "sink",
+          "allow_negative": 1
+        }
+      ]
+    },
+    {
+      "table": "system_agents",
+      "conflictKey": [
+        "workspace_id",
+        "display_seq"
+      ],
+      "rows": [
+        {
+          "id": {
+            "$ref": "id",
+            "key": "system_agents:sa-0001"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SA-0001",
+          "display_seq": 1,
+          "system_key": "interviewer"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "system_agents:sa-0002"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SA-0002",
+          "display_seq": 2,
+          "system_key": "trainer"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "system_agents:sa-0003"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SA-0003",
+          "display_seq": 3,
+          "system_key": "consolidator"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "system_agents:sa-0004"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SA-0004",
+          "display_seq": 4,
+          "system_key": "judge"
+        }
+      ]
+    },
+    {
+      "table": "tools",
+      "conflictKey": [
+        "workspace_id",
+        "display_seq"
+      ],
+      "rows": [
+        {
+          "id": {
+            "$ref": "id",
+            "key": "tools:tl-0001"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "TL-0001",
+          "display_seq": 1,
+          "slug": "recall",
+          "name": "recall",
+          "kind": "gateway_builtin",
+          "risk_level": "low",
+          "default_mode": "allow",
+          "allowed_agents": "role",
+          "is_builtin": 1,
+          "builtin_key": "recall",
+          "definition_tokens": 0,
+          "status": "active"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "tools:tl-0002"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "TL-0002",
+          "display_seq": 2,
+          "slug": "remember",
+          "name": "remember",
+          "kind": "gateway_builtin",
+          "risk_level": "low",
+          "default_mode": "allow",
+          "allowed_agents": "role",
+          "is_builtin": 1,
+          "builtin_key": "remember",
+          "definition_tokens": 0,
+          "status": "active"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "tools:tl-0003"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "TL-0003",
+          "display_seq": 3,
+          "slug": "report_task",
+          "name": "report_task",
+          "kind": "gateway_builtin",
+          "risk_level": "low",
+          "default_mode": "allow",
+          "allowed_agents": "role",
+          "is_builtin": 1,
+          "builtin_key": "report_task",
+          "definition_tokens": 0,
+          "status": "active"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "tools:tl-0004"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "TL-0004",
+          "display_seq": 4,
+          "slug": "send_telegram",
+          "name": "send_telegram",
+          "kind": "gateway_builtin",
+          "risk_level": "medium",
+          "default_mode": "allow",
+          "allowed_agents": "role",
+          "is_builtin": 1,
+          "builtin_key": "send_telegram",
+          "definition_tokens": 0,
+          "status": "active"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "tools:tl-0005"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "TL-0005",
+          "display_seq": 5,
+          "slug": "set_field",
+          "name": "set_field",
+          "kind": "gateway_builtin",
+          "risk_level": "low",
+          "default_mode": "allow",
+          "allowed_agents": "system",
+          "is_builtin": 1,
+          "builtin_key": "set_field",
+          "definition_tokens": 0,
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "table": "skin_assets",
+      "conflictKey": [
+        "workspace_id",
+        "display_seq"
+      ],
+      "rows": [
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0001"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0001",
+          "display_seq": 1,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq046",
+          "asset_kind": "chibi",
+          "name_vi": "Gia Cát Lượng",
+          "name_zh": "諸葛亮",
+          "faction": "Thục",
+          "char_kind": "strategist",
+          "gender": "male",
+          "params_json": "{\"id\":\"tq046\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "fdfcd0d26b989194edd7527c7c7436ee755383c04989aca44b5755d6cf354f3a",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0002"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0002",
+          "display_seq": 2,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq044",
+          "asset_kind": "chibi",
+          "name_vi": "Quan Vũ",
+          "name_zh": "關羽",
+          "faction": "Thục",
+          "char_kind": "martial",
+          "gender": "male",
+          "params_json": "{\"id\":\"tq044\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "7e5d1fc1665404a8998e8bda38ebfdc0db193d44b5ec24d5d9160c9f9590d1ff",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0003"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0003",
+          "display_seq": 3,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq080",
+          "asset_kind": "chibi",
+          "name_vi": "Tào Tháo",
+          "name_zh": "曹操",
+          "faction": "Ngụy",
+          "char_kind": "lord",
+          "gender": "male",
+          "params_json": "{\"id\":\"tq080\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "a803207835076ff336250fa4cdda383fccca9373923bb941c9262e9981dc75eb",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0004"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0004",
+          "display_seq": 4,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq043",
+          "asset_kind": "chibi",
+          "name_vi": "Lưu Bị",
+          "name_zh": "劉備",
+          "faction": "Thục",
+          "char_kind": "lord",
+          "gender": "male",
+          "params_json": "{\"id\":\"tq043\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "07fea44d3867209929d0b0a9f505c86b2d5e903861fd7a74ad11d95c98ee3f43",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0005"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0005",
+          "display_seq": 5,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq045",
+          "asset_kind": "chibi",
+          "name_vi": "Trương Phi",
+          "name_zh": "張飛",
+          "faction": "Thục",
+          "char_kind": "martial",
+          "gender": "male",
+          "params_json": "{\"id\":\"tq045\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "d5b7a26a9debac810734ab69f4bfd01203b4d3a73e6c7fab0c5053afe6eac54f",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0006"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0006",
+          "display_seq": 6,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq047",
+          "asset_kind": "chibi",
+          "name_vi": "Triệu Vân",
+          "name_zh": "趙雲",
+          "faction": "Thục",
+          "char_kind": "martial",
+          "gender": "male",
+          "params_json": "{\"id\":\"tq047\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "1f681f0f165d8e6df07e2d83178f98c2ad32cc6d8df98c230ebb409cbb267bfe",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0007"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0007",
+          "display_seq": 7,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq010",
+          "asset_kind": "chibi",
+          "name_vi": "Điêu Thuyền",
+          "name_zh": "貂蟬",
+          "faction": "Quần hùng",
+          "char_kind": "civil",
+          "gender": "female",
+          "params_json": "{\"id\":\"tq010\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "65d279cc169ce588a1ef6657acd0dbe52f1907615830172bb564b48c7221fa3f",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0008"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0008",
+          "display_seq": 8,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq141",
+          "asset_kind": "chibi",
+          "name_vi": "Tôn Thượng Hương",
+          "name_zh": "孫尚香",
+          "faction": "Ngô",
+          "char_kind": "martial",
+          "gender": "female",
+          "params_json": "{\"id\":\"tq141\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "75d2f78eb76bcef280862c14cc5fc1a138b0086c0f66309a81532a5777eaeac0",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0009"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0009",
+          "display_seq": 9,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tq031",
+          "asset_kind": "chibi",
+          "name_vi": "Hoa Đà",
+          "name_zh": "華佗",
+          "faction": "Quần hùng",
+          "char_kind": "civil",
+          "gender": "male",
+          "params_json": "{\"id\":\"tq031\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "5f073d6e0ed62ebcb429e42fe9c7f3c5f18906db885b8ed0d97299fb0275b7e8",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        },
+        {
+          "id": {
+            "$ref": "id",
+            "key": "skin_assets:sn-0010"
+          },
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "display_id": "SN-0010",
+          "display_seq": 10,
+          "pack_slug": "tam-quoc-chibi",
+          "pack_version": "1.0.0",
+          "asset_code": "tqx001",
+          "asset_kind": "chibi",
+          "name_vi": "Lính quèn",
+          "name_zh": null,
+          "faction": null,
+          "char_kind": "soldier",
+          "gender": "male",
+          "params_json": "{\"id\":\"tqx001\",\"schema\":1}",
+          "params_schema_version": 1,
+          "sha256": "4286da6cdfbc060c7aaa05d9eb0d065a1c2e755c62d709e9e6edbb9a10e46060",
+          "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+          "license": "Proprietary — Afi Labs"
+        }
+      ]
+    },
+    {
+      "table": "id_counters",
+      "conflictKey": [
+        "workspace_id",
+        "prefix"
+      ],
+      "rows": [
+        {
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "prefix": "ST",
+          "last_seq": 18
+        },
+        {
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "prefix": "PS",
+          "last_seq": 1
+        },
+        {
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "prefix": "WL",
+          "last_seq": 2
+        },
+        {
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "prefix": "SA",
+          "last_seq": 4
+        },
+        {
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "prefix": "TL",
+          "last_seq": 5
+        },
+        {
+          "workspace_id": {
+            "$ref": "workspace"
+          },
+          "prefix": "SN",
+          "last_seq": 10
+        }
+      ]
+    }
+  ],
+  "sha256": "b8b18641391d002e95e471c1407a489b1fac2c73af316af10d87df0d14b68a77"
+}

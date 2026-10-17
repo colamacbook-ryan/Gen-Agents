@@ -1,31 +1,30 @@
 {
-  "source_repo": "colamacbook-ryan/Second-Brain",
-  "rev": "70903fdd54cb8f2adf231d9222e5436090c06f07",
-  "source_dir": "01-projects/gen-agents/spec/db-v2.2",
-  "database_version": "2.3.2",
-  "database_md": {
-    "path": "01-projects/gen-agents/spec/DATABASE.md",
-    "sha256": "9662e59cad83f1b5184bf9c3c82510d1abe9f8127bfaca9c35bd2e30ec51922f"
-  },
+  "source": "repo",
+  "rev": "repo",
+  "source_dir": "db/spec",
+  "database_version": "2.3.4",
   "files": {
     "schema_v2_2.py": {
-      "source": "01-projects/gen-agents/spec/db-v2.2/schema_v2_2.py",
-      "sha256": "8f5fdc07a3ba8ecca8e4ba930502d1450508b14a45d215195d34b1276ed60f74"
+      "sha256": "5e73cb743c0f65beb49354b3005b7c8ad56a5461961f3b4ad2ec6a82d32ce4f4"
     },
     "schema_v2_2.sql": {
-      "source": "01-projects/gen-agents/spec/db-v2.2/schema_v2_2.sql",
-      "sha256": "0c8dbe249f6a1feaaa3cba3d0ee756c4cb3804d40005811e75464ae94055c3a7"
+      "sha256": "5d87098d019d0da13a77d20a1deafa13b8c4474db607597a07437ebb33260d43"
     },
     "views_v2_2.sql": {
-      "source": "01-projects/gen-agents/spec/db-v2.2/views_v2_2.sql",
-      "sha256": "f365ac256ce011c28fabbd386274b7b4224982b3b8e72684052bc99a5a9ffcbb"
+      "sha256": "d74f8852bf88861451e0da9c4f000c1d13550571e92f89eedc35256e19fe4ac6"
     },
     "tests_v2_2.py": {
-      "source": "01-projects/gen-agents/spec/db-v2.2/tests_v2_2.py",
-      "sha256": "0c1b5dddafb621662f666b544fe343ce04cbf61b612261d951e87750518d03d6"
+      "sha256": "cbd752140e7099adc79de499c4e9ab26f58e06558b18af5003da7161469d6895"
+    },
+    "gen_seed.py": {
+      "sha256": "416eea5a52aa8f7ab937151af78a189469040ed47167142d0d31a470482179f5"
+    },
+    "seed_reference.json": {
+      "sha256": "85f0bcf8f72ed51bb1a333ecedf0a1b3880c7b5ea8db01c7b7a035f687929543"
     }
   },
   "app_functions": [
+    "app_actor",
     "app_local_time",
     "app_maint",
     "app_now"
@@ -34,13 +33,13 @@
     "tables": 81,
     "virtual_tables": 1,
     "indexes": 284,
-    "triggers": 415,
+    "triggers": 564,
     "views": 31
   },
   "python_tests": {
-    "passed": 101,
-    "total": 101,
+    "passed": 117,
+    "total": 117,
     "sqlite": "3.45.1"
   },
-  "synced_at": "2026-10-16T13:01:39Z"
+  "synced_at": "2026-10-17T01:02:13Z"
 }
