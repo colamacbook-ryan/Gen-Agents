@@ -38,10 +38,11 @@ import { parseJsonBody, readBodyCapped } from './body.ts';
 import type { Handler, RawBody, ValidatedInput } from './define-handler.ts';
 import { ApiError, type ErrorResult, mapError, safeZodPath } from './errors.ts';
 import {
+  type IdempotencyKeyRef,
   type IdempotencyStore,
   idempotencyFingerprint,
+  idempotencyKeyRef,
   idempotencyKeyReserved,
-  idempotencyScope,
   type StoredResult,
 } from './idempotency.ts';
 import type { Logger } from './logger.ts';
@@ -203,7 +204,7 @@ export async function runRoute(
   const requestId = c.get('requestId');
   c.set('routeId', route.id);
   const req = c.req.raw;
-  let idem: { scope: string; fingerprint: string } | null = null;
+  let idem: { key: IdempotencyKeyRef; fingerprint: string } | null = null;
   try {
     // 1–4. phiên → cổng đổi mật khẩu → CSRF → actor + quyền tối thiểu
     let actor: Actor | null = null;
@@ -319,7 +320,7 @@ export async function runRoute(
       if (idempotencyKeyReserved(key)) {
         throw new ApiError('validation.failed', { reason: 'idempotency_key_reserved', field: 'headers' });
       }
-      const scope = idempotencyScope({ workspaceId: actor.workspaceId, actorId: actor.id, routeId: route.id, key });
+      const ref = idempotencyKeyRef({ workspaceId: actor.workspaceId, actorId: actor.id, routeId: route.id, key });
       const fingerprint = idempotencyFingerprint({
         routeId: route.id,
         actorId: actor.id,
@@ -327,10 +328,15 @@ export async function runRoute(
         query: input.query,
         body: input.body,
       });
-      const b = deps.idempotency.begin(scope, fingerprint);
+      const b = deps.idempotency.begin(ref, fingerprint);
       if (b.kind === 'replay') return jsonResponse(b.result, { 'idempotency-replayed': 'true' });
       if (b.kind === 'conflict') throw new ApiError('idempotency.conflict', { reason: b.reason });
-      idem = { scope, fingerprint };
+      if (b.kind === 'full') {
+        // không evict khoá còn hiệu lực ⇒ từ chối khoá MỚI (hợp đồng chưa có mã 503 ⇒ 429)
+        const reason = b.reason === 'namespace' ? 'idempotency_namespace_full' : 'idempotency_capacity';
+        throw new ApiError('auth.rate_limited', { reason, retryAfterS: 60 }, { headers: { 'retry-after': '60' } });
+      }
+      idem = { key: ref, fingerprint };
     }
 
     // 12. handler
@@ -344,13 +350,13 @@ export async function runRoute(
     const built = buildResponse(route, out, { requestId, logger: deps.logger });
     if (built instanceof Response) return built;
     if (idem !== null) {
-      deps.idempotency.complete(idem.scope, idem.fingerprint, built);
+      deps.idempotency.complete(idem.key, idem.fingerprint, built);
       idem = null;
     }
     return jsonResponse(built);
   } catch (err) {
     return errorResponse(mapError(err, { requestId, routeId: route.id, logger: deps.logger }));
   } finally {
-    if (idem !== null) deps.idempotency.abort(idem.scope, idem.fingerprint);
+    if (idem !== null) deps.idempotency.abort(idem.key, idem.fingerprint);
   }
 }
