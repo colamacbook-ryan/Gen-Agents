@@ -16,6 +16,7 @@ import {
   seedReferenceDigestInput,
 } from '@ga/contracts';
 import type { AppConnection, WriteContext } from '../connection.ts';
+import { dml } from '../repos/sql.ts';
 import { stampInsert } from '../stamp.ts';
 
 export class SeedReferenceError extends Error {
@@ -92,33 +93,41 @@ function seedTables(
   tables: readonly SeedTable[],
   resolve: Resolve,
 ): SeedApplyResult {
-  return conn.bootstrap(target, (w) => {
-    const result: SeedApplyResult = { inserted: 0, skipped: 0 };
-    for (const t of tables) {
-      const columns = tableColumns(w, t.table);
-      if (!uniqueKeys(w, t.table).some((k) => sameSet(k, t.conflictKey))) {
-        throw new SeedReferenceError(
-          `${t.table}: conflictKey (${t.conflictKey.join(', ')}) không phải PK / UNIQUE của bảng`,
-        );
-      }
-      for (const raw of t.rows) {
-        const resolved = resolveRow(raw, resolve);
-        const row: Record<string, SeedScalar> = columns.has('created_by')
-          ? stampInsert(w, resolved as Record<string, SeedScalar> & { created_by?: never })
-          : resolved;
-        const cols = Object.keys(row);
-        const unknown = cols.filter((c) => !columns.has(c));
-        if (unknown.length > 0) throw new SeedReferenceError(`${t.table}: cột không tồn tại ${unknown.join(', ')}`);
-        const sql =
-          `INSERT INTO ${quote(t.table)} (${cols.map(quote).join(', ')}) SELECT ${cols.map(() => '?').join(', ')} ` +
-          `WHERE NOT EXISTS (SELECT 1 FROM ${quote(t.table)} WHERE ${t.conflictKey.map((k) => `${quote(k)} IS ?`).join(' AND ')})`;
-        const changes = w.run(sql, [...cols.map((c) => row[c]), ...t.conflictKey.map((k) => row[k])]).changes;
-        if (changes > 0) result.inserted += changes;
-        else result.skipped++;
-      }
+  return conn.bootstrap(target, (w) => seedTablesIn(w, tables, resolve));
+}
+
+/**
+ * Áp các bảng seed trong giao dịch bootstrap ĐANG MỞ (w) — dùng chung cho applyGlobalSeed / applyWorkspaceSeed và
+ * seed/tenant.ts (ghi hàng workspaces + owner cùng giao dịch với seed, L-DB 2026-10-17). Câu lệnh ghi đi qua dml(w).write
+ * (kiểm lúc chạy đang trong giao dịch ghi của chính w).
+ */
+export function seedTablesIn(w: WriteContext, tables: readonly SeedTable[], resolve: Resolve): SeedApplyResult {
+  const result: SeedApplyResult = { inserted: 0, skipped: 0 };
+  for (const t of tables) {
+    const columns = tableColumns(w, t.table);
+    if (!uniqueKeys(w, t.table).some((k) => sameSet(k, t.conflictKey))) {
+      throw new SeedReferenceError(
+        `${t.table}: conflictKey (${t.conflictKey.join(', ')}) không phải PK / UNIQUE của bảng`,
+      );
     }
-    return result;
-  });
+    for (const raw of t.rows) {
+      const resolved = resolveRow(raw, resolve);
+      const row: Record<string, SeedScalar> = columns.has('created_by')
+        ? stampInsert(w, resolved as Record<string, SeedScalar> & { created_by?: never })
+        : resolved;
+      const cols = Object.keys(row);
+      const unknown = cols.filter((c) => !columns.has(c));
+      if (unknown.length > 0) throw new SeedReferenceError(`${t.table}: cột không tồn tại ${unknown.join(', ')}`);
+      const changes = dml(w).write(
+        `INSERT INTO ${quote(t.table)} (${cols.map(quote).join(', ')}) SELECT ${cols.map(() => '?').join(', ')} ` +
+          `WHERE NOT EXISTS (SELECT 1 FROM ${quote(t.table)} WHERE ${t.conflictKey.map((k) => `${quote(k)} IS ?`).join(' AND ')})`,
+        [...cols.map((c) => row[c]), ...t.conflictKey.map((k) => row[k])],
+      ).changes;
+      if (changes > 0) result.inserted += changes;
+      else result.skipped++;
+    }
+  }
+  return result;
 }
 
 const noRefs: Resolve = () => {
@@ -165,6 +174,25 @@ export function applyWorkspaceSeed(
   if (target.workspaceId === SYSTEM_WORKSPACE_ID) {
     throw new SeedReferenceError('seed perWorkspace chỉ cho workspace tenant');
   }
+  return conn.bootstrap({ workspaceId: target.workspaceId, systemActorId: target.actorIds.system }, (w) =>
+    applyWorkspaceSeedIn(w, seed, target),
+  );
+}
+
+/** applyWorkspaceSeed trong giao dịch bootstrap đang mở của CHÍNH tenant đó (seed/tenant.ts). */
+export function applyWorkspaceSeedIn(
+  w: WriteContext,
+  seed: SeedReference,
+  target: WorkspaceSeedTarget,
+): SeedApplyResult {
+  if (target.workspaceId === SYSTEM_WORKSPACE_ID) {
+    throw new SeedReferenceError('seed perWorkspace chỉ cho workspace tenant');
+  }
+  if (w.actorId !== target.actorIds.system) {
+    throw new SeedReferenceError(
+      'applyWorkspaceSeedIn: giao dịch phải là bootstrap bằng actor system của chính tenant',
+    );
+  }
   const resolve: Resolve = (ref) => {
     if (ref.$ref === 'workspace') return target.workspaceId;
     if (ref.$ref === 'actor') {
@@ -174,10 +202,5 @@ export function applyWorkspaceSeed(
     }
     return target.idFor(ref.key);
   };
-  return seedTables(
-    conn,
-    { workspaceId: target.workspaceId, systemActorId: target.actorIds.system },
-    seed.perWorkspace,
-    resolve,
-  );
+  return seedTablesIn(w, seed.perWorkspace, resolve);
 }
