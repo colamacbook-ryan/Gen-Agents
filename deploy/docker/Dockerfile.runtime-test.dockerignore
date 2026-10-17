@@ -1,0 +1,6 @@
+*
+!apps/runner/src/engine-install/fake-source.ts
+!testing/fakes/package.json
+!testing/fakes/agy/**
+!testing/fakes/claude/**
+!testing/fakes/lib/**

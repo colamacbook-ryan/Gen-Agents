@@ -1,0 +1,25 @@
+{
+  "name": "@ga/supervisor",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "ga-supervisor — nơi DUY NHẤT cầm Docker API (qua socket-proxy): mẫu container có version, chỉ container nhãn genagents.*, exec ga-runner, relay PTY, cài CLI, reconcile (BUILD-PLAN §B.2, §B.3, §B.6). TCB.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs",
+    "start": "node src/bin.ts",
+    "test:it:runtime": "vitest run --config ../../testing/it/runtime/vitest.config.ts"
+  },
+  "dependencies": {
+    "@ga/contracts": "workspace:*",
+    "@ga/security": "workspace:*",
+    "ws": "8.18.3",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  }
+}
