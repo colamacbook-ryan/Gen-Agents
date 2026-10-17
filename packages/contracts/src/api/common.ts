@@ -1,8 +1,7 @@
 import { z } from 'zod';
-import { DB_TIMESTAMP_RE } from '../clock.ts';
+import { BoundedJson, DbTimestamp, JSON_LIMITS } from '../bounds.ts';
 import { API_ERROR_CODES, type ApiErrorCode, DB_ERROR_CODES, type DbErrorCode } from '../errors.ts';
 import { ENTITY_TYPES, type EntityPrefix, formatDisplayId, parseDisplayId, ULID_RE } from '../ids.ts';
-import { TOOL_PAYLOAD_LIMITS } from '../mcp.ts';
 
 // Quy ước chung của hợp đồng API (BACKEND-TRIAL §3.0; L-API, M2). Mọi lane M2 dùng chung — KHÔNG định nghĩa lại kiểu ở lane.
 //
@@ -14,10 +13,25 @@ import { TOOL_PAYLOAD_LIMITS } from '../mcp.ts';
 /** Base của mọi route (trừ WS `/term` của L-RT, gắn ở gốc edge). */
 export const API_BASE = '/api/v1' as const;
 
+/**
+ * Tên header CSRF — NGUỒN DUY NHẤT cho frontend / CLI (frontend không được import `@ga/security`). PHẢI trùng đúng
+ * `CSRF_HEADER` của `@ga/security` (packages/security/src/session.ts): giá trị sao chép từ mã nguồn đó, test golden ở cả hai nơi
+ * giữ không lệch. Chữ thường (HTTP header không phân biệt hoa thường). Thiếu / sai ở method ghi ⇒ `403 auth.csrf`.
+ */
+export const CSRF_HEADER = 'x-ga-csrf' as const;
+
+/**
+ * Tên cookie phiên — sao chép từ `SESSION` của `@ga/security` (session.ts): HTTPS (sau Caddy TLS) dùng `__Host-ga_sid` (+ Secure,
+ * trình duyệt cấm subdomain / HTTP ghi đè); HTTP thường (cài mặc định :7400) dùng `ga_sid`. Cả hai HttpOnly, SameSite=Strict, Path=/.
+ * (Đặc tả BACKEND-TRIAL §3.0 / §3.2 ghi `ga_session`: lệch với bản cài đặt đã duyệt; hợp đồng theo bản cài đặt.)
+ */
+export const SESSION_COOKIE_NAMES = { secure: '__Host-ga_sid', insecure: 'ga_sid' } as const;
+
 /** Cookie phiên + tên header dùng chung (HTTP header không phân biệt hoa thường: hợp đồng ghi chữ thường). */
 export const API_AUTH = {
-  sessionCookie: 'ga_session',
-  csrfHeader: 'x-ga-csrf',
+  sessionCookieSecure: SESSION_COOKIE_NAMES.secure,
+  sessionCookieInsecure: SESSION_COOKIE_NAMES.insecure,
+  csrfHeader: CSRF_HEADER,
   idempotencyHeader: 'idempotency-key',
   lastEventIdHeader: 'last-event-id',
   contentSha256Header: 'x-content-sha256',
@@ -31,13 +45,15 @@ export const API_LIMITS = {
   gridPageMax: 500,
   cursorChars: 256,
   idempotencyKeyChars: 128,
+  /** Trần số hàng của một lần xuất CSV (OPS-23, OPS-34). */
+  csvMaxRows: 100_000,
   /** Tên thực thể dài nhất cho ConfirmName (tên Role ≤ 60, workspace ≤ 80, nhãn tài khoản ≤ 60). */
   confirmChars: 200,
   /** `Json` tự do: mỗi chuỗi = trần chuỗi của gateway (mcp.ts); sâu ≤ 8; ≤ 1000 phần tử / khoá. */
-  jsonString: TOOL_PAYLOAD_LIMITS.maxStringChars,
-  jsonDepth: 8,
-  jsonItems: 1000,
-  jsonKeyChars: 128,
+  jsonString: JSON_LIMITS.string,
+  jsonDepth: JSON_LIMITS.depth,
+  jsonItems: JSON_LIMITS.items,
+  jsonKeyChars: JSON_LIMITS.keyChars,
 } as const;
 
 // ---------------------------------------------------------------- chuỗi có trần
@@ -81,7 +97,7 @@ export const Pct = z.number().int().min(0).max(100);
 
 // ---------------------------------------------------------------- thời gian
 /** Chuỗi UTC 24 ký tự (`toDbTimestamp`). */
-export const Ts = z.string().length(24).regex(DB_TIMESTAMP_RE).meta({ example: '2026-10-17T00:00:00.000Z' });
+export const Ts = DbTimestamp;
 
 /** IANA timezone: do `Intl` quyết (không tự viết danh sách). */
 export function isIanaTimezone(value: string): boolean {
@@ -98,25 +114,13 @@ export const IanaTimezone = str(64, 1)
   .meta({ example: 'Asia/Ho_Chi_Minh' });
 
 // ---------------------------------------------------------------- JSON tự do có trần
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-
-function jsonLevel(depth: number): z.ZodType<JsonValue> {
-  const leaves = [str(API_LIMITS.jsonString), z.number(), z.boolean(), z.null()] as const;
-  if (depth <= 0) return z.union([...leaves]);
-  const inner = jsonLevel(depth - 1);
-  return z.union([
-    ...leaves,
-    z.array(inner).max(API_LIMITS.jsonItems),
-    z
-      .record(str(API_LIMITS.jsonKeyChars), inner)
-      .refine((o) => Object.keys(o).length <= API_LIMITS.jsonItems, 'quá nhiều khoá'),
-  ]);
-}
+export type { JsonValue } from '../bounds.ts';
 /**
  * Giá trị JSON tự do — dùng cho `value` của DNA, `payload` ui_action, `before/after` change set… (hình dạng thật do
- * JSON Schema của miền kiểm ở tầng dịch vụ). Có trần: chuỗi, độ sâu, số phần tử. KHÔNG dùng `z.json()` (không trần).
+ * JSON Schema của miền kiểm ở tầng dịch vụ). Có trần: chuỗi, độ sâu, số phần tử (`BoundedJson` của bounds.ts). KHÔNG dùng
+ * `z.json()` (không trần).
  */
-export const Json = jsonLevel(API_LIMITS.jsonDepth);
+export const Json = BoundedJson;
 
 // ---------------------------------------------------------------- định danh
 export const Ulid = z.string().length(26).regex(ULID_RE).meta({ example: '01JABCDEFGHJKMNPQRSTVWXYZ0' });
@@ -252,12 +256,16 @@ export function secretKindOf(schema: z.ZodType): SecretKind | undefined {
 }
 
 // ---------------------------------------------------------------- Idempotency-Key, ConfirmName
-/** Header `Idempotency-Key` (bắt buộc ở SYS-19, SYS-74, WRK-23…26): ghi vào `ledger_entries.idempotency_key` (UNIQUE). */
+/**
+ * Header `Idempotency-Key` (bắt buộc ở SYS-19, SYS-74, WRK-23…26): ghi vào `ledger_entries.idempotency_key` (UNIQUE).
+ * KHÔNG chứa `:` (review bảo mật PR #7, M9): hệ thống đặt khoá nội bộ dạng `activate:<ulid>`, `reverse:<ulid>`… cùng cột UNIQUE;
+ * client không được tự đặt khoá giả danh (đụng khoá ⇒ chặn việc ghi sổ hợp lệ, hoặc phát lại bút toán của hệ thống).
+ */
 export const IdempotencyKey = z
   .string()
   .min(8)
   .max(API_LIMITS.idempotencyKeyChars)
-  .regex(/^[A-Za-z0-9._:-]+$/)
+  .regex(/^[A-Za-z0-9._-]+$/)
   .meta({ example: 'idem-0001-abcdef' });
 export const IdempotencyHeaders = z.strictObject({ [API_AUTH.idempotencyHeader]: IdempotencyKey });
 
@@ -414,6 +422,8 @@ export const ErrorDetail = z.strictObject({
   retryAfterS: Nat.optional(),
   /** Vị trí ký tự (từ 0) của mệnh đề lỗi trong ô truy vấn (`query.invalid`) — để vẽ chip đỏ đúng chỗ. */
   position: Nat.optional(),
+  /** Độ dài (ký tự) của đoạn gây lỗi bắt đầu tại `position` (`query.invalid`) — chip đỏ gạch đúng đoạn, không phải đoán. */
+  length: Nat.optional(),
 });
 
 /** Thân lỗi (mở rộng `ApiErrorBody` của errors.ts với `detail`). */

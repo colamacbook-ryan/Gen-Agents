@@ -2,10 +2,12 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import {
   AnyId,
+  API_AUTH,
   type ApiErrorBody,
   ApiErrorEnvelope,
   authAtLeast,
   ConfirmName,
+  CSRF_HEADER,
   classifyRef,
   DisplayId,
   ErrorDetail,
@@ -22,7 +24,10 @@ import {
   queryInt,
   queryList,
   Ref,
+  ROUTES,
   refPrefixesOf,
+  requiresCsrf,
+  SESSION_COOKIE_NAMES,
   str,
   Ts,
   Ulid,
@@ -101,6 +106,10 @@ describe('Idempotency-Key, ConfirmName, Job', () => {
     expect(IdempotencyKey.safeParse('a'.repeat(129)).success).toBe(false);
     expect(IdempotencyKey.safeParse('a'.repeat(7)).success).toBe(false);
     expect(IdempotencyKey.safeParse('abc def ghi').success).toBe(false);
+    // M9: `:` dành cho khoá nội bộ của hệ thống (`activate:<ulid>`) — client không được đặt.
+    expect(IdempotencyKey.safeParse(`activate:${'01JABCDEFGHJKMNPQRSTVWXYZ0'}`).success).toBe(false);
+    expect(IdempotencyKey.safeParse('reverse:abcdefgh').success).toBe(false);
+    expect(IdempotencyKey.safeParse('idem.0001_abc-def').success).toBe(true);
     expect(IdempotencyKey.safeParse('abc\ndefghi').success).toBe(false);
   });
 
@@ -187,5 +196,43 @@ describe('lỗi: envelope + detail', () => {
     expect(authAtLeast('A', 'O')).toBe(false);
     expect(authAtLeast('V', 'V')).toBe(true);
     expect(authAtLeast('public', 'V')).toBe(false);
+  });
+});
+
+describe('hằng xác thực dùng chung với @ga/security (golden — không được lệch)', () => {
+  // GIÁ TRỊ GOLDEN sao chép từ packages/security/src/session.ts (`CSRF_HEADER`, `SESSION.cookieSecure / cookieInsecure`).
+  // Frontend không được import @ga/security nên các hằng này sống ở contracts. Phía @ga/security có test đối chiếu ngược
+  // (xem đề xuất `contract-constants.test.ts`): đổi một bên mà quên bên kia ⇒ một trong hai test đỏ.
+  it('CSRF_HEADER = "x-ga-csrf" (chữ thường); API_AUTH.csrfHeader là chính hằng đó', () => {
+    expect(CSRF_HEADER).toBe('x-ga-csrf');
+    expect(API_AUTH.csrfHeader).toBe(CSRF_HEADER);
+    expect(CSRF_HEADER).toBe(CSRF_HEADER.toLowerCase());
+    expect(CSRF_HEADER).toMatch(/^[a-z][a-z0-9-]*$/);
+  });
+
+  it('cookie phiên: __Host-ga_sid (HTTPS) và ga_sid (HTTP), khớp bản cài đặt của @ga/security', () => {
+    expect(SESSION_COOKIE_NAMES).toEqual({ secure: '__Host-ga_sid', insecure: 'ga_sid' });
+    expect(API_AUTH.sessionCookieSecure).toBe('__Host-ga_sid');
+    expect(API_AUTH.sessionCookieInsecure).toBe('ga_sid');
+    expect(SESSION_COOKIE_NAMES.secure.startsWith('__Host-')).toBe(true);
+    expect(Object.keys(API_AUTH)).not.toContain('sessionCookie');
+  });
+
+  it('header riêng của hợp đồng đều chữ thường và khác nhau', () => {
+    const names = [
+      API_AUTH.csrfHeader,
+      API_AUTH.idempotencyHeader,
+      API_AUTH.lastEventIdHeader,
+      API_AUTH.contentSha256Header,
+    ];
+    expect(new Set(names).size).toBe(names.length);
+    for (const n of names) expect(n, n).toBe(n.toLowerCase());
+  });
+
+  it('mọi route ghi (trừ công khai) dùng đúng CSRF_HEADER: requiresCsrf đúng, EXT-01 miễn', () => {
+    const csrfRoutes = ROUTES.filter((r) => requiresCsrf(r));
+    expect(csrfRoutes.length).toBeGreaterThan(100);
+    expect(csrfRoutes.map((r) => r.method)).not.toContain('GET');
+    expect(ROUTES.find((r) => r.id === 'EXT-01' && requiresCsrf(r))).toBeUndefined();
   });
 });

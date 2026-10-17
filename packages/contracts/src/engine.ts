@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS, BoundedJson, DbTimestamp } from './bounds.ts';
 
 // Hợp đồng EngineAdapter (BUILD-PLAN §B.5, §B.7, §D.3; CNS-132, 137, 142, 160).
 // - Adapter là HÀM THUẦN (packages/engines): dựng argv / tệp / env, parse output. Không tự chạy tiến trình, không I/O.
@@ -24,15 +25,24 @@ export function isForbiddenEnvName(name: string): boolean {
   return FORBIDDEN_ENV_NAME_PATTERNS.some((re) => re.test(name));
 }
 
-export const EnvMap = z.record(z.string(), z.string()).superRefine((env, ctx) => {
-  for (const name of Object.keys(env)) {
-    if (!ENV_NAME_RE.test(name)) {
-      ctx.addIssue({ code: 'custom', message: `tên env không hợp lệ: ${name}`, path: [name] });
-    } else if (isForbiddenEnvName(name)) {
-      ctx.addIssue({ code: 'custom', message: `env bị cấm tiêm vào container: ${name}`, path: [name] });
+/** Trần số biến / độ dài giá trị adapter đặt. */
+export const MAX_ENGINE_ENV_VARS = 32;
+export const MAX_ENGINE_ENV_VALUE = 4096;
+
+export const EnvMap = z
+  .record(z.string().max(BOUNDS.name), z.string().max(MAX_ENGINE_ENV_VALUE))
+  .superRefine((env, ctx) => {
+    if (Object.keys(env).length > MAX_ENGINE_ENV_VARS) {
+      ctx.addIssue({ code: 'custom', message: `quá ${MAX_ENGINE_ENV_VARS} biến env` });
     }
-  }
-});
+    for (const name of Object.keys(env)) {
+      if (!ENV_NAME_RE.test(name)) {
+        ctx.addIssue({ code: 'custom', message: `tên env không hợp lệ: ${name}`, path: [name] });
+      } else if (isForbiddenEnvName(name)) {
+        ctx.addIssue({ code: 'custom', message: `env bị cấm tiêm vào container: ${name}`, path: [name] });
+      }
+    }
+  });
 export type EnvMap = z.infer<typeof EnvMap>;
 
 // ---------------------------------------------------------------- argv do runner dựng: cổng cuối trước spawn
@@ -236,10 +246,6 @@ export function isForbiddenRuntimeEnvName(name: string): boolean {
   return FORBIDDEN_RUNTIME_ENV_NAMES.has(upper) || FORBIDDEN_RUNTIME_ENV_PREFIXES.some((p) => upper.startsWith(p));
 }
 
-/** Trần số biến / độ dài giá trị adapter đặt. */
-export const MAX_ENGINE_ENV_VARS = 32;
-export const MAX_ENGINE_ENV_VALUE = 4096;
-
 /** Lỗi của env so với chính sách (rỗng = được spawn). Chỉ trả tên biến, không trả giá trị. */
 export function engineEnvViolations(env: Readonly<Record<string, string>>, table: EngineFlagTable): string[] {
   const out: string[] = [];
@@ -299,9 +305,9 @@ export function engineArgvViolations(argv: readonly string[], engineSlug: string
 // trong container với HOME tmpfs riêng + auth-gc (CNS-168). Adapter (chạy trong runner) trả EnginePlan (turnPlan / probePlan).
 export const ExecResult = z.strictObject({
   exitCode: z.number().int().nullable(),
-  signal: z.string().nullable(),
-  stdout: z.string(),
-  stderr: z.string(),
+  signal: z.string().max(BOUNDS.signal).nullable(),
+  stdout: z.string().max(BOUNDS.blobText),
+  stderr: z.string().max(BOUNDS.blobText),
   timedOut: z.boolean(),
   durationMs: z.number().int().nonnegative(),
 });
@@ -328,9 +334,13 @@ export const EngineInstallStatus = z.discriminatedUnion('state', [
     state: z.literal('installing'),
     /** null khi trình cài chưa biết tổng dung lượng. */
     progressPct: z.number().int().min(0).max(100).nullable(),
-    version: z.string().nullable(),
+    version: z.string().max(BOUNDS.version).nullable(),
   }),
-  z.strictObject({ state: z.literal('installed'), version: z.string().min(1), installedAt: z.string() }),
+  z.strictObject({
+    state: z.literal('installed'),
+    version: z.string().min(1).max(BOUNDS.version),
+    installedAt: DbTimestamp,
+  }),
   z.strictObject({
     state: z.literal('failed'),
     reason: z.enum(ENGINE_INSTALL_FAILURE_REASONS),
@@ -366,7 +376,7 @@ export type InstallPlatform = z.infer<typeof InstallPlatform>;
 export const InstallSpec = z.strictObject({
   source: z.literal('official'),
   /** URL manifest / trình cài chính chủ mà adapter khai (mô tả để audit; supervisor là bên tải). */
-  origin: z.string().url(),
+  origin: z.string().url().max(BOUNDS.url),
   checksum: z.strictObject({
     algorithm: z.enum(['sha256', 'sha512', 'unknown']),
     from: z.enum(['manifest', 'pinned', 'unknown']),
@@ -374,11 +384,12 @@ export const InstallSpec = z.strictObject({
   /** CLI có tự cập nhật vào thư mục chỉ đọc không: chưa kiểm thì `unknown` (Spike 1c). */
   selfUpdate: z.enum(['disabled', 'enabled', 'unknown']),
   /** Domain egress cần mở cho lần cài (allowlist ga-egress). */
-  egressDomains: z.array(z.string().min(1)),
+  egressDomains: z.array(z.string().min(1).max(BOUNDS.domain)).max(BOUNDS.smallList),
   /** Nền tảng hãng phát hành (L-ENG đề xuất, Gen duyệt). Máy không khớp ⇒ engine_installs.failure_reason 'unsupported_arch'. */
   platforms: z
     .array(InstallPlatform)
     .min(1)
+    .max(ENGINE_ARCHES.length * ENGINE_LIBCS.length)
     .refine((ps) => new Set(ps.map((p) => `${p.arch}/${p.libc}`)).size === ps.length, 'trùng (arch, libc)'),
 });
 export type InstallSpec = z.infer<typeof InstallSpec>;
@@ -439,19 +450,19 @@ export const CAPABILITY_AUTH_MODES = ['oauth', 'api_key', 'adc', 'none', 'unknow
 /** Một giá trị quét được. Không quét được ⇒ valueState 'unknown' + lý do, KHÔNG điền mặc định. scanned_at / cli_version do bộ probe gắn. */
 export const CapabilityEntry = z.discriminatedUnion('valueState', [
   z.strictObject({
-    key: z.string().min(1),
+    key: z.string().min(1).max(BOUNDS.name),
     valueState: z.literal('known'),
-    value: z.json(),
-    source: z.string().min(1),
+    value: BoundedJson,
+    source: z.string().min(1).max(BOUNDS.name),
     confidence: z.enum(CAPABILITY_CONFIDENCE),
     authMode: z.enum(CAPABILITY_AUTH_MODES),
   }),
   z.strictObject({
-    key: z.string().min(1),
+    key: z.string().min(1).max(BOUNDS.name),
     valueState: z.literal('unknown'),
     /** vd `unknown_requires_login`, `unknown: CLI không cung cấp usage ở phiên bản này`. */
-    unknownReason: z.string().min(1),
-    source: z.string().min(1),
+    unknownReason: z.string().min(1).max(BOUNDS.message),
+    source: z.string().min(1).max(BOUNDS.name),
     authMode: z.enum(CAPABILITY_AUTH_MODES),
   }),
 ]);
@@ -473,7 +484,7 @@ export type TurnOutcome = (typeof TURN_OUTCOMES)[number];
 export const TurnClassification = z.strictObject({
   outcome: z.enum(TURN_OUTCOMES),
   /** Giờ reset quota nếu CLI báo (dạng ts DB), không thì null. */
-  resetAt: z.string().nullable(),
+  resetAt: DbTimestamp.nullable(),
   detail: z.string().max(500).nullable(),
 });
 export type TurnClassification = z.infer<typeof TurnClassification>;
@@ -509,17 +520,21 @@ export type QuotaSignal = z.infer<typeof QuotaSignal>;
 
 /** Sự kiện đã parse từ một dòng stdout. Một dòng có thể sinh NHIỀU sự kiện (parseStreamLine trả mảng; rỗng = không có gì). */
 export const TurnStreamEvent = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('delta'), text: z.string() }),
+  z.strictObject({ type: z.literal('delta'), text: z.string().max(BOUNDS.streamText) }),
   z.strictObject({
     type: z.literal('tool'),
     stage: z.enum(['call', 'result']),
-    name: z.string().min(1),
-    callId: z.string().nullable(),
+    name: z.string().min(1).max(BOUNDS.name),
+    callId: z.string().max(BOUNDS.name).nullable(),
   }),
   z.strictObject({ type: z.literal('usage'), usage: TokenUsage }),
   /** Model thực chạy nếu CLI tự báo (vd sự kiện khởi tạo) — nguồn cho G-08 / registry. */
-  z.strictObject({ type: z.literal('model'), model: z.string().min(1) }),
-  z.strictObject({ type: z.literal('error'), code: z.string().min(1), message: z.string() }),
+  z.strictObject({ type: z.literal('model'), model: z.string().min(1).max(BOUNDS.name) }),
+  z.strictObject({
+    type: z.literal('error'),
+    code: z.string().min(1).max(BOUNDS.code),
+    message: z.string().max(BOUNDS.message),
+  }),
   /** Trạng thái quota gói CLI tự báo trong luồng của lượt (L-ENG đề xuất, Gen duyệt). */
   z.strictObject({ type: z.literal('quota'), quota: QuotaSignal }),
 ]);
@@ -531,8 +546,9 @@ export const TurnPlanFile = z.strictObject({
   path: z
     .string()
     .min(1)
+    .max(255)
     .refine((p) => !p.startsWith('/') && !p.split('/').includes('..'), 'path phải tương đối và không chứa ..'),
-  content: z.string(),
+  content: z.string().max(BOUNDS.blobText),
   mode: z.union([z.literal(0o400), z.literal(0o600)]),
 });
 export type TurnPlanFile = z.infer<typeof TurnPlanFile>;
@@ -546,8 +562,8 @@ export type TurnPlanFile = z.infer<typeof TurnPlanFile>;
 export const EnginePlan = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('cli'),
-    files: z.array(TurnPlanFile),
-    argv: z.array(z.string().min(1)).min(1),
+    files: z.array(TurnPlanFile).max(BOUNDS.smallList),
+    argv: z.array(z.string().min(1).max(4096)).min(1).max(MAX_ENGINE_ARGV),
     /** Runner còn kiểm theo bảng env của adapter (engineEnvViolations); schema chặn cứng nhóm loader / interpreter / HOME. */
     env: EnvMap.refine(
       (env) => !Object.keys(env).some(isForbiddenRuntimeEnvName),
@@ -557,11 +573,13 @@ export const EnginePlan = z.discriminatedUnion('kind', [
   }),
   z.strictObject({
     kind: z.literal('http'),
-    endpoint: z.string().url(),
+    endpoint: z.string().url().max(BOUNDS.url),
     request: z.strictObject({
       method: z.literal('POST'),
-      headers: z.record(z.string(), z.string()),
-      body: z.string(),
+      headers: z
+        .record(z.string().max(BOUNDS.name), z.string().max(8192))
+        .refine((h) => Object.keys(h).length <= BOUNDS.smallList, 'quá nhiều header'),
+      body: z.string().max(BOUNDS.blobText),
     }),
     timeoutMs: z.number().int().positive().max(3_600_000),
   }),
@@ -577,16 +595,16 @@ export const ProbeOutcome = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('cli'),
     exitCode: z.number().int().nullable(),
-    signal: z.string().nullable(),
-    stdout: z.string(),
-    stderr: z.string(),
+    signal: z.string().max(BOUNDS.signal).nullable(),
+    stdout: z.string().max(BOUNDS.blobText),
+    stderr: z.string().max(BOUNDS.blobText),
     timedOut: z.boolean(),
     durationMs: z.number().int().nonnegative(),
   }),
   z.strictObject({
     kind: z.literal('http'),
     status: z.number().int().nullable(),
-    body: z.string(),
+    body: z.string().max(BOUNDS.blobText),
     timedOut: z.boolean(),
     durationMs: z.number().int().nonnegative(),
   }),

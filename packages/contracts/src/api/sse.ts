@@ -53,6 +53,49 @@ export const SSE_EVENT_TYPES = [
 ] as const;
 export type SseEventTypeName = (typeof SSE_EVENT_TYPES)[number];
 
+/** Ai được nhận sự kiện: `V` mọi thành viên · `A` admin / owner · `O` owner · `recipient` chỉ người nhận (`user_id` của phiên). */
+export type SseAudience = 'V' | 'A' | 'O' | 'recipient';
+
+/**
+ * Đối tượng nhận của TỪNG loại sự kiện (review bảo mật PR #7, M7; HANDLER-OBLIGATIONS #6). KHÔNG có mặc định: `Record` theo
+ * `SseEventTypeName` nên thêm loại sự kiện mà quên khai ⇒ lỗi kiểu lúc compile VÀ test quét 26 loại đỏ. Handler lọc từng kết nối
+ * theo (workspace, audience, người nhận) và cắt luồng khi thành viên bị gỡ / hạ quyền. `grid.changed` còn chịu `GRID_MIN_AUTH`
+ * của lưới (xem `sseEventAllows` ở access.ts).
+ */
+export const SSE_EVENT_AUDIENCE: Record<SseEventTypeName, SseAudience> = {
+  'role.state': 'V',
+  'avatar.state': 'V',
+  // Nội dung hội thoại với agent: chỉ owner / admin.
+  'chat.delta': 'A',
+  'chat.tool': 'A',
+  'ui.action': 'A',
+  // Thông báo của riêng từng người: lọc `user_id = người dùng của phiên` (SYS-83 / SYS-84 `scope: 'self'`).
+  notification: 'recipient',
+  'core_agent.status': 'V',
+  'job.progress': 'A',
+  'update.step': 'A',
+  'probe.result': 'A',
+  'engine.install': 'A',
+  // Phiên đăng nhập terminal / credential bị chặn: chỉ owner.
+  'pty.closed': 'O',
+  'credential.blocked': 'O',
+  'chat.message': 'A',
+  'chat.turn': 'A',
+  'changeset.state': 'V',
+  'grid.changed': 'V',
+  'attention.changed': 'V',
+  'card.step': 'A',
+  'trial.progress': 'V',
+  'knowledge.progress': 'V',
+  // `candidate` mang tên hiển thị + tgUserId của người ngoài (PII).
+  'telegram.capture': 'A',
+  'wallet.changed': 'V',
+  // Mang ID tài khoản engine.
+  'engine.failover': 'A',
+  resync: 'V',
+  'log.line': 'A',
+};
+
 /** 13 loại đã có ở contracts M0 (`events.ts`). */
 export const SSE_EXISTING_TYPES = SSE_EVENT_TYPES.slice(0, 13);
 /** 12 loại mới trên `/stream` (#14–#25). */

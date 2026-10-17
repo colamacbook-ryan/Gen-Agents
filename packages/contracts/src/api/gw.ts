@@ -133,9 +133,21 @@ export const GW_03 = gw({
   id: 'GW-03',
   method: 'PUT',
   path: '/engines/{engineSlug}/pin',
-  auth: 'A',
+  // Ghim phiên bản CLI hãng chạy trong container của mọi Role ⇒ owner (Gen: mọi update / pin = owner).
+  // Dịch vụ KHÔNG nội suy slug / version vào shell: chỉ dùng EXEC_ARGV cố định (HANDLER-OBLIGATIONS #16).
+  auth: 'O',
   o4: 'blocked',
-  request: { params: EngineParams, body: z.strictObject({ version: str(64, 1).nullable() }) },
+  request: {
+    params: EngineParams,
+    body: z.strictObject({
+      // Chỉ ký tự của semver / tag (không khoảng trắng, không ký tự shell); `null` = bỏ ghim.
+      version: z
+        .string()
+        .regex(/^[0-9A-Za-z.+-]{1,64}$/)
+        .meta({ example: '1.2.3' })
+        .nullable(),
+    }),
+  },
   response: ok(EngineRow),
   cli: ['engines pin'],
 });
@@ -144,7 +156,9 @@ export const GW_04 = gw({
   id: 'GW-04',
   method: 'POST',
   path: '/engines/{engineSlug}/update',
-  auth: 'A',
+  // Cập nhật CLI hãng = chạy mã mới trong container có credential ⇒ owner (Gen: mọi update / pin = owner). Slug chỉ đi qua
+  // EXEC_ARGV, không vào shell (HANDLER-OBLIGATIONS #16).
+  auth: 'O',
   o4: 'blocked',
   request: { params: EngineParams },
   // Bản mới ngoài `testedVersions` thì gắn cờ "chưa kiểm tương thích" (`compat`).
@@ -269,6 +283,9 @@ export const GW_10 = gw({
   method: 'PATCH',
   path: '/engine-bindings/{bindingRef}',
   auth: 'A',
+  // BẬT binding (`enabled = true`) gắn volume `/auth` của tài khoản vào container của Role = NỚI ⇒ owner; tắt / đổi model / effort
+  // giữ A. Binding phải thuộc đúng workspace (HANDLER-OBLIGATIONS #1, #2).
+  ownerWhen: { in: 'body', field: 'enabled', equals: true },
   o4: 'blocked',
   request: {
     params: z.strictObject({ bindingRef: Ref('EB') }),
@@ -455,10 +472,12 @@ export const GW_20 = gw({
   path: '/roles/{roleRef}/measure-prompt',
   auth: 'A',
   o4: 'blocked',
-  // Mặc định binding ưu tiên 1.
+  // Đo trên MỘT BINDING của chính Role (mặc định binding ưu tiên 1). Đặc tả cũ nhận `accountRef` (bất kỳ tài khoản): đổi sang
+  // `bindingRef` để không chạy phiên đo trên tài khoản Core agent hay tài khoản của Role khác (HANDLER-OBLIGATIONS #2: dịch vụ
+  // vẫn PHẢI kiểm binding ∈ bindings của Role này).
   request: {
     params: z.strictObject({ roleRef: Ref('RL') }),
-    body: z.strictObject({ accountRef: Ref('EN').optional() }),
+    body: z.strictObject({ bindingRef: Ref('EB').optional() }),
   },
   // Phiên `prompt_worst`.
   response: accepted(z.strictObject({ job: Job, session: IdOf('SS') })),
@@ -616,7 +635,6 @@ export const GW_26 = gw({
   },
   response: ok(PageOf(SessionRow)),
   cli: ['sessions', 'task show', 'diag'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_27 = gw({
@@ -635,7 +653,6 @@ export const GW_27 = gw({
     }),
   ),
   cli: ['session show'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 // ---------------------------------------------------------------- GW-28…32 quyền tool
@@ -668,7 +685,6 @@ export const GW_28 = gw({
   request: { query: z.strictObject({ status: z.enum(PERMISSION_STATUSES).optional() }) },
   response: ok(list(PermissionRow)),
   cli: ['perms'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_29 = gw({
@@ -676,6 +692,11 @@ export const GW_29 = gw({
   method: 'POST',
   path: '/permission-requests/{permissionRef}/decision',
   auth: 'A',
+  // NỚI hàng rào = owner (Gen, fail-closed): `decision` ∈ {allow, ask} cấp / mở quyền tool cho Role ⇒ O; `deny` siết ⇒ A.
+  // Dịch vụ còn PHẢI (HANDLER-OBLIGATIONS #3): quyền thật đọc từ trạng thái phía máy chủ; KÉO DÀI `expiresAt` của một grant
+  // đang có (hoặc bỏ hạn) cũng là nới ⇒ O (hợp đồng không biểu đạt được: so với `expiresAt` đã lưu); ref cùng workspace (#1).
+  ownerWhen: { in: 'body', field: 'decision', equalsAny: ['allow', 'ask'] },
+  writesAccessPolicy: ['tool_grants'],
   o4: 'blocked',
   request: {
     params: z.strictObject({ permissionRef: Ref('PM') }),
@@ -688,7 +709,6 @@ export const GW_29 = gw({
   // `conflict` khi đã quyết. B-REL: duyệt bằng CLI (Q-B5: không có nút duyệt nhanh trên Telegram).
   response: ok(z.strictObject({ request: PermissionRow, grant: IdOf('GR').nullable() })),
   cli: ['perm allow', 'perm ask', 'perm deny'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_30 = gw({
@@ -700,7 +720,6 @@ export const GW_30 = gw({
   request: { params: z.strictObject({ roleRef: Ref('RL') }) },
   response: ok(list(GrantRow)),
   cli: ['grants'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_31 = gw({
@@ -708,6 +727,11 @@ export const GW_31 = gw({
   method: 'PUT',
   path: '/roles/{roleRef}/tool-grants/{toolSlug}',
   auth: 'A',
+  // NỚI hàng rào = owner (Gen, fail-closed): `mode` ∈ {allow, ask} cấp / mở quyền tool cho Role ⇒ O; `deny` siết ⇒ A.
+  // Dịch vụ còn PHẢI (HANDLER-OBLIGATIONS #3): quyền thật đọc từ trạng thái phía máy chủ; KÉO DÀI `expiresAt` của một grant
+  // đang có (hoặc bỏ hạn) cũng là nới ⇒ O (hợp đồng không biểu đạt được: so với `expiresAt` đã lưu); ref cùng workspace (#1).
+  ownerWhen: { in: 'body', field: 'mode', equalsAny: ['allow', 'ask'] },
+  writesAccessPolicy: ['tool_grants'],
   o4: 'blocked',
   request: {
     params: z.strictObject({ roleRef: Ref('RL'), toolSlug: KeyStr }),
@@ -716,7 +740,6 @@ export const GW_31 = gw({
   response: ok(GrantRow),
   errors: ['db.*'],
   cli: ['grants set'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_32 = gw({
@@ -743,7 +766,6 @@ export const GW_32 = gw({
     ),
   ),
   cli: ['tools'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_ROUTES = [

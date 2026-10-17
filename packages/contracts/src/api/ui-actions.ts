@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Anchor, ToolArgs, UI_TOOLS } from '../mcp.ts';
-import { IdOf, idShape, Json, Nat, str, Ts } from './common.ts';
+import { IdOf, idShape, Nat, str, Ts } from './common.ts';
 
 // `ui_actions` — hợp đồng Soi (BACKEND-TRIAL §3.8, STD-08 §4–§5).
 // Luồng: AI hệ thống gọi tool UI qua MCP gateway (tham số = `ToolArgs` của mcp.ts) → gateway quét credential, kiểm anchor,
@@ -17,16 +17,13 @@ export type UiActionName = (typeof UI_ACTIONS)[number];
 export const UI_ACTION_OUTCOMES = ['ok', 'target_gone', 'failed'] as const;
 export type UiActionOutcome = (typeof UI_ACTION_OUTCOMES)[number];
 
-/**
- * Tham số theo hành động — dùng lại `ToolArgs` của mcp.ts. Riêng `propose_edit.newValue` của M0 là `z.json()` (không trần):
- * ở response dùng `Json` (có trần) thay vào; hình dạng còn lại không đổi.
- */
+/** Tham số theo hành động — dùng lại NGUYÊN `ToolArgs` của mcp.ts (`propose_edit.newValue` đã là `BoundedJson`). */
 export const UiActionArgs = {
   highlight: ToolArgs.highlight,
   navigate: ToolArgs.navigate,
   annotate: ToolArgs.annotate,
   tour: ToolArgs.tour,
-  propose_edit: ToolArgs.propose_edit.extend({ newValue: Json }),
+  propose_edit: ToolArgs.propose_edit,
 } as const satisfies Record<UiActionName, z.ZodType>;
 
 const rowBase = {

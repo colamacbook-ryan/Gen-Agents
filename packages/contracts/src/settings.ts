@@ -12,10 +12,23 @@ import { ULID_RE } from './ids.ts';
  */
 export const SETTING_WRITERS = ['owner', 'admin', 'system'] as const;
 export type SettingWriter = (typeof SETTING_WRITERS)[number];
-/** Đa số khoá: owner / admin (UI), actor system khi dựng workspace. */
-const OWNER_ADMIN = ['owner', 'admin', 'system'] as const satisfies readonly SettingWriter[];
-/** Khoá định tuyến credential: CHỈ owner (admin cũng không) hoặc actor system (DB v2.3.2 settings_remote_anchor_*). */
+/**
+ * MẶC ĐỊNH FAIL-CLOSED (Gen, review bảo mật PR #7): khoá nào không khai `writers` ⇒ CHỈ owner (+ actor system lúc dựng).
+ * Quy tắc: thay đổi NỚI một hàng rào (retention, hạn mức / quota, trần dung lượng, ngân sách, thưởng / phạt, egress, allowlist,
+ * neo ngoài máy…) là việc của owner; admin chỉ ghi được khoá THUẦN GIAO DIỆN (`COSMETIC_WRITERS`). Trigger DB (cho phép cả admin ở
+ * nhiều khoá) vẫn là chốt cuối nhưng KHÔNG rộng hơn hợp đồng này ở tầng app.
+ */
 const OWNER_OR_SYSTEM = ['owner', 'system'] as const satisfies readonly SettingWriter[];
+export const DEFAULT_SETTING_WRITERS: readonly SettingWriter[] = OWNER_OR_SYSTEM;
+/** Khoá thuần giao diện (không ảnh hưởng bảo mật / chi phí): admin cũng ghi được. */
+const COSMETIC_WRITERS = ['owner', 'admin', 'system'] as const satisfies readonly SettingWriter[];
+
+/**
+ * Tên khoá thuộc nhóm NỚI hàng rào ⇒ test `settings-fence` đòi owner-only: retention mọi loại, grace purge, hạn mức / quota, trần
+ * dung lượng / số lần, ngân sách, cấp / thưởng / phạt ₲, egress, allowlist, mặc định chung, neo ngoài máy, chủ động, Core agent.
+ */
+export const SETTING_LOOSENING_KEY_RE =
+  /retention|grace|quota|allowlist|egress|^defaults\.|^proactive|^telegram|max|_bp|budget|initial_grant|token_cost|revive|horizon|attachment|overhead|penalty|core_agent|anchor|economy|^backup|^update|^network|^export/;
 
 export interface SettingDef<S extends z.ZodType = z.ZodType> {
   key: string;
@@ -27,6 +40,7 @@ export interface SettingDef<S extends z.ZodType = z.ZodType> {
   default: z.infer<S> | 'seed' | 'absent';
   /** Ghi sẵn lúc tạo workspace (DATABASE §11.2). */
   preseeded: boolean;
+  /** Ai được ghi. Thiếu ⇒ `DEFAULT_SETTING_WRITERS` (owner + system) — fail-closed. */
   writers: readonly SettingWriter[];
   /** Mã ST- trong design (chỉ để đối chiếu màn A6; số thật cấp theo workspace). */
   designDisplayId?: string;
@@ -49,9 +63,13 @@ export function remoteAnchorAuthority(url: string): string | null {
 }
 const bp = int(1, 10_000);
 
-function def<S extends z.ZodType>(d: SettingDef<S>): SettingDef<S> {
-  return d;
+type SettingInput<S extends z.ZodType> = Omit<SettingDef<S>, 'writers'> & { writers?: readonly SettingWriter[] };
+
+/** Dựng một khoá registry; `writers` không khai ⇒ owner-only (fail-closed). Xuất để test chứng minh luật mặc định. */
+export function defineSetting<S extends z.ZodType>(d: SettingInput<S>): SettingDef<S> {
+  return { ...d, writers: d.writers ?? DEFAULT_SETTING_WRITERS };
 }
+const def = defineSetting;
 
 export const SETTINGS = {
   'economy.initial_grant_minor': def({
@@ -59,49 +77,42 @@ export const SETTINGS = {
     schema: int(1, Number.MAX_SAFE_INTEGER),
     default: 100_000,
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'economy.token_cost_to_wallet': def({
     key: 'economy.token_cost_to_wallet',
     schema: z.boolean(),
     default: false,
     preseeded: false,
-    writers: OWNER_ADMIN,
   }),
   'economy.penalty.self_reported_max_bp': def({
     key: 'economy.penalty.self_reported_max_bp',
     schema: bp,
     default: 1000,
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'economy.penalty.concealment_min_bp': def({
     key: 'economy.penalty.concealment_min_bp',
     schema: bp,
     default: 5000,
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'economy.penalty.harness_bp': def({
     key: 'economy.penalty.harness_bp',
     schema: z.literal(10_000),
     default: 10_000,
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'economy.penalty.dissatisfaction_presets_bp': def({
     key: 'economy.penalty.dissatisfaction_presets_bp',
-    schema: z.array(bp).min(1),
+    schema: z.array(bp).min(1).max(16),
     default: [500, 1000, 2000, 3000],
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'economy.penalty.self_confessed_harness_as_self_reported': def({
     key: 'economy.penalty.self_confessed_harness_as_self_reported',
     schema: z.boolean(),
     default: true,
     preseeded: true,
-    writers: OWNER_ADMIN,
     designDisplayId: 'ST-0016',
   }),
   'economy.revive_suggest_minor': def({
@@ -109,28 +120,24 @@ export const SETTINGS = {
     schema: int(1, Number.MAX_SAFE_INTEGER),
     default: 50_000,
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'economy.wound_commitment_horizon_hours': def({
     key: 'economy.wound_commitment_horizon_hours',
     schema: int(1, 24 * 365),
     default: 72,
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'economy.reflection_max_runs': def({
     key: 'economy.reflection_max_runs',
     schema: int(1, 100),
     default: 3,
     preseeded: true,
-    writers: OWNER_ADMIN,
   }),
   'budget.runtime_overhead_estimate_tokens': def({
     key: 'budget.runtime_overhead_estimate_tokens',
     schema: int(1, 2000),
     default: 250,
     preseeded: true,
-    writers: OWNER_ADMIN,
     designDisplayId: 'ST-0015',
   }),
   'system.core_agent_engine': def({
@@ -139,7 +146,6 @@ export const SETTINGS = {
     schema: z.string().regex(/^[a-z0-9][a-z0-9-]{1,31}$/),
     default: 'seed',
     preseeded: true,
-    writers: OWNER_ADMIN,
     designDisplayId: 'ST-0017',
   }),
   'chat.attachment_max_bytes': def({
@@ -147,7 +153,6 @@ export const SETTINGS = {
     schema: int(1, 104_857_600),
     default: 26_214_400,
     preseeded: true,
-    writers: OWNER_ADMIN,
     designDisplayId: 'ST-0018',
   }),
   'avatar.transient_seconds': def({
@@ -155,42 +160,39 @@ export const SETTINGS = {
     schema: int(1, 600),
     default: 20,
     preseeded: false,
-    writers: OWNER_ADMIN,
+    writers: COSMETIC_WRITERS,
   }),
   'avatar.idle_after_minutes': def({
     key: 'avatar.idle_after_minutes',
     schema: int(1, 1440),
     default: 10,
     preseeded: false,
-    writers: OWNER_ADMIN,
+    writers: COSMETIC_WRITERS,
   }),
   'ui.avatar_motion': def({
     key: 'ui.avatar_motion',
     schema: z.enum(['full', 'subtle', 'off']),
     default: 'full',
     preseeded: false,
-    writers: OWNER_ADMIN,
+    writers: COSMETIC_WRITERS,
   }),
   'defaults.prompt_budget_tokens': def({
     key: 'defaults.prompt_budget_tokens',
     schema: int(200, 8000),
     default: 2000,
     preseeded: false,
-    writers: OWNER_ADMIN,
   }),
   'audit.retention_days': def({
     key: 'audit.retention_days',
     schema: int(1, 36_500),
     default: 730,
     preseeded: false,
-    writers: OWNER_ADMIN,
   }),
   'log.retention_days': def({
     key: 'log.retention_days',
     schema: int(1, 3650),
     default: 14,
     preseeded: false,
-    writers: OWNER_ADMIN,
   }),
   'backup.remote_anchor': def({
     key: 'backup.remote_anchor',
@@ -207,7 +209,6 @@ export const SETTINGS = {
     schema: int(1, 3650),
     default: 30,
     preseeded: false,
-    writers: OWNER_ADMIN,
   }),
 } as const;
 

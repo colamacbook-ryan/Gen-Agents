@@ -97,6 +97,12 @@ export const TgUserId = z
   .regex(/^\d{1,20}$/)
   .meta({ example: '123456789' });
 
+/**
+ * Thành viên workspace dạng AN TOÀN để liệt kê / hiển thị: `{id, displayId, name}` (join `workspace_members`). KHÔNG BAO GIỜ trả
+ * bản ghi `US` thô (email, username, mật khẩu băm) — `RECORD_ACCESS.US = 'deny'` (HANDLER-OBLIGATIONS #1).
+ */
+export const MemberView = z.strictObject({ ...idShape('US'), name: str(60, 1) });
+
 /** Slug loại CLI (registry engines): đúng hình dạng của contracts (`ENGINE_SLUG_RE`). */
 export const EngineSlug = EngineSlugFormat.meta({ example: 'engine-x' });
 /** id model từ capability registry (STD-10): đúng `MODEL_ID_RE`, không bao giờ dạng cờ `-…`. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
-import { defOf } from '../../src/api/introspect.ts';
+import { defOf, secretFieldsOf } from '../../src/api/introspect.ts';
 import {
   CLI_GROUPS,
   ColumnName,
@@ -14,9 +14,11 @@ import {
   GRID_KEYS,
   GRID_PAGE_MAX,
   GRID_PREFIX,
+  GRID_WRITE_ROUTES,
   GridInfo,
   GridKey,
   GridRowsPage,
+  gridRouteIds,
   QueryClause,
   ROUTES,
   routeById,
@@ -50,7 +52,7 @@ describe('độ phủ FRONTEND-SPEC §3.11', () => {
     expect(() => expandIds('SYS-09..01')).toThrow();
     expect(FS_COVERAGE.G2.length).toBe(20);
     expect(FS_COVERAGE.A6.length).toBe(13);
-    expect(FS_COVERAGE.O4.length).toBe(25);
+    expect(FS_COVERAGE.O4.length).toBe(24); // 25 trong đặc tả − SYS-78 (M5: resume không mở khi recovery)
     expect(FS_COVERAGE.A3.length).toBe(17);
     expect(FS_COVERAGE.A10.length).toBe(16);
   });
@@ -66,7 +68,7 @@ describe('độ phủ FRONTEND-SPEC §3.11', () => {
       ROUTES.filter((r) => r.cliOnly)
         .map((r) => r.id)
         .sort(),
-    ).toEqual(['GW-26', 'GW-27', 'GW-28', 'GW-29', 'GW-30', 'GW-31', 'GW-32', 'SYS-44', 'SYS-45', 'WRK-19', 'WRK-26']);
+    ).toEqual(['SYS-44', 'SYS-45']);
   });
 
   it('SSE gắn với màn có thật trong §3.7', () => {
@@ -119,7 +121,16 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
   const query = (r: typeof rows) => (r.request.query as unknown as { shape: Record<string, z.ZodType> }).shape;
 
   it('OPS-33: q, view, sort, cols, group, cursor, limit ≤ 500 — keyset, không OFFSET', () => {
-    expect(Object.keys(query(rows)).sort()).toEqual(['cols', 'cursor', 'group', 'limit', 'q', 'sort', 'view']);
+    expect(Object.keys(query(rows)).sort()).toEqual([
+      'cols',
+      'cursor',
+      'group',
+      'limit',
+      'offset',
+      'q',
+      'sort',
+      'view',
+    ]);
     const q = rows?.request.query as z.ZodType;
     const parsed = q.parse({
       q: 'role:Mai status:active tokens>200',
@@ -137,7 +148,8 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
     expect(parsed.limit).toBe(500);
     expect(GRID_PAGE_MAX).toBe(500);
     expect(q.safeParse({ limit: '501' }).success).toBe(false);
-    expect(q.safeParse({ offset: '10' }).success).toBe(false);
+    // `offset` (round 4) là CHẾ ĐỘ TRUY CẬP NGẪU NHIÊN có trần; chi tiết ở nhóm test OPS-33 random access bên dưới.
+    expect(q.safeParse({ offset: '10' }).success).toBe(true);
     expect(q.safeParse({ page: '2' }).success).toBe(false);
     expect(q.safeParse({ sort: 'a,b,c,d' }).success).toBe(false);
     expect(q.safeParse({ sort: '-Bad Column' }).success).toBe(false);
@@ -161,6 +173,7 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
       'groups',
       'items',
       'nextCursor',
+      'start',
       'total',
     ]);
     const ok = {
@@ -171,9 +184,11 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
           state: 'proposed',
           supersededBy: null,
           cells: { status: 'active', tokens: 120 },
+          redacted: false,
         },
       ],
       nextCursor: null,
+      start: 0,
       total: 1,
       footer: { sum_tokens: 120, count: 1 },
       clauses: [
@@ -188,7 +203,10 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
       expect(GridRowsPage.safeParse({ ...ok, items: [{ ...ok.items[0], state }] }).success, state).toBe(true);
     }
     expect(GridRowsPage.safeParse({ ...ok, items: [{ ...ok.items[0], state: 'deleted' }] }).success).toBe(false);
-    expect(GridRowsPage.safeParse({ ...ok, total: null, groups: null }).success).toBe(true);
+    expect(GridRowsPage.safeParse({ ...ok, groups: null }).success).toBe(true);
+    // `total` và `start` là số chính xác (lưới ảo hoá cần để dựng thanh cuộn) — không còn null.
+    expect(GridRowsPage.safeParse({ ...ok, total: null }).success).toBe(false);
+    expect(GridRowsPage.safeParse({ ...ok, start: undefined }).success).toBe(false);
     expect(GridRowsPage.safeParse({ ...ok, items: Array(501).fill(ok.items[0]) }).success).toBe(false);
     expect(GridRowsPage.safeParse({ ...ok, extra: 1 }).success).toBe(false);
   });
@@ -237,6 +255,7 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
     const grid = {
       key: 'instructions',
       prefix: 'IN',
+      minAuth: 'V',
       source: 'instructions',
       exportable: true,
       defaultSort: ['layer', 'ordinal'],
@@ -279,7 +298,7 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
   });
 
   it('GridKey: mọi khoá trỏ đúng prefix của ENTITY_TYPES; không trùng prefix', () => {
-    expect(GRID_KEYS.length).toBe(33);
+    expect(GRID_KEYS.length).toBe(37);
     const prefixes = Object.values(GRID_PREFIX);
     expect(new Set(prefixes).size).toBe(prefixes.length);
     for (const key of GRID_KEYS) expect(Object.hasOwn(ENTITY_TYPES, GRID_PREFIX[key]), key).toBe(true);
@@ -307,7 +326,23 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
   });
 
   it('Data Console có đủ nguồn dữ liệu: mọi route DataGrid, ⌘K, thông báo, SSE grid.changed', () => {
-    expect(FS_COVERAGE.DataGrid).toEqual(['OPS-32', 'OPS-33', 'OPS-34', 'OPS-35']);
+    // DataGrid = 4 route lưới chung + route của từng miền nối vào lưới (GRID_WRITE_ROUTES): không có PATCH chung.
+    expect(FS_COVERAGE.DataGrid.slice(0, 4)).toEqual(['OPS-32', 'OPS-33', 'OPS-34', 'OPS-35']);
+    for (const id of [
+      'GW-26',
+      'GW-27',
+      'GW-28',
+      'GW-29',
+      'GW-30',
+      'GW-31',
+      'GW-32',
+      'WRK-19',
+      'WRK-26',
+      'SYS-38',
+      'SYS-48',
+    ]) {
+      expect(FS_COVERAGE.DataGrid as readonly string[], id).toContain(id);
+    }
     expect(FS_COVERAGE.O1).toEqual(['OPS-36', 'OPS-35']);
     expect(SSE_EVENT_TYPES as readonly string[]).toContain('grid.changed');
     for (const id of ['OPS-32', 'OPS-33', 'OPS-34', 'OPS-35', 'OPS-36']) expect(routeById(id)?.auth, id).toBe('V');
@@ -316,6 +351,77 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
   it('chỉ-đọc cho viewer, route Data Console đọc không bị O4 mở: bị chặn khi recovery (✗)', () => {
     for (const id of ['OPS-32', 'OPS-33', 'OPS-34', 'OPS-35', 'OPS-36'])
       expect(routeById(id)?.recovery, id).toBe(false);
+  });
+
+  it('GRID_WRITE_ROUTES: đủ mọi lưới; route nối vào lưới có thật, đúng method, không chạm credential / secret', () => {
+    expect(Object.keys(GRID_WRITE_ROUTES).sort()).toEqual([...GRID_KEYS].sort());
+    const wired = gridRouteIds();
+    expect(wired.length).toBeGreaterThan(30);
+    for (const id of wired) {
+      const r = routeById(id);
+      expect(r, `route ${id} nối vào lưới nhưng không có trong registry`).toBeDefined();
+      expect(r?.touchesCredential, `${id}: route chạm credential KHÔNG được nối vào ô lưới`).toBe(false);
+      expect(r?.userPassword, id).toBe(false);
+      expect(r?.request.body && secretFieldsOf(r.request.body).length, `${id}: body có secret`).toBeFalsy();
+    }
+    for (const [grid, w] of Object.entries(GRID_WRITE_ROUTES)) {
+      if (w.create) expect(routeById(w.create)?.method, `${grid}.create`).toBe('POST');
+      if (w.remove) expect(routeById(w.remove)?.method, `${grid}.remove`).toBe('DELETE');
+      for (const [col, id] of Object.entries(w.edit)) {
+        expect(['PATCH', 'PUT', 'POST'], `${grid}.edit.${col}`).toContain(routeById(id)?.method);
+        expect(col, `${grid}: tên cột`).toMatch(/^[a-z][a-z0-9_]{0,31}$/);
+      }
+      for (const id of w.reads) expect(routeById(id)?.method, `${grid}.reads`).toBe('GET');
+    }
+  });
+
+  it('lưới trạng thái hệ thống (sessions, permission_requests, tool_grants, tools): chỉ-đọc trừ khi đã có route ghi, giữ quyền route gốc', () => {
+    for (const [grid, prefix] of [
+      ['sessions', 'SS'],
+      ['permission_requests', 'PM'],
+      ['tool_grants', 'GR'],
+      ['tools', 'TL'],
+    ] as const) {
+      expect(GRID_PREFIX[grid]).toBe(prefix);
+      expect(GridKey.safeParse(grid).success).toBe(true);
+      expect(GRID_WRITE_ROUTES[grid].create, `${grid}: không có route tạo ⇒ chỉ-đọc`).toBeNull();
+      expect(GRID_WRITE_ROUTES[grid].remove).toBeNull();
+    }
+    expect(GRID_WRITE_ROUTES.sessions).toMatchObject({ edit: {}, actions: {}, reads: ['GW-26', 'GW-27'] });
+    expect(GRID_WRITE_ROUTES.tools).toMatchObject({ edit: {}, actions: {}, reads: ['GW-32'] });
+    // đã có route ghi tương ứng ⇒ nối vào, GIỮ NGUYÊN quyền của route gốc (không nới ở lưới)
+    expect(GRID_WRITE_ROUTES.permission_requests.edit).toEqual({ status: 'GW-29' });
+    expect(GRID_WRITE_ROUTES.tool_grants.edit).toEqual({ mode: 'GW-31' });
+    expect(routeById('GW-29')?.auth).toBe('A');
+    expect(routeById('GW-31')?.auth).toBe('A');
+  });
+
+  it('prefix chưa có lưới (liệt kê để Gen quyết, KHÔNG tự thêm prefix): 19 prefix', () => {
+    const have = new Set(Object.values(GRID_PREFIX));
+    const missing = Object.keys(ENTITY_TYPES).filter((p) => !have.has(p as never));
+    expect(missing.sort()).toEqual(
+      [
+        'AN',
+        'AS',
+        'AT',
+        'BK',
+        'CN',
+        'EG',
+        'GC',
+        'JB',
+        'MSG',
+        'PB',
+        'PS',
+        'RV',
+        'SEC',
+        'ST',
+        'TH',
+        'TT',
+        'UA',
+        'US',
+        'WL',
+      ].sort(),
+    );
   });
 
   it('cột sửa được trỏ route ghi có thật của lane sở hữu (editRouteId dạng RouteIdRef)', () => {

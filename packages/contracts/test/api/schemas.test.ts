@@ -126,6 +126,26 @@ describe('ràng buộc nghiệp vụ trong schema (ca tay)', () => {
   const params = (id: string) => routeById(id)?.request.params as z.ZodType;
   const query = (id: string) => routeById(id)?.request.query as z.ZodType;
 
+  it('GW-03 version (L4): chỉ semver / tag, không khoảng trắng, không ký tự shell; null = bỏ ghim', () => {
+    const b = body('GW-03');
+    for (const v of ['1.2.3', '2.0.0-rc.1', '1.0.0+build5', 'v3', null])
+      expect(b.safeParse({ version: v }).success, String(v)).toBe(true);
+    for (const v of ['', '1.2 3', '1.2.3; rm -rf /', '$(id)', '`id`', '1.2.3|x', '../1', 'a'.repeat(65), '1.2.3\n'])
+      expect(b.safeParse({ version: v }).success, JSON.stringify(v)).toBe(false);
+  });
+
+  it('SYS-62 toạ độ x / y (L5): hữu hạn, trong ±1e6', () => {
+    const b = body('SYS-62');
+    const at = (x: number, y: number) =>
+      b.safeParse({ ...(sampleOf(b, OVERRIDES) as object), positions: [{ ref: 'SK-0001', x, y }] }).success;
+    expect(at(0, 0)).toBe(true);
+    expect(at(1_000_000, -1_000_000)).toBe(true);
+    for (const bad of [1e308, -1e308, 1_000_001, Number.POSITIVE_INFINITY, Number.NaN]) {
+      expect(at(bad, 0), `x=${bad}`).toBe(false);
+      expect(at(0, bad), `y=${bad}`).toBe(false);
+    }
+  });
+
   it('Ref: ULID hoặc display_id đúng hình dạng; rác bị loại (400); sai prefix qua classifyRef ⇒ 404 ở tầng route', () => {
     const p = params('SYS-32');
     expect(p.safeParse({ roleRef: 'RL-0001' }).success).toBe(true);

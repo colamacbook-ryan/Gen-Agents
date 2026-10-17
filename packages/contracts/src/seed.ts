@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ACTOR_SYSTEM_KEYS } from './actors.ts';
+import { BOUNDS } from './bounds.ts';
 
 // Định dạng MÁY ĐỌC ĐƯỢC của seed tham chiếu (DATABASE §11.1–11.2; BUILD-PLAN §D.4; CNS-170).
 // Nguồn: bộ sinh của lane DB chạy trên nguồn DB đã kiểm (tệp `db/spec/seed_reference.json`, có sha256) — KHÔNG viết tay ở
@@ -43,8 +44,8 @@ export type SeedRow = z.infer<typeof SeedRow>;
 export const SeedTable = z
   .strictObject({
     table: SqlIdent,
-    conflictKey: z.array(SqlIdent).min(1),
-    rows: z.array(SeedRow).min(1),
+    conflictKey: z.array(SqlIdent).min(1).max(8),
+    rows: z.array(SeedRow).min(1).max(100_000),
   })
   .superRefine((t, ctx) => {
     t.rows.forEach((row, i) => {
@@ -65,15 +66,15 @@ export type SeedTable = z.infer<typeof SeedTable>;
 export const SeedReference = z
   .strictObject({
     format: z.literal(SEED_REFERENCE_FORMAT),
-    databaseVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+    databaseVersion: z.string().regex(/^\d{1,6}\.\d{1,6}\.\d{1,6}$/),
     source: z.strictObject({
       /** Nơi bộ sinh chạy (repo code từ DB v2.3.4; trước đó Second-Brain). */
-      repo: z.string().min(1),
+      repo: z.string().min(1).max(255),
       rev: z.string().regex(/^[0-9a-f]{40}$/),
-      generator: z.string().min(1),
+      generator: z.string().min(1).max(255),
     }),
-    global: z.array(SeedTable),
-    perWorkspace: z.array(SeedTable),
+    global: z.array(SeedTable).max(BOUNDS.mediumList),
+    perWorkspace: z.array(SeedTable).max(BOUNDS.mediumList),
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
   })
   .superRefine((s, ctx) => {

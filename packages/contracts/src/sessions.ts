@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS, DbTimestamp } from './bounds.ts';
 import { QuotaSignal, TokenUsage, TURN_OUTCOMES, TurnClassification, type TurnOutcome } from './engine.ts';
 
 // Hợp đồng dịch vụ phiên (CNS-151): L-GW cung cấp, L-SYS / L-WORK gọi — đóng băng ở M0 để không phải chờ code.
@@ -120,20 +121,20 @@ export const TurnEvent = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('started'),
     sessionId: Ulid,
-    sessionDisplayId: z.string(),
+    sessionDisplayId: z.string().max(BOUNDS.displayId),
     engineAccountId: Ulid,
     /** 1 = lần đầu; > 1 = sau fallback sang loại CLI khác (chỉ Role). */
     attempt: z.number().int().positive(),
   }),
-  z.strictObject({ type: z.literal('phase'), phase: z.enum(SESSION_PHASES), at: z.string() }),
-  z.strictObject({ type: z.literal('delta'), text: z.string() }),
+  z.strictObject({ type: z.literal('phase'), phase: z.enum(SESSION_PHASES), at: DbTimestamp }),
+  z.strictObject({ type: z.literal('delta'), text: z.string().max(BOUNDS.streamText) }),
   z.strictObject({
     type: z.literal('tool'),
     stage: z.enum(['call', 'result']),
-    name: z.string().min(1),
-    callId: z.string().nullable(),
+    name: z.string().min(1).max(BOUNDS.name),
+    callId: z.string().max(BOUNDS.name).nullable(),
     /** Gateway từ chối (vd `credential_like_payload`) — chỉ mã, không nội dung. */
-    deniedCode: z.string().nullable(),
+    deniedCode: z.string().max(BOUNDS.code).nullable(),
   }),
   z.strictObject({ type: z.literal('usage'), usage: TokenUsage }),
   /** Quota gói của tài khoản đang chạy (CLI tự báo trong luồng) — L-GW cập nhật trạng thái tài khoản / UI. */
@@ -157,7 +158,7 @@ export const TurnResult = z.strictObject({
   failoverCount: z.number().int().nonnegative(),
   durationMs: z.number().int().nonnegative(),
   /** Văn bản trả lời cuối (đã qua bộ lọc che bí mật). */
-  text: z.string(),
+  text: z.string().max(BOUNDS.blobText),
   /** Role tự khai qua report_task (= chat_messages.certainty của tin final); tác tử khác / không khai ⇒ null. */
   certainty: z.enum(CERTAINTY_LEVELS).nullable(),
   /** Pha cuối đã ghi (sessions.phase); không tách được ⇒ null. */
