@@ -137,7 +137,17 @@ export const GW_03 = gw({
   // Dịch vụ KHÔNG nội suy slug / version vào shell: chỉ dùng EXEC_ARGV cố định (HANDLER-OBLIGATIONS #16).
   auth: 'O',
   o4: 'blocked',
-  request: { params: EngineParams, body: z.strictObject({ version: str(64, 1).nullable() }) },
+  request: {
+    params: EngineParams,
+    body: z.strictObject({
+      // Chỉ ký tự của semver / tag (không khoảng trắng, không ký tự shell); `null` = bỏ ghim.
+      version: z
+        .string()
+        .regex(/^[0-9A-Za-z.+-]{1,64}$/)
+        .meta({ example: '1.2.3' })
+        .nullable(),
+    }),
+  },
   response: ok(EngineRow),
   cli: ['engines pin'],
 });

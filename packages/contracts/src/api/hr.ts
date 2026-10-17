@@ -253,6 +253,9 @@ export const SYS_36 = hr({
   cli: ['role delete'],
 });
 
+/** Toạ độ trên bản đồ tri thức: hữu hạn, trong ±1e6 (chặn 1e308 / số làm hỏng layout). */
+const Coord = z.number().min(-1_000_000).max(1_000_000);
+
 // ---------------------------------------------------------------- DNA, ký, revision (A1, A3)
 const DNA_TEXT_MAX = 20_000;
 
@@ -859,7 +862,7 @@ export const SYS_62 = hr({
     params: z.strictObject({ roleRef: Ref('RL') }),
     body: z.strictObject({
       kind: z.enum(['skills', 'knowledge']),
-      positions: z.array(z.strictObject({ ref: Ref(['SK', 'KN']), x: z.number(), y: z.number() })).max(2000),
+      positions: z.array(z.strictObject({ ref: Ref(['SK', 'KN']), x: Coord, y: Coord })).max(2000),
     }),
   },
   response: noContent(),
