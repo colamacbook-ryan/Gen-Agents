@@ -117,7 +117,13 @@ Trigger 564 → 905 (+342 / −1 `schema_migrations_no_replace_u`); bộ test Py
   `created_by`; TS: `seedMinimal` tạo workspace trong `conn.bootstrap`; runner test ghi `schema_migrations` trong `conn.maintenance`.
 
 ### Mutation
-- (đang chạy — ghi kết quả ở commit sau)
+- **Lượt toàn bộ** (`228eb47`, 905 trigger, bộ 125 test, mỗi lượt DROP đúng 1 trigger + tiến trình + bản sao mới): **901/905 đỏ thật qua FAIL, 0 sống**,
+  4 nghi đỏ giả — `users_writer_u`, `workspaces_writer_i`, `tool_grants_writer_d`, `settings_rowid_lock` văng "no such trigger" ở đối chứng âm của
+  WRITER-all (`DROP TRIGGER` thiếu `IF EXISTS` — lỗi của test). Sửa ⇒ `mutate.py --only` 4 trigger đó: 4/4 đỏ qua FAIL, đối chứng 125/125.
+- **Đột biến mệnh đề** (sửa 1 mệnh đề trong generator, sinh lại, chạy nguyên bộ; `scratchpad/db235/clause_mut235.py`): 54 đột biến trên mọi nhánh cổng mới
+  (SYS_SYS, USR_SELF + 8 cột khoá, AS_SELF_REVOKE + 8 cột khoá, workspaces_writer_i, tự đăng ký bootstrap, membership chéo, owner_new_i/_u, rowid_lock,
+  cond_d, retention_d, xoá mặc định, xoá secrets / bot / CLI, ws_actor): lượt đầu 50 đỏ / 4 sống (no-op tự ghi phiên, đổi mốc gỡ thành viên đã gỡ,
+  owner_new_u nhánh bootstrap ×2) ⇒ thêm ca ⇒ 4/4 đỏ ⇒ **54/54 đỏ qua FAIL**.
 
 ## v2.3.4 — 2026-10-17
 

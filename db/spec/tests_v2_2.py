@@ -8202,10 +8202,10 @@ def t_v235_writer_all():
     by = {}
     for (t, op), k in cls.items():
         by.setdefault(op, {}).setdefault(k or 'miễn', []).append(t)
-    db.execute("DROP TRIGGER tool_grants_writer_d")
-    db.execute("DROP TRIGGER users_writer_u")
-    db.execute("DROP TRIGGER workspaces_writer_i")
-    db.execute("DROP TRIGGER settings_rowid_lock")
+    db.execute("DROP TRIGGER IF EXISTS tool_grants_writer_d")      # IF EXISTS: lượt mutation đã bỏ sẵn trigger này ⇒ không văng (đỏ qua FAIL)
+    db.execute("DROP TRIGGER IF EXISTS users_writer_u")
+    db.execute("DROP TRIGGER IF EXISTS workspaces_writer_i")
+    db.execute("DROP TRIGGER IF EXISTS settings_rowid_lock")
     db.execute("CREATE TRIGGER settings_rowid_lock BEFORE UPDATE OF rowid ON settings WHEN NEW.rowid IS NOT OLD.rowid AND (app_maint() = 0 OR 0) "
                "BEGIN SELECT RAISE(ABORT, 'x'); END")
     db.execute("CREATE TABLE fake_tbl (id TEXT PRIMARY KEY, workspace_id TEXT)")
