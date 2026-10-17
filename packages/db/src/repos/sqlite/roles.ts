@@ -639,18 +639,14 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
       if (accept.length === 0)
         throw invalidInput('không có mục nào được áp (mọi mục bị từ chối / đã cũ) — dùng reject');
       const isCore = accept.some((r) => r.isCore);
-      // Values > Nội quy > Polaris: đề xuất của AI / hệ thống chạm lõi (giá trị / tính cách) hoặc Nội quy ⇒ CHỈ owner áp.
-      // DB chưa có trigger tương ứng (đề xuất gửi lane DB) — repo là rào duy nhất ở M1.
+      // Values > Nội quy > Polaris: ÁP mục chạm lõi (giá trị / tính cách, DN lõi) hoặc Nội quy ⇒ CHỈ owner, BẤT KỂ ai đề
+      // xuất (Gen 2026-10-17: admin nằm trong mô hình đe doạ của INTENT — admin vẫn đề xuất được, chỉ không tự áp).
+      // DB chưa có trigger tương ứng (đề xuất v2.3.6 cho lane DB) — repo là rào duy nhất tới khi trigger về.
       const ownerGround = accept.some(
         (r) => r.isCore || (r.kind === 'instruction' && (r.main as InstructionRow).layer === 'house_rules'),
       );
       if (ownerGround && accessOf(ctx) !== 'owner') {
-        const proposer = ctx.r.get<{ kind: string }>('SELECT kind FROM actors WHERE id = ?', [cs.proposed_by]);
-        if (proposer?.kind !== 'user') {
-          throw permissionDenied(
-            `changeSets.apply: ${cs.display_id} do AI / hệ thống đề xuất chạm lõi hoặc Nội quy — chỉ owner được áp`,
-          );
-        }
+        throw permissionDenied(`changeSets.apply: ${cs.display_id} chạm lõi hoặc Nội quy — chỉ owner được áp`);
       }
       const note = input.note?.trim() || null;
       if (isCore && note === null) throw invalidInput('chạm lõi (giá trị / tính cách) ⇒ bắt buộc lý do (note)');

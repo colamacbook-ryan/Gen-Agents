@@ -2,7 +2,7 @@
 // chạm lõi / Nội quy (Values > Nội quy > Polaris: đất của owner).
 //   1. Quét TOÀN BỘ scope × lớp × op (bảng, không chọn tay) trên repo SQLite VÀ fake: ngoài phạm vi ⇒ repo.invalid_input,
 //      trong phạm vi ⇒ đề xuất được. Kỳ vọng tính bằng oracle viết riêng trong test (không gọi lại hàm của src).
-//   2. Đề xuất của AI / hệ thống chạm lõi (giá trị / tính cách, DN lõi) hoặc Nội quy ⇒ chỉ owner áp (admin bị chặn).
+//   2. ÁP mục chạm lõi (giá trị / tính cách, DN lõi) hoặc Nội quy ⇒ chỉ owner, BẤT KỂ ai đề xuất (admin đề xuất được, không tự áp).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -230,68 +230,97 @@ describe('phạm vi change set: quét scope × lớp × op', () => {
   });
 });
 
-describe('ai được áp thay đổi chạm lõi / Nội quy', () => {
+describe('ai được ÁP thay đổi chạm lõi / Nội quy (owner-only, bất kể ai đề xuất)', () => {
   let admin: string;
   beforeAll(() => {
     const u = f.store.createUser({ username: 'quantri', displayName: 'Quản trị', passwordHash: 'argon2id$x' });
     admin = f.store.write(f.ownerActorId, (tx) => tx.workspace.addMember({ userId: u.id, accessLevel: 'admin' })).actor
       .id;
   });
-  const sysPropose = (layer: InstructionLayer, by = f.systemActorId) => {
-    const where =
-      layer === 'house_rules'
-        ? { scope: 'workspace' as const }
-        : layer === 'position'
-          ? { scope: 'position' as const, positionId: sql.p1 }
-          : { scope: 'role' as const, roleId: sql.r2 };
-    return f.store.write(by, (tx) =>
-      tx.changeSets.propose({
-        ...where,
-        title: `đề xuất ${layer}`,
-        items: [{ ...createItem(layer), name: `${layer} ${by.slice(-6)}`, source: 'system' } as ChangeItemInput],
-      }),
-    ).changeSet.id;
+  /** Oracle độc lập: đất của owner = lớp giá trị / tính cách / Nội quy, DN lõi. */
+  const ownerGroundLayer = (layer: InstructionLayer) =>
+    layer === 'values' || layer === 'persona' || layer === 'house_rules';
+  const where = (layer: InstructionLayer) =>
+    layer === 'house_rules'
+      ? { scope: 'workspace' as const }
+      : layer === 'position'
+        ? { scope: 'position' as const, positionId: sql.p1 }
+        : { scope: 'role' as const, roleId: sql.r2 };
+  let n = 0;
+  const propose = (
+    by: string,
+    items: ChangeItemInput[],
+    w: Pick<ProposeChangeSetInput, 'scope' | 'roleId' | 'positionId'>,
+  ) => f.store.write(by, (tx) => tx.changeSets.propose({ ...w, title: `đề xuất ${++n}`, items }));
+  const inItem = (layer: InstructionLayer, by: string) =>
+    ({
+      ...createItem(layer),
+      name: `${layer} ${++n}`,
+      source: by === f.systemActorId ? 'system' : 'owner',
+    }) as ChangeItemInput;
+  const usedDefs = new Set<string>();
+  /** Mỗi lần một def DN chưa dùng cho Role r2 (tránh trùng ô (role, def, item_index)). */
+  const dnItem = (core: boolean, by: string): ChangeItemInput => {
+    const def = f.store.read(f.workspaceId, (tx) =>
+      tx.dna.defs().find((d) => d.is_core === (core ? 1 : 0) && d.is_list === 0 && !usedDefs.has(d.id)),
+    );
+    expect(def, `def DN ${core ? 'lõi' : 'thường'} chưa dùng`).toBeDefined();
+    usedDefs.add(def?.id as string);
+    return {
+      target: 'dna',
+      op: 'create',
+      defId: def?.id as string,
+      valueJson: '"x"',
+      tokenCount: 2,
+      tokenizer: 't',
+      source: by === f.systemActorId ? 'system' : 'owner',
+    };
   };
-  const applyAs = (actor: string, id: string) =>
-    f.store.write(actor, (tx) => tx.changeSets.apply(id, { note: 'duyệt' })).changeSet.status;
+  const applyAs = (actor: string, id: string, acceptItemIds?: string[]) =>
+    f.store.write(actor, (tx) => tx.changeSets.apply(id, { note: 'duyệt', acceptItemIds })).changeSet.status;
+  const denied = expect.objectContaining({ rule: 'permission.denied' });
 
-  it('đề xuất của hệ thống: lõi (values / persona) + Nội quy ⇒ admin bị chặn (permission.denied), owner áp được', () => {
-    for (const layer of LAYERS) {
-      const id = sysPropose(layer);
-      const ownerGround = layer === 'values' || layer === 'persona' || layer === 'house_rules';
-      if (ownerGround) {
-        expect(() => applyAs(admin, id), layer).toThrow(expect.objectContaining({ rule: 'permission.denied' }));
-        expect(applyAs(f.ownerActorId, id), layer).toBe('applied');
-      } else {
-        expect(applyAs(admin, id), layer).toBe('applied');
+  it('quét người đề xuất (hệ thống / admin / owner) × lớp IN × DN lõi / thường: admin đề xuất được nhưng chỉ owner áp đất của owner', () => {
+    const proposers = { system: f.systemActorId, admin, owner: f.ownerActorId };
+    const wrong: string[] = [];
+    let swept = 0;
+    for (const [who, by] of Object.entries(proposers)) {
+      const cases: { name: string; ownerGround: boolean; items: ChangeItemInput[]; w: ReturnType<typeof where> }[] = [
+        ...LAYERS.map((layer) => ({
+          name: `IN ${layer}`,
+          ownerGround: ownerGroundLayer(layer),
+          items: [inItem(layer, by)],
+          w: where(layer),
+        })),
+        { name: 'DN lõi', ownerGround: true, items: [dnItem(true, by)], w: where('values') },
+        { name: 'DN thường', ownerGround: false, items: [dnItem(false, by)], w: where('values') },
+      ];
+      for (const c of cases) {
+        const id = propose(by, c.items, c.w).changeSet.id; // đề xuất luôn được (kể cả admin chạm lõi)
+        swept++;
+        const label = `${who} đề xuất ${c.name}`;
+        let adminResult: string;
+        try {
+          adminResult = applyAs(admin, id);
+        } catch (e) {
+          adminResult = (e as { rule?: string }).rule ?? String(e);
+        }
+        const wantAdmin = c.ownerGround ? 'permission.denied' : 'applied';
+        if (adminResult !== wantAdmin) wrong.push(`${label}: admin áp ⇒ cần ${wantAdmin}, nhận ${adminResult}`);
+        if (c.ownerGround) {
+          const ownerResult = applyAs(f.ownerActorId, id);
+          if (ownerResult !== 'applied') wrong.push(`${label}: owner áp ⇒ ${ownerResult}`);
+        }
       }
     }
+    expect(swept).toBe(3 * (LAYERS.length + 2));
+    expect(wrong).toEqual([]);
   });
 
-  it('DN lõi do hệ thống đề xuất ⇒ chỉ owner áp; đề xuất của chính người (admin) chạm lõi ⇒ admin áp được', () => {
-    const core = f.store.read(f.workspaceId, (tx) => tx.dna.defs().find((d) => d.is_core === 1 && d.is_list === 0));
-    expect(core).toBeDefined();
-    const { changeSet } = f.store.write(f.systemActorId, (tx) =>
-      tx.changeSets.propose({
-        scope: 'role',
-        roleId: sql.r2,
-        title: 'DN lõi',
-        items: [
-          {
-            target: 'dna',
-            op: 'create',
-            defId: core?.id as string,
-            valueJson: '"lõi"',
-            tokenCount: 2,
-            tokenizer: 't',
-            source: 'system',
-          },
-        ],
-      }),
-    );
-    expect(() => applyAs(admin, changeSet.id)).toThrow(expect.objectContaining({ rule: 'permission.denied' }));
-    expect(applyAs(f.ownerActorId, changeSet.id)).toBe('applied');
-    // người (actor user) tự đề xuất ⇒ luật owner-only cho AI không áp dụng (owner / admin như cũ)
-    expect(applyAs(admin, sysPropose('values', admin))).toBe('applied');
+  it('luật tính trên mục được ÁP: admin áp phần thường, mục lõi bị loại ⇒ được; chọn cả mục lõi ⇒ bị chặn', () => {
+    const { changeSet, items } = propose(admin, [inItem('style', admin), inItem('values', admin)], where('values'));
+    const [style, values] = items.map((x) => x.id) as [string, string];
+    expect(() => applyAs(admin, changeSet.id, [style, values])).toThrow(denied);
+    expect(applyAs(admin, changeSet.id, [style])).toBe('partially_applied');
   });
 });

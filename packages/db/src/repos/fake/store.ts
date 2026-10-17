@@ -1670,7 +1670,7 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
         ),
       effectiveMode: (roleId, toolId) => {
         const tool = getOrNull('tools', toolId);
-        if (!tool || tool.status !== 'active' || tool.allowed_agents === 'system') return 'deny';
+        if (tool?.status !== 'active' || tool.allowed_agents === 'system') return 'deny';
         const g = live('tool_grants', (r) => r.tool_id === toolId && r.role_id === roleId).at(-1);
         return (g?.mode ?? tool.default_mode) as 'allow' | 'ask' | 'deny';
       },
