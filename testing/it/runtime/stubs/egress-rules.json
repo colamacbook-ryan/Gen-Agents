@@ -1,0 +1,3 @@
+{
+  "rules": [{ "host": "fake-source.ga.test", "ports": [8080], "allowPrivate": true }]
+}

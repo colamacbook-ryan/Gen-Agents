@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+# gen-agents-runtime-test — CHỈ DÙNG TRONG TEST (BUILD-PLAN §C.3): image runtime + nguồn cài `fake` của ga-engine-install +
+# CLI giả (testing/fakes, ở /opt/ga-fakes = fakesRoot mặc định của engine-source). KHÔNG BAO GIỜ phát hành.
+#   docker build -f deploy/docker/Dockerfile.runtime-test --build-arg BASE=gen-agents-runtime:local -t gen-agents-runtime-test:local .
+ARG BASE=gen-agents-runtime:local
+FROM ${BASE}
+COPY apps/runner/src/engine-install/fake-source.ts /opt/ga/app/apps/runner/src/engine-install/fake-source.ts
+COPY testing/fakes/package.json /opt/ga-fakes/package.json
+COPY testing/fakes/agy /opt/ga-fakes/agy
+COPY testing/fakes/claude /opt/ga-fakes/claude
+COPY testing/fakes/lib /opt/ga-fakes/lib
+# Cấu hình CLI giả: rootfs chỉ đọc ⇒ /etc/ga-fakes/config.json trỏ sang tmpfs; harness ghi /run/ga/ga-fakes-config.json
+# bằng `docker exec` (ASSUMPTIONS "Cấu hình qua tệp").
+USER root
+RUN mkdir -p /etc/ga-fakes && ln -s /run/ga/ga-fakes-config.json /etc/ga-fakes/config.json \
+ && echo 'GA-RUNTIME-TEST-IMAGE' > /opt/ga/TEST-IMAGE
+USER 10001:10001

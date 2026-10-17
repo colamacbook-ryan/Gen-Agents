@@ -1,0 +1,15 @@
+# Bối cảnh build của Dockerfile.runtime: mặc định loại hết, chỉ mở đúng thứ image cần.
+*
+!packages/contracts/package.json
+!packages/contracts/src/**
+!packages/engines/package.json
+!packages/engines/src/**
+!packages/security/package.json
+!packages/security/src/**
+!apps/runner/package.json
+!apps/runner/src/**
+!node_modules/.pnpm/zod@4.6.7/node_modules/zod/**
+# nguồn cài giả CHỈ ở image test
+apps/runner/src/engine-install/fake-source.ts
+# runner không băm mật khẩu ⇒ không kèm worker argon2 (cần hash-wasm)
+packages/security/src/argon2-worker.ts
