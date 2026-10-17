@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>chibi bench</title>
+<style>html,body{margin:0;background:#2b2b33}#g{display:grid;grid-template-columns:repeat(10,auto);justify-content:start}#g>div{overflow:visible}</style>
+</head>
+<body>
+<div id="g"></div>
+<script type="module">
+// Trang đo fps: ?n=30&size=64&secs=10&motion=full. Mỗi nhân vật lặp lại cho đủ n; trạng thái trải đều 16 trạng thái.
+import * as C from '/src/index.ts';
+
+const q = new URLSearchParams(location.search);
+const n = +(q.get('n') ?? 30), size = +(q.get('size') ?? 64), secs = +(q.get('secs') ?? 10);
+const base = '/skins/tam-quoc-chibi/1.0.0/';
+const manifest = await (await fetch(`${base}manifest.json`)).json();
+const chars = {};
+for (const c of manifest.characters) chars[c.file] = await (await fetch(`${base}${c.file}`)).json();
+C.loadSkinPack(manifest, (f) => chars[f]);
+const ids = C.cast().map((c) => c.id);
+const g = document.getElementById('g');
+for (let i = 0; i < n; i++) {
+  const d = document.createElement('div');
+  g.appendChild(d);
+  C.mount(d, ids[i % ids.length], C.AVATAR_STATES[(i * 5) % 16], { size, motion: q.get('motion') ?? 'full' });
+}
+window.__bench = async () => {
+  await new Promise((r) => setTimeout(r, 1500));
+  const t0 = performance.now(); let frames = 0, long = 0, last = t0;
+  await new Promise((done) => {
+    const tick = (t) => { frames++; if (t - last > 33) long++; last = t; if (t - t0 < secs * 1000) requestAnimationFrame(tick); else done(); };
+    requestAnimationFrame(tick);
+  });
+  const dt = (performance.now() - t0) / 1000;
+  return { n, size, fps: +(frames / dt).toFixed(1), long, frames, animations: document.getAnimations().length };
+};
+window.__ready = true;
+</script>
+</body>
+</html>

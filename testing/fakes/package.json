@@ -1,0 +1,25 @@
+{
+  "name": "@ga/fakes",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "CHỈ DÙNG TRONG TEST / IMAGE *-test, KHÔNG BAO GIỜ VÀO IMAGE PHÁT HÀNH: CLI giả (agy, claude) + máy chủ giả (vendor, telegram, update-feed, engine-source). BUILD-PLAN §C.2, §C.3.",
+  "exports": {
+    "./vendor": "./vendor/server.ts",
+    "./telegram": "./telegram/server.ts",
+    "./update-feed": "./update-feed/server.ts",
+    "./minisign": "./update-feed/minisign.ts",
+    "./engine-source": "./engine-source/server.ts",
+    "./engine-source/client": "./engine-source/client.ts",
+    "./creds": "./lib/creds.ts",
+    "./scenario": "./lib/scenario.ts"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@ga/contracts": "workspace:*"
+  }
+}

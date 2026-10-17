@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "id": "tq046",
+  "name": "Gia Cát Lượng",
+  "han": "諸葛亮",
+  "role": "Quân sư",
+  "faction": "Thục",
+  "kind": "muu",
+  "gender": "nam",
+  "own": "#2BB3A3",
+  "crop": [14, 4, 186],
+  "anim": {
+    "phase": "-0.6s",
+    "breath": "3.4s",
+    "blink": "4.4s",
+    "bdelay": "-1.1s"
+  },
+  "cover": {
+    "target": [100, 101],
+    "propAngle": -70
+  },
+  "note": "che nửa mặt cười đắc ý + bóng đèn \"Kế!\"; chờ / bị trừ ₲: Không Thành Kế, cười mỉm mà mồ hôi lạnh; thưởng: quạt phe phẩy",
+  "p": {
+    "skin": "#F7D9BD",
+    "robe": "#F1EEE6",
+    "trim": "#25242C",
+    "sash": "#25242C",
+    "inner": "#E4E8F0",
+    "sleeve": 34,
+    "hem": "feather",
+    "glow": "#4F86C4",
+    "cap": "soft",
+    "capColor": "#2E3B6E",
+    "capAccent": "#8F9CC8",
+    "brow": "soft",
+    "eyes": "round",
+    "mouth": "smile",
+    "crownY": 4,
+    "beard": "none",
+    "prop": "fan",
+    "armL": [10, 42],
+    "armR": [26, 32],
+    "tails": true
+  },
+  "identity": {
+    "p1": "prop-fan",
+    "must": [
+      {
+        "p": 1,
+        "label": "Quạt lông vũ (羽扇)",
+        "check": {
+          "part": "prop-fan"
+        }
+      },
+      {
+        "p": 2,
+        "label": "Khăn luân cân (綸巾) + áo hạc sưởng (鶴氅, vạt lông hạc)",
+        "check": {
+          "all": [
+            {
+              "part": "cap-lunjin"
+            },
+            {
+              "part": "hem-feather"
+            }
+          ]
+        }
+      },
+      {
+        "p": 3,
+        "label": "Áo trắng viền đen (素衣皂縧)",
+        "check": {
+          "all": [
+            {
+              "fill": "robe",
+              "is": "white"
+            },
+            {
+              "trim": "robe",
+              "is": "dark"
+            }
+          ]
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Không Thành Kế: cười mỉm 笑容可掬 + giọt mồ hôi lạnh (normal)",
+        "check": {
+          "phase": {
+            "state": "normal",
+            "where": {
+              "eyes": "happy",
+              "emote": "sweat"
+            }
+          }
+        }
+      }
+    ],
+    "colors": ["#F1EEE6 trắng (áo)", "#25242C đen (viền, đai)", "#2E3B6E xanh than (khăn)"],
+    "props": ["quạt lông vũ"],
+    "face": "mặt thường (lão sinh [P]), nét thanh tú; không vẽ mặt nạ",
+    "source": "TQDN-038, TQDN-093, TQDN-095; TQC-35 (research §4.1 #5)"
+  }
+}

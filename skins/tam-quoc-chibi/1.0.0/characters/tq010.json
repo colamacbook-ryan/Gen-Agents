@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "id": "tq010",
+  "name": "Điêu Thuyền",
+  "han": "貂蟬",
+  "role": "Ca vũ",
+  "faction": "Khác",
+  "kind": "van",
+  "gender": "nu",
+  "own": "#E58DB5",
+  "crop": [8, 0, 188],
+  "anim": {
+    "phase": "-1.5s",
+    "breath": "3.8s",
+    "blink": "3.9s",
+    "bdelay": "-2.0s"
+  },
+  "note": "múa xoay, tay áo nước bay; liếc mắt khéo qua lại; hờn thì che miệng sau tay áo; bị trừ ₲ thì ngất kịch trong tay áo (không gợi cảm hoá)",
+  "p": {
+    "face": "oval",
+    "skin": "#FBE6D6",
+    "blush": "#F59DB3",
+    "hair": "#2A1F2E",
+    "iris": "#3A2438",
+    "glow": "#C25A8A",
+    "liner": true,
+    "robe": "#F2A9C6",
+    "trim": "#B9A3E6",
+    "sash": "#8E7CC3",
+    "inner": "#FFF1F6",
+    "buckle": "#F2D06B",
+    "sleeve": 34,
+    "collar": "high",
+    "ribbon": "#EDE3FF",
+    "flower": "#F7A6C6",
+    "crownY": 14,
+    "cap": "flowerbun",
+    "brow": "thin",
+    "eyes": "big",
+    "mouth": "small",
+    "beard": "none",
+    "prop": "silkfan",
+    "armL": [12, 40],
+    "armR": [28, 30]
+  },
+  "identity": {
+    "p1": "water-sleeve",
+    "must": [
+      {
+        "p": 1,
+        "label": "Tay áo nước dài (水袖)",
+        "check": {
+          "part": "water-sleeve"
+        }
+      },
+      {
+        "p": 2,
+        "label": "Búi tóc cài hoa + trâm (簪花)",
+        "check": {
+          "part": "cap-flowerbun"
+        }
+      },
+      {
+        "p": 3,
+        "label": "Quạt lụa / hoa (vầng trăng, hoa)",
+        "check": {
+          "part": "prop-silkfan"
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Hồng + tím nhạt [ĐX]",
+        "check": {
+          "fill": "robe",
+          "is": "pink"
+        }
+      },
+      {
+        "label": "Không gợi cảm hoá: cổ áo kín, váy dài (research §6.8)",
+        "check": {
+          "part": "collar-high"
+        }
+      },
+      {
+        "label": "Gag: liếc mắt qua lại (liner + sideL/sideR), múa xoay",
+        "check": {
+          "all": [
+            {
+              "phase": {
+                "state": "normal",
+                "where": {
+                  "eyes": "sideL"
+                }
+              }
+            },
+            {
+              "token": {
+                "state": "normal",
+                "has": "twirl"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "colors": ["#F2A9C6 hồng (áo)", "#B9A3E6 tím nhạt (viền)", "#E3D4FA tím nhạt (tay áo nước)"],
+    "props": ["tay áo nước", "quạt lụa"],
+    "face": "hoa đán [P], mặt trang điểm đẹp, thanh tú",
+    "source": "TQDN-008; TQC-07; en.wikipedia Chinese opera costume (research §4.4 #27, §6.8)"
+  }
+}
