@@ -155,8 +155,10 @@ export interface ScrollToIdOptions {
 }
 
 export interface ActiveCell {
+  /** display_id của hàng */
   id: string;
-  col: string;
+  /** chữ cột; null = ô "Duyệt" (không phải cột DB) */
+  col: string | null;
 }
 
 export interface DataGridHandle {
