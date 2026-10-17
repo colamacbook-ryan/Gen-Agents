@@ -686,9 +686,11 @@ function fastest(fn: () => unknown): number {
 }
 
 // Trần thời gian chỉ để tách TUYẾN TÍNH (~10–30 ms / MiB cho cả bộ) khỏi SIÊU TUYẾN TÍNH (bậc hai trên 1 MiB ≈ 10^12 bước,
-// hàng phút): 200 ms chừa biên cho máy CI bận + vitest chạy song song nhiều tệp test, vẫn bắt được ReDoS với biên cực lớn.
+// hàng phút). Trần 2000 ms (trước là 200 ms): đo trên máy dùng chung tải nặng (load average ~24, nhiều lane chạy song song)
+// các ca TUYẾN TÍNH chạy tới ~480 ms ⇒ trần 200 ms đỏ giả và chặn cổng commit; ReDoS bậc hai ≫ 10^5 ms nên 2000 ms vẫn tách rõ.
+// Phép kiểm tỉ lệ (1 MiB / 256 KiB) bên dưới không phụ thuộc tải.
 // Ở runtime chuỗi không bao giờ tới 1 MiB: payloadLimitExceeded chặn > 16 KiB / chuỗi, > 64 KiB / payload TRƯỚC khi quét.
-const SCAN_BUDGET_MS = 200;
+const SCAN_BUDGET_MS = 2000;
 
 describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dưới trần tuyến tính', () => {
   const adversarial: Record<string, string> = {

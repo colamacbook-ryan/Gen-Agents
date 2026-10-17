@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS, BoundedJson, DbTimestamp } from './bounds.ts';
 import { EngineInstallStatus } from './engine.ts';
 import { CREDENTIAL_PATTERN_IDS, MCP_TOOLS, UI_TOOLS } from './mcp.ts';
 import { PtyCloseReason } from './supervisor.ts';
@@ -33,14 +34,14 @@ export const AVATAR_STATES = [
 const Ulid = z.string().length(26);
 const Severity = z.enum(['ok', 'info', 'warn', 'danger']);
 
-const base = { id: z.string().min(1), workspaceId: Ulid, at: z.string() };
+const base = { id: z.string().min(1).max(64), workspaceId: Ulid, at: DbTimestamp };
 
 export const SseEvent = z.discriminatedUnion('type', [
   z.strictObject({
     ...base,
     type: z.literal('role.state'),
     roleId: Ulid,
-    lifecycle: z.string(),
+    lifecycle: z.string().max(32),
     runtime: z.enum(['none', 'sleeping', 'starting', 'running', 'error', 'stopped']),
   }),
   z.strictObject({
@@ -48,47 +49,53 @@ export const SseEvent = z.discriminatedUnion('type', [
     type: z.literal('avatar.state'),
     roleId: Ulid,
     state: z.enum(AVATAR_STATES),
-    sourceDisplayId: z.string().nullable(),
-    expiresAt: z.string().nullable(),
+    sourceDisplayId: z.string().max(BOUNDS.displayId).nullable(),
+    expiresAt: DbTimestamp.nullable(),
   }),
-  z.strictObject({ ...base, type: z.literal('chat.delta'), threadId: Ulid, messageId: Ulid, text: z.string() }),
+  z.strictObject({
+    ...base,
+    type: z.literal('chat.delta'),
+    threadId: Ulid,
+    messageId: Ulid,
+    text: z.string().max(BOUNDS.streamText),
+  }),
   z.strictObject({
     ...base,
     type: z.literal('chat.tool'),
     threadId: Ulid,
     messageId: Ulid,
-    tool: z.string(),
+    tool: z.string().max(BOUNDS.name),
     stage: z.enum(['call', 'result']),
-    deniedCode: z.string().nullable(),
+    deniedCode: z.string().max(BOUNDS.code).nullable(),
   }),
   z.strictObject({
     ...base,
     type: z.literal('ui.action'),
     threadId: Ulid,
     action: z.enum(UI_TOOLS),
-    uiActionDisplayId: z.string(),
-    args: z.json(),
+    uiActionDisplayId: z.string().max(BOUNDS.displayId),
+    args: BoundedJson,
   }),
   z.strictObject({
     ...base,
     type: z.literal('notification'),
-    notificationDisplayId: z.string(),
+    notificationDisplayId: z.string().max(BOUNDS.displayId),
     severity: Severity,
-    kind: z.string(),
+    kind: z.string().max(BOUNDS.code),
   }),
   z.strictObject({
     ...base,
     type: z.literal('core_agent.status'),
     /** = v_core_agent_status.mode */
     mode: z.enum(['setup', 'ok', 'recovery']),
-    reason: z.string().nullable(),
+    reason: z.string().max(BOUNDS.code).nullable(),
     isIncident: z.boolean(),
   }),
   z.strictObject({
     ...base,
     type: z.literal('job.progress'),
-    jobDisplayId: z.string(),
-    kind: z.string(),
+    jobDisplayId: z.string().max(BOUNDS.displayId),
+    kind: z.string().max(BOUNDS.code),
     status: z.enum(['queued', 'running', 'succeeded', 'failed', 'dead', 'cancelled']),
     progressPct: z.number().int().min(0).max(100).nullable(),
   }),
@@ -102,11 +109,16 @@ export const SseEvent = z.discriminatedUnion('type', [
     ...base,
     type: z.literal('probe.result'),
     engineAccountId: Ulid,
-    probeDisplayId: z.string(),
+    probeDisplayId: z.string().max(BOUNDS.displayId),
     kind: z.enum(['login_check', 'capability_scan']),
     status: z.enum(['running', 'ok', 'partial', 'failed']),
   }),
-  z.strictObject({ ...base, type: z.literal('engine.install'), engineSlug: z.string(), status: EngineInstallStatus }),
+  z.strictObject({
+    ...base,
+    type: z.literal('engine.install'),
+    engineSlug: z.string().max(32),
+    status: EngineInstallStatus,
+  }),
   z.strictObject({ ...base, type: z.literal('pty.closed'), engineAccountId: Ulid, reason: PtyCloseReason }),
   /** Cảnh báo owner (A0) khi gateway chặn payload giống credential (CNS-169) — không mang payload, không phải án phạt. */
   z.strictObject({
@@ -116,7 +128,7 @@ export const SseEvent = z.discriminatedUnion('type', [
     tool: z.union([z.enum(MCP_TOOLS), z.literal('unknown')]),
     patternId: z.enum(CREDENTIAL_PATTERN_IDS),
     severity: z.literal('warn'),
-    auditDisplayId: z.string(),
+    auditDisplayId: z.string().max(BOUNDS.displayId),
   }),
 ]);
 export type SseEvent = z.infer<typeof SseEvent>;

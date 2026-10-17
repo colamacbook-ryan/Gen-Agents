@@ -1,4 +1,6 @@
 export * from './actors.ts';
+export * from './api/index.ts';
+export * from './bounds.ts';
 export * from './clock.ts';
 export * from './engine.ts';
 export * from './errors.ts';
