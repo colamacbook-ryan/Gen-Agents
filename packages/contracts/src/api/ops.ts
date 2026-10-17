@@ -324,7 +324,8 @@ export const OPS_14 = ops({
   id: 'OPS-14',
   method: 'POST',
   path: '/update/start',
-  auth: 'A',
+  // Cập nhật bản của chính hệ thống chạy mã mới có quyền lớn nhất ⇒ owner (Gen: mọi update / pin = owner). Kiểm feed (OPS-13) giữ A.
+  auth: 'O',
   o4: 'open',
   // Lệnh đóng `start_update` (không tham số); rồi SSE `update.step`.
   response: accepted(UpdaterStatus),

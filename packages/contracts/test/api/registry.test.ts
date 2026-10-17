@@ -150,7 +150,9 @@ describe('registry — quyền', () => {
       'SYS-11',
       'SYS-36',
       'SYS-79',
-      // GW-07, GW-08: nâng từ A lên O (rà soát bảo mật 2026-10-17); GW-11…14 theo đặc tả.
+      // GW-07, GW-08: nâng từ A lên O (rà soát bảo mật 2026-10-17); GW-11…14 theo đặc tả; GW-03/04, OPS-14: mọi update / pin = owner.
+      'GW-03',
+      'GW-04',
       'GW-07',
       'GW-08',
       'GW-11',
@@ -166,6 +168,7 @@ describe('registry — quyền', () => {
       'WRK-12',
       'OPS-10',
       'OPS-11',
+      'OPS-14',
       'OPS-15',
       'OPS-30',
       'OPS-31',
