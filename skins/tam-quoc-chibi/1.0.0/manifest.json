@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "pack": "tam-quoc-chibi",
+  "version": "1.0.0",
+  "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+  "license": "Proprietary — Afi Labs",
+  "attribution": null,
+  "paramsSchema": 1,
+  "characters": [
+    {
+      "asset_code": "tq046",
+      "file": "characters/tq046.json",
+      "name": "Gia Cát Lượng",
+      "han": "諸葛亮",
+      "faction": "Thục",
+      "char_kind": "strategist",
+      "gender": "male",
+      "params_sha256": "92ce3224717b2a81304d223c16e4986866fc130b85771a9e56dbc3fc4d8ebd3d"
+    },
+    {
+      "asset_code": "tq044",
+      "file": "characters/tq044.json",
+      "name": "Quan Vũ",
+      "han": "關羽",
+      "faction": "Thục",
+      "char_kind": "martial",
+      "gender": "male",
+      "params_sha256": "e413c6468c955707f88b11d5d4d8eecaa08807ed0d4803d9e1c782d2d503d4cd"
+    },
+    {
+      "asset_code": "tq080",
+      "file": "characters/tq080.json",
+      "name": "Tào Tháo",
+      "han": "曹操",
+      "faction": "Ngụy",
+      "char_kind": "lord",
+      "gender": "male",
+      "params_sha256": "899a31bacf05f16903b6e7c63aaf65565c5039b65c33d0edc4e4a47bd0d1f4cb"
+    },
+    {
+      "asset_code": "tq043",
+      "file": "characters/tq043.json",
+      "name": "Lưu Bị",
+      "han": "劉備",
+      "faction": "Thục",
+      "char_kind": "lord",
+      "gender": "male",
+      "params_sha256": "382d11838be92d6de8b711c5ae121242f44088688fe0d307081eaa9a38ffa688"
+    },
+    {
+      "asset_code": "tq045",
+      "file": "characters/tq045.json",
+      "name": "Trương Phi",
+      "han": "張飛",
+      "faction": "Thục",
+      "char_kind": "martial",
+      "gender": "male",
+      "params_sha256": "114f51c63c0d255be5c7c6d7b6a7e26fb880f0c3d67e4d5edf882786c60429e9"
+    },
+    {
+      "asset_code": "tq047",
+      "file": "characters/tq047.json",
+      "name": "Triệu Vân",
+      "han": "趙雲",
+      "faction": "Thục",
+      "char_kind": "martial",
+      "gender": "male",
+      "params_sha256": "c20857284545be00222bba2c662308370f614244cde78379a2cb4dcaab829659"
+    },
+    {
+      "asset_code": "tq010",
+      "file": "characters/tq010.json",
+      "name": "Điêu Thuyền",
+      "han": "貂蟬",
+      "faction": "Khác",
+      "char_kind": "civil",
+      "gender": "female",
+      "params_sha256": "a72a559d74245e4630865cd3290bf9b6279090e79d8f87b53d96bf3a47dcf304"
+    },
+    {
+      "asset_code": "tq141",
+      "file": "characters/tq141.json",
+      "name": "Tôn Thượng Hương",
+      "han": "孫尚香",
+      "faction": "Ngô",
+      "char_kind": "martial",
+      "gender": "female",
+      "params_sha256": "75f39f06bb3085732909dbd27004bea94a4a54da636cb3a04621e5f5282036a2"
+    },
+    {
+      "asset_code": "tq031",
+      "file": "characters/tq031.json",
+      "name": "Hoa Đà",
+      "han": "華佗",
+      "faction": "Khác",
+      "char_kind": "civil",
+      "gender": "male",
+      "params_sha256": "3f3e1d8dfe41c4b0a093f6c0b1cda549fb9485d4adb032af3042004b32510e4f"
+    },
+    {
+      "asset_code": "tqx001",
+      "file": "characters/tqx001.json",
+      "name": "Lính quèn",
+      "han": "小卒",
+      "faction": "Không phe",
+      "char_kind": "soldier",
+      "gender": "male",
+      "params_sha256": "4aafbd618334f7c05b6ce0326c757c8a5b2ee26a8e8f3aa281ae17aca389eb70"
+    }
+  ]
+}

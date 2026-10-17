@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "id": "tq047",
+  "name": "Triệu Vân",
+  "han": "趙雲",
+  "role": "Võ tướng trẻ",
+  "faction": "Thục",
+  "kind": "vo",
+  "gender": "nam",
+  "own": "#5FA8D3",
+  "crop": [0, 0, 200],
+  "anim": {
+    "phase": "-2.2s",
+    "breath": "3.6s",
+    "blink": "4.2s",
+    "bdelay": "-1.4s"
+  },
+  "note": "bế em bé A Đẩu không rời; nghe khen \"cả người là gan\" thì gan to hiện ở bụng; chờ thì suỵt cho em ngủ; ngủ cả hai cùng ngáy (không diễn cảnh ném em bé)",
+  "p": {
+    "face": "square",
+    "skin": "#F7DCC0",
+    "hair": "#22202A",
+    "glow": "#4F86C4",
+    "robe": "#DDE3EC",
+    "trim": "#7FA6D6",
+    "sash": "#7FA6D6",
+    "inner": "#EEF3F8",
+    "buckle": "#D6DEEB",
+    "sleeve": 28,
+    "armor": true,
+    "armorColor": "#CBD5E3",
+    "crownY": 6,
+    "cap": "band",
+    "capColor": "#8DB4E2",
+    "capAccent": "#C9D3E2",
+    "brow": "thick",
+    "eyes": "big",
+    "mouth": "smile",
+    "beard": "none",
+    "prop": "spear",
+    "front": "baby",
+    "armL": [28, 26],
+    "armR": [-28, 26],
+    "lockL": true,
+    "lockR": true
+  },
+  "identity": {
+    "p1": "prop-baby",
+    "must": [
+      {
+        "p": 1,
+        "label": "Bế em bé A Đẩu trước ngực (silhouette độc nhất)",
+        "check": {
+          "part": "prop-baby"
+        }
+      },
+      {
+        "p": 2,
+        "label": "Mặt vuông, mày rậm, mắt to (濃眉大眼，闊面)",
+        "check": {
+          "all": [
+            {
+              "part": "face",
+              "attr": {
+                "shape": "square"
+              }
+            },
+            {
+              "part": "brow-thick"
+            }
+          ]
+        }
+      },
+      {
+        "p": 3,
+        "label": "Thương dài (+ kiếm Thanh Cang)",
+        "check": {
+          "part": "prop-spear"
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Bạc trắng + xanh nhạt [ĐX] (tránh nhầm Mã Siêu áo trắng giáp bạc)",
+        "check": {
+          "all": [
+            {
+              "fill": "robe",
+              "is": "silver"
+            },
+            {
+              "trim": "robe",
+              "is": "paleBlue"
+            }
+          ]
+        }
+      },
+      {
+        "label": "Gag \"cả người là gan\" (TQDN-071): emote gan to ở bụng",
+        "check": {
+          "phase": {
+            "state": "normal",
+            "where": {
+              "emote": "gall"
+            }
+          }
+        }
+      }
+    ],
+    "colors": ["#DDE3EC bạc trắng (áo)", "#7FA6D6 xanh nhạt (viền, đai)", "#F6E7B8 vàng kem (tã em bé)"],
+    "props": ["em bé A Đẩu", "thương"],
+    "face": "vũ sinh [K], mặt thường",
+    "source": "TQDN-007, TQDN-041, TQDN-042, TQDN-071; TQC-36 (research §4.1 #4, §5 cụm 6 tướng trẻ)"
+  }
+}
