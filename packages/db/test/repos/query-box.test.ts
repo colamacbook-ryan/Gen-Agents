@@ -196,6 +196,7 @@ describe('biên dịch §8.3 / ví dụ §8.4 (không cần DB)', () => {
       ['LG', 'task:RL-0001', 'bad_value'],
       ['LG', 'mai', 'unknown_field'],
       ['RL', 'tokens>-7d', 'unknown_field'],
+      ['SK', 'engine:abc*', 'bad_value'],
     ];
     for (const [grid, input, code] of bad) {
       expect(() => compileGridQuery(grid, input, C), `${grid} ${input}`).toThrow(qerr(code));
@@ -364,7 +365,7 @@ function samples(grid: GridDef, field: FieldDef): string[] {
     case 'enum':
       return [`${n}:${ev[0]}`, `-${n}:${ev[0]},${ev[ev.length - 1]}`];
     case 'text':
-      return [`${n}:x`, `${n}:x*`, `${n}!=x`];
+      return field.eqSql === undefined ? [`${n}:x`, `${n}:x*`, `${n}!=x`] : [`${n}:x`, `${n}!=x`];
     case 'seq':
       return [`${n}:1`, `${n}>1`, `${n}:${grid.prefix}-0001`, `${n}:1..9`];
     case 'number':

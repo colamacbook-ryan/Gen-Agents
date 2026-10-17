@@ -175,8 +175,12 @@ function fieldCondition(
         const v0 = wordOf(a, raw, start);
         const v = f.sql === 't.name_norm' ? foldVi(v0) : v0;
         // `*` cuối chỉ là cú pháp tiền tố khi giá trị KHÔNG trích dẫn; "a*" = so bằng nguyên văn
-        if (a.kind === 'word' && v.endsWith('*')) push(`${f.sql} LIKE ? ESCAPE '\\'`, `${likeEscape(v.slice(0, -1))}%`);
-        else push(f.eqSql ?? `${f.sql} = ?`, v);
+        if (a.kind === 'word' && v.endsWith('*')) {
+          // trường so qua bảng phụ (eqSql) không có cột để LIKE ⇒ báo lỗi thay vì LIKE nhầm cột khoá
+          if (f.eqSql !== undefined)
+            throw new QueryBoxError('bad_value', raw, start, 'trường này không nhận tiền tố *');
+          push(`${f.sql} LIKE ? ESCAPE '\\'`, `${likeEscape(v.slice(0, -1))}%`);
+        } else push(f.eqSql ?? `${f.sql} = ?`, v);
         break;
       }
       case 'role': {
