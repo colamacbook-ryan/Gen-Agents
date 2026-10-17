@@ -32,7 +32,7 @@ Status markers (L-APP skeleton, `apps/control-plane/src/{http,context,events}`):
    - ✓ auto: `RecoveryGuard` reads `recoveryDecision` of the registry; no provider / provider error ⇒ recovery (fail-closed); `o4=core` asks `RecoveryProvider.isCoreAgentTarget` with the VALIDATED input only. Meta-test: every O4 reason × every mounted route.
    - ✗ L-SYS: the real `RecoveryProvider` (`v_core_agent_status`, `isCoreAgentTarget` from the DB).
    - ✗ lane: GW-05/06 in recovery: return only the Core agent's rows. SYS-78 resume: BLOCKED in recovery. WRK-14: in recovery, only `enabled:false` is allowed.
-5. **Masking for V** (`confidential`). Applies to: SYS-23 snapshot, SYS-37, SYS-54 summary, WRK-34/35, OPS-21 (V sees only the list of keys, not before/after), OPS-33/34/35 cells, OPS-36 snippet. — **✗ lane** (`ctx.actor.authLevel === 'V'`).
+5. **Masking for V** (`confidential`). Applies to: SYS-23 snapshot, SYS-37, SYS-54 summary, WRK-34/35, OPS-21 (V sees only the list of keys, not before/after), OPS-33/34/35 cells, OPS-36 snippet, OPS-02 (`SettingRow.redacted`), GW-05 / GW-06 (`AccountRow.redacted`). — **✗ lane** (the response schema only carries the `redacted` flag — output validation cannot tell whether the handler really masked) (`ctx.actor.authLevel === 'V'`).
 6. **SSE.** — **◐**
    - ✓ auto (`events/bus.ts`): filter each connection by workspace + audience (V/A/O/recipient) + recipient; replay buffer per workspace; replay re-checks the permission of the CURRENT connection; credential-like / off-schema events rejected; slow subscriber ⇒ `resync` + drop.
    - ✓ audience = `SSE_EVENT_AUDIENCE` + `sseEventAllows` of contracts (incl. `GRID_MIN_AUTH` for `grid.changed`).

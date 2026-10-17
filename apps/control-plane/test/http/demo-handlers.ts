@@ -61,6 +61,7 @@ export const DEMO_HANDLERS: readonly Handler[] = [
     writers: ['owner', 'admin'],
     writable: true,
     locked: null,
+    redacted: false,
   })),
   defineHandler('WRK-14', ({ params }, ctx) => {
     ctx.ref('RL', params.roleRef);
