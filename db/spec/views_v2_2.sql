@@ -196,7 +196,7 @@ SELECT t.*,
             END AS card_block_reason
 FROM tot t;
 
--- Leaderboard ₲ (MVP theo Ryan/Polaris): hạng cạnh tranh (đồng hạng khi bằng số dư: 1,1,3), khoảng cách tới hạng trên, Δ7 ngày
+-- Leaderboard ₲ (MVP theo Polaris): hạng cạnh tranh (đồng hạng khi bằng số dư: 1,1,3), khoảng cách tới hạng trên, Δ7 ngày
 -- v2.2.1 (CNS-048): "₲ kiếm được 7 ngày" = Σ reward + honesty_reward trong 7 ngày (thu nhập từ việc; trừ phần đã bị đảo vì ghi nhầm);
 -- KHÔNG gồm cấp phát, KHÔNG gồm phạt. Δ7 = biến động ròng của số dư, gồm mọi thứ. Chỉ hiển thị — hạng vẫn theo số dư (PRODUCT-SPEC A9).
 CREATE VIEW v_leaderboard AS
@@ -227,7 +227,7 @@ SELECT k.workspace_id, k.role_id, k.wallet_id, k.display_id, k.name, k.condition
                             IN ('reward', 'honesty_reward')))), 0) AS earned_7d_minor
 FROM ranked k;
 
--- Polaris (bảng mục tiêu của từng Role, Ryan 2026-10-15): đích cố định từ gen truy cầu + vị thế hiện tại + cơ hội. Luật chơi ở compiler.
+-- Polaris (bảng mục tiêu của từng Role, quyết định 2026-10-15): đích cố định từ gen truy cầu + vị thế hiện tại + cơ hội. Luật chơi ở compiler.
 CREATE VIEW v_role_polaris AS
 SELECT r.workspace_id, r.id AS role_id, r.display_id, r.name,
        (SELECT f.value_json FROM dna_fields f JOIN dna_field_defs d ON d.id = f.def_id
@@ -401,6 +401,9 @@ LEFT JOIN consents cn ON cn.id = a.consent_id;
 --   v2.3.1 (BUILD-PLAN §F.6 n, CNS-137 — [ĐỀ XUẤT — Gen vòng 10, BUILD-PLAN]): engine_install_state = trạng thái cài CLI của loại tài khoản (engine_installs;
 --   thiếu hàng ⇒ 'not_installed'); khác 'installed' ⇒ không sẵn sàng, not_ready_reason 'engine_not_installed' (ngay sau container_missing — không có CLI thì
 --   không đăng nhập / kiểm được gì) — = ENGINE_INSTALLED() trong CORE_READY / CORE_CALM của schema_v2_2.py; sửa một chỗ thì sửa cả hai.
+--   v2.3.4 (contracts ENGINE_UNRESTRICTED_REASON — L-ENG toolRestriction, Gen duyệt): tool_restriction_ok = CLI của loại tài khoản đã cài VÀ app đã kiểm có cơ chế
+--   giới hạn công cụ cho ĐÚNG phiên bản đang cài (engine_installs.tool_restriction_version = installed_version); 0 ⇒ không sẵn sàng, not_ready_reason
+--   'engine_unrestricted' — nhánh CUỐI (owner xử lý mọi lý do khác trước; cập nhật CLI làm kết luận cũ hết hiệu lực) — = ENGINE_RESTRICTED() trong CORE_READY.
 CREATE VIEW v_core_agent_accounts AS
 WITH wk AS (
   SELECT w.id AS workspace_id,
@@ -415,6 +418,8 @@ WITH wk AS (
          CASE WHEN vc.consent_state IN ('not_required', 'ok') THEN 1 ELSE 0 END AS consent_ok, vc.consent_state,
          COALESCE((SELECT ei.install_state FROM engine_installs ei WHERE ei.workspace_id = b.workspace_id AND ei.engine_slug = a.engine_slug
                    AND ei.deleted_at IS NULL), 'not_installed') AS engine_install_state,                                   -- v2.3.1 (CNS-137)
+         COALESCE((SELECT CASE WHEN er.install_state = 'installed' AND er.tool_restriction_version = er.installed_version THEN 1 ELSE 0 END FROM engine_installs er WHERE er.workspace_id = b.workspace_id
+                   AND er.engine_slug = a.engine_slug AND er.deleted_at IS NULL), 0) AS tool_restriction_ok,                   -- v2.3.4
          (SELECT lp.id FROM probe_runs lp JOIN containers lc ON lc.id = lp.container_id AND lc.workspace_id = b.workspace_id
             AND lc.kind = 'system' AND lc.deleted_at IS NULL
           WHERE lp.engine_account_id = a.id AND lp.trigger = 'login_check' AND lp.status <> 'running'
@@ -428,7 +433,7 @@ WITH wk AS (
 SELECT b.*, p.display_id AS last_login_check_display_id, p.status AS last_login_check_status, p.finished_at AS last_login_check_at,
        CASE WHEN b.is_enabled = 1 AND b.account_status = 'active' AND b.engine_slug = b.core_slug AND b.login_status = 'logged_in'
                  AND b.quota_state <> 'exhausted' AND b.outage_since IS NULL AND b.engine_install_state = 'installed'
-                 AND p.status IS 'ok' AND b.consent_ok = 1 THEN 1 ELSE 0 END AS is_ready,
+                 AND p.status IS 'ok' AND b.consent_ok = 1 AND b.tool_restriction_ok = 1 THEN 1 ELSE 0 END AS is_ready,
        CASE WHEN b.engine_slug <> b.core_slug THEN 'wrong_type'
             -- v2.2.7 (CNS-093): không còn container AI Hệ thống sống (lớp hai — trigger containers_system_last_* chặn khi còn binding)
             WHEN NOT EXISTS (SELECT 1 FROM containers sc WHERE sc.workspace_id = b.workspace_id AND sc.kind = 'system'
@@ -455,7 +460,8 @@ SELECT b.*, p.display_id AS last_login_check_display_id, p.status AS last_login_
             WHEN b.outage_since IS NOT NULL THEN 'outage'              -- v2.2.8 (CONTRACT-r8 §C): sự cố phía hãng (5xx)
             WHEN b.quota_state = 'exhausted' THEN 'quota_exhausted'   -- v2.2.8: hết quota
             WHEN p.id IS NULL THEN 'login_check_missing'
-            WHEN p.status <> 'ok' THEN 'login_check_' || p.status END AS not_ready_reason,
+            WHEN p.status <> 'ok' THEN 'login_check_' || p.status
+            WHEN b.tool_restriction_ok = 0 THEN 'engine_unrestricted' END AS not_ready_reason,                -- v2.3.4 (contracts ENGINE_UNRESTRICTED_REASON)
        CASE WHEN b.is_enabled = 1 AND b.account_status = 'active' AND b.engine_slug = b.core_slug
                  AND b.priority = (SELECT MIN(x.priority) FROM engine_bindings x JOIN engine_accounts xa ON xa.id = x.engine_account_id
                                      AND xa.workspace_id = x.workspace_id
@@ -480,7 +486,7 @@ WHERE sa.deleted_at IS NULL;
 --   mode 'ok'       = tài khoản Core agent sẵn sàng (= v_core_agent_accounts.is_ready = CORE_READY() của trigger);
 --   mode 'recovery' = đã khoá mà KHÔNG sẵn sàng ⇒ blocks_admin = 1: overlay chặn, không đóng được, overlay_text + nút "Xử lý ngay" (fix_target) và
 --                     "Xem log" (A8); AI Hệ thống tạm dừng — DB chặn phiên (sessions_core_agent_ready_*), job giữ 'queued'; DB chặn Role mới
---                     (roles_core_agent_ready_i); Role đang làm việc VẪN CHẠY bằng CLI của chính nó (Q-I7 [CHỐT — Ryan 2026-10-16]: "có, role vẫn chạy tiếp").
+--                     (roles_core_agent_ready_i); Role đang làm việc VẪN CHẠY bằng CLI của chính nó (Q-I7 [CHỐT 2026-10-16]).
 --   reason_text khớp chữ FS v2.4 (O4, tin Telegram §6.2): "đăng nhập hết hạn" · "sự cố từ hãng" · "hết quota" (UI nối dòng "mở lại lúc" riêng) · "tài khoản bị khoá"
 --                     · v2.2.9 "đang đăng nhập lại".
 --   incident_reason = lý do theo từ vựng failover_reason (login_expired / outage / quota_exhausted / account_suspended) khi khớp, NULL nếu khác.
@@ -496,7 +502,7 @@ WHERE sa.deleted_at IS NULL;
 --                  tính chờ đồng ý lại): "Core agent đang đăng nhập lại. Hoàn tất đăng nhập trước khi tiếp tục.";
 --     fix_hint     giữ, nay SUY RA = <màn của fix_target> || ': ' || owner_action (không còn bộ chữ riêng).
 --   Không có fallback tự động: không đổi tài khoản, không đổi loại CLI.
---   v2.2.10 (CONTRACT-r8c §A/§C — Q-R8a [CHỐT — Ryan 2026-10-16: "1,2,3 ok" (Q-R8a)]; cách làm [ĐỀ XUẤT — Gen vòng 8c]):
+--   v2.2.10 (CONTRACT-r8c §A/§C — Q-R8a [CHỐT 2026-10-16]; cách làm [ĐỀ XUẤT — Gen vòng 8c]):
 --     reason 'type_change_in_progress' "đang đổi loại Core agent" (owner vừa đổi loại lúc sự cố, tài khoản mới đang đăng nhập): is_incident 0,
 --       auto_recheck 0, fix_target a5.system, owner_action "Hoàn tất đăng nhập trong terminal", overlay_text "Core agent đang đổi loại CLI. Hoàn tất đăng
 --       nhập trước khi tiếp tục.", A0 warn; kiểm đạt ⇒ ok (mốc khoá lại = lần đạt đầu tiên của tài khoản mới).
@@ -515,6 +521,9 @@ WHERE sa.deleted_at IS NULL;
 --   v2.3.2 ([Gen quyết 2026-10-16]): install_state 'installing' (owner bấm "Cài lại CLI" / đang tải) ⇒ sub_reason 'installing', KHÔNG phải sự cố
 --     (is_incident 0 qua luật sub_reason, như relogin_in_progress): overlay "Đang cài CLI. Hoàn tất trước khi tiếp tục.", A0 warn, không chuông / Telegram
 --     (= ENGINE_INSTALLING trong CORE_CALM); not_installed / failed / thiếu hàng vẫn là sự cố.
+--   v2.3.4 (contracts ENGINE_UNRESTRICTED_REASON = 'engine_unrestricted'; chữ [ĐỀ XUẤT — lane DB]): reason 'engine_unrestricted' "CLI chưa có cơ chế giới hạn công
+--     cụ đã kiểm" (runner không dựng lượt — fail-closed): is_incident 1 (cổng đổi loại mở), auto_recheck 0, fix_target a5.system, owner_action "Cài lại CLI
+--     hoặc Đổi loại Core agent"; trước mốc khoá: mode setup, không overlay.
 CREATE VIEW v_core_agent_status AS
 WITH wk AS (
   SELECT w.id AS workspace_id, w.core_agent_locked_at,
@@ -545,6 +554,7 @@ WITH wk AS (
               WHEN 'relogin_in_progress' THEN 'đang đăng nhập lại' WHEN 'type_change_in_progress' THEN 'đang đổi loại Core agent'
               WHEN 'login_stalled' THEN 'đăng nhập bị bỏ dở'
               WHEN 'engine_not_installed' THEN 'CLI chưa được cài'                                                             -- v2.3.1 (CNS-137)
+              WHEN 'engine_unrestricted' THEN 'CLI chưa có cơ chế giới hạn công cụ đã kiểm'                                     -- v2.3.4
               END AS reason_text,
          CASE WHEN x.reason = 'consent_missing' AND x.consent_state = 'identity_changed' THEN 'identity_changed'
               WHEN x.reason = 'engine_not_installed' AND x.engine_install_state = 'installing' THEN 'installing' END AS sub_reason,   -- v2.3.2 (Gen quyết)
@@ -566,6 +576,7 @@ WITH wk AS (
               WHEN t.reason = 'container_missing' THEN 'Dựng lại container AI Hệ thống'
               WHEN t.reason IN ('relogin_in_progress', 'type_change_in_progress') THEN 'Hoàn tất đăng nhập trong terminal'
               WHEN t.reason = 'engine_not_installed' THEN 'Cài lại CLI'                                                   -- v2.3.1 (CNS-137)
+              WHEN t.reason = 'engine_unrestricted' THEN 'Cài lại CLI hoặc Đổi loại Core agent'                            -- v2.3.4
               END AS owner_action
   FROM t
 )
@@ -593,7 +604,7 @@ FROM u;
 
 -- v2.2.8 (CONTRACT-r8 §C): danh sách "Loại Core agent" ở Onboarding bước 2 = engine core_capable = 1 (antigravity, claude-code, openclaw).
 --   selectable = adapter_status 'ready' (= điều kiện CORE_VALID của trigger settings_core_agent_*); loại chưa ready hiện mờ kèm badge ("sắp có").
---   is_default = mặc định registry 'antigravity' (Q-I5 [CHỐT — Ryan 2026-10-16]) — cùng hằng CORE_DEFAULT của schema_v2_2.py.
+--   is_default = mặc định registry 'antigravity' (Q-I5 [CHỐT 2026-10-16]) — cùng hằng CORE_DEFAULT của schema_v2_2.py.
 CREATE VIEW v_core_agent_options AS
 SELECT e.slug, e.name, e.vendor, e.cli_binary, e.adapter_status, e.priority_order, e.requires_consent,
        CASE WHEN e.adapter_status = 'ready' THEN 1 ELSE 0 END AS selectable,
@@ -715,7 +726,8 @@ SELECT a.workspace_id, a.id AS engine_account_id, a.display_id, a.engine_slug, a
        -- 'identity_changed' (đăng nhập ra danh tính khác: đồng ý cũ hết hiệu lực, tick lại = CN- mới, giữ EN-/EB-); áp cho Role lẫn AI Hệ thống
        vc.consent_state, vc.consent_display_id,
        -- v2.3.1 (CNS-137): trạng thái cài CLI của loại tài khoản (A5 cột "CLI", nút "Cài lại") — thiếu hàng ⇒ 'not_installed'
-       COALESCE(ei.install_state, 'not_installed') AS engine_install_state, ei.installed_version AS engine_installed_version
+       COALESCE(ei.install_state, 'not_installed') AS engine_install_state, ei.installed_version AS engine_installed_version,
+       CASE WHEN ei.install_state = 'installed' AND ei.tool_restriction_version = ei.installed_version THEN 1 ELSE 0 END AS engine_tool_restriction_ok   -- v2.3.4: 0 ⇒ runner từ chối lượt (engine_unrestricted)
 FROM engine_accounts a
 JOIN v_account_consent vc ON vc.engine_account_id = a.id
 LEFT JOIN engine_bindings b ON b.engine_account_id = a.id AND b.workspace_id = a.workspace_id AND b.deleted_at IS NULL
@@ -731,6 +743,7 @@ CREATE VIEW v_engine_installs AS
 SELECT w.id AS workspace_id, e.slug AS engine_slug, e.name AS engine_name, e.adapter_status, e.core_capable,
        i.id AS engine_install_id, COALESCE(i.install_state, 'not_installed') AS install_state, i.installed_version, i.failure_reason, i.detail,
        i.checked_at, COALESCE(i.updated_at, i.created_at) AS state_changed_at,
+       i.tool_restriction_version, CASE WHEN i.install_state = 'installed' AND i.tool_restriction_version = i.installed_version THEN 1 ELSE 0 END AS tool_restriction_ok,           -- v2.3.4 (engine_unrestricted)
        CASE WHEN e.slug = COALESCE((SELECT json_extract(s.value_json, '$') FROM settings s WHERE s.workspace_id = w.id
                                     AND s.key = 'system.core_agent_engine' AND s.deleted_at IS NULL), 'antigravity') THEN 1 ELSE 0 END AS is_core_agent_type
 FROM workspaces w CROSS JOIN engines e
@@ -861,7 +874,7 @@ FROM employee_cards c, json_each(c.checks_json) j
 WHERE c.deleted_at IS NULL;
 
 -- Onboarding v3 bước 5 "setup_checklist" (CNS-010): 7 mã cố định OB-01…OB-07, tính từ bảng thật; không bao giờ đọc password_hash
--- v2.2.5 (INT-20, Ryan 2026-10-15): AI Hệ thống chạy trên Core agent = setting system.core_agent_engine (ST-0017; thiếu ⇒ 'antigravity' — v2.2.8, Q-I5 [CHỐT — Ryan 2026-10-16]).
+-- v2.2.5 (INT-20, quyết định 2026-10-15): AI Hệ thống chạy trên Core agent = setting system.core_agent_engine (ST-0017; thiếu ⇒ 'antigravity' — v2.2.8, Q-I5 [CHỐT 2026-10-16]).
 --   Không còn bước "chọn engine Hệ thống". OB-04 = Core agent đã đăng nhập (đếm tài khoản SẴN SÀNG: binding hệ thống sống + bật,
 --   cùng loại Core agent, login_status logged_in, có probe 'ok' trong container AI Hệ thống): 0 ⇒ err, 1 ⇒ warn (chưa có failover), ≥2 ⇒ ok.
 --   v2.2.6 (CONTRACT-r6 A1): OB-04 chỉ HAI trạng thái — 0 sẵn sàng ⇒ err, ≥1 ⇒ ok; đúng 1 ⇒ check_detail trung tính "1 tài khoản · chưa có
@@ -946,7 +959,7 @@ FROM k;
 
 -- v2.2 (CNS-032/037): MỘT bảng mức phạt theo hạng, đọc từ settings economy.penalty.* (đơn vị basis point, như penalty_rate_bp)
 -- — mọi màn (modal "Trừ ₲", Cài đặt › Kinh tế, khối Polaris P2/P3, tab Ví) đọc view này; không màn nào giữ bộ số riêng.
--- Mặc định = setting registry trong code (seed ghi sẵn cùng số). Q-R7 [CHỐT — Ryan duyệt 2026-10-15] — mọi số vẫn chỉnh được (harness khoá).
+-- Mặc định = setting registry trong code (seed ghi sẵn cùng số). Q-R7 [CHỐT 2026-10-15] — mọi số vẫn chỉnh được (harness khoá).
 CREATE VIEW v_penalty_presets AS
 WITH s AS (
   SELECT w.id AS workspace_id,
@@ -974,7 +987,7 @@ SELECT workspace_id, 'harness_violation', 4, 'exact', harness_bp, json_array(har
        || CASE WHEN self_confessed = 1 THEN '; Role tự khai → hạng tự báo' ELSE '; Role tự khai vẫn áp mức này' END FROM s;
 
 -- v2.2 (CNS-035): lưới Trọng thương — mỗi lần vào trạng thái: việc tạm chờ, cam kết sắp đến hạn, tự xét lỗi (chạy lại được?),
--- bài học chờ duyệt, mức gợi ý hồi phục (setting). Hồi phục = bất kỳ khoản cấp > 0 (Ryan); gợi ý chỉ là số điền sẵn.
+-- bài học chờ duyệt, mức gợi ý hồi phục (setting). Hồi phục = bất kỳ khoản cấp > 0; gợi ý chỉ là số điền sẵn.
 CREATE VIEW v_role_wounds AS
 SELECT w.workspace_id, w.id AS role_wound_id, w.display_id, w.role_id, r.display_id AS role_display_id, r.name,
        w.started_at, w.ended_at, CASE WHEN w.ended_at IS NULL THEN 1 ELSE 0 END AS is_open,
@@ -1020,7 +1033,7 @@ FROM avatars a JOIN roles r ON r.id = a.role_id
 LEFT JOIN skin_assets s ON s.id = a.skin_asset_id
 WHERE a.source = 'library' AND r.deleted_at IS NULL;
 
--- v2.3.0 (CONTRACT-r9 §A — Kho nhân vật A11 [CHỐT — Ryan 2026-10-16: "ok kho làm ở mvp, xưởng để gđ2" (Q-I8)]; cột / luật [ĐỀ XUẤT — Gen vòng 9]):
+-- v2.3.0 (CONTRACT-r9 §A — Kho nhân vật A11 — Q-I8 [CHỐT 2026-10-16]; cột / luật [ĐỀ XUẤT — Gen vòng 9]):
 -- lưới Kho (Nhân sự › Kho nhân vật) — một hàng mỗi nhân vật thư viện còn sống (SN-), gồm cả đã tắt / đã rút (cột Trạng thái). is_selectable = chọn được
 -- (= SN_SELECTABLE của schema_v2_2.py: còn sống + active + đang bật) — tab Thư viện của modal Ảnh đại diện (A1) đọc CÙNG view, lọc is_selectable = 1.
 -- roles_using = số Role còn sống đang dùng nhân vật làm avatar hiện hành (cùng định nghĩa với skin_assets_in_use_d/_u); danh sách Role = v_skin_pack_usage
