@@ -6,20 +6,26 @@
 //   GA_SECURE_COOKIES         "1" khi sau HTTPS (cookie Secure + __Host-)
 //   GA_DB_PATH                mặc định /data/db/gen.sqlite
 //   GENAGENTS_MASTER_KEY_FILE mặc định /run/secrets/ga_master_key (keyring: dòng đầu = khoá hiện hành)
-import type { AddressInfo } from 'node:net';
+//   GA_TRUSTED_PROXIES        IP socket của proxy tin cậy (Caddy), phân tách dấu phẩy — chỉ khi đó mới đọc X-Forwarded-For
+//   GA_SEED_PATH              seed tham chiếu (mặc định db/spec/seed_reference.json của repo) — bootstrap bản cài (L-SYS)
+//   GA_FIRST_PASSWORD_PATH    tệp mật khẩu lần đầu (mặc định /data/run/first-password)
+import { readFileSync } from 'node:fs';
+import { type AddressInfo, isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Clock, systemClock } from '@ga/contracts';
-import { openReader, openWriter } from '@ga/db';
+import { openReader, openWriter, verifySeedReference } from '@ga/db';
 import { masterKeyring } from '@ga/db/audit-writer';
 import { createSqliteStore } from '@ga/db/sqlite';
 import { assertNoRawKeysInEnv, deriveSubkey, keyFilePath, loadMasterKeyringFromFile } from '@ga/security';
 import { serve } from '@hono/node-server';
 import { type CreatedApp, createApp } from './app.ts';
-import { AuthService, SqliteAuthStore } from './auth/index.ts';
+import { AuthService, FIRST_PASSWORD_PATH, firstPasswordFile, OWNER_USERNAME, SqliteAuthStore } from './auth/index.ts';
 import { InMemoryEventBus } from './events/bus.ts';
 import { PRODUCTION_HANDLERS } from './http/handlers.ts';
 import { createStderrLogger, formatLogLine, type Logger } from './http/logger.ts';
+import { bootstrapInstall } from './onboarding/bootstrap.ts';
+import { createDbRecoveryProvider } from './recovery/provider.ts';
 
 export class ServerConfigError extends Error {
   constructor(message: string) {
@@ -35,7 +41,13 @@ export interface ServerConfig {
   secureCookies: boolean;
   dbPath: string;
   masterKeyFile: string;
+  trustedProxies: string[];
+  seedPath: string;
+  firstPasswordPath: string;
 }
+
+const DEFAULT_SEED_PATH = fileURLToPath(new URL('../../../db/spec/seed_reference.json', import.meta.url));
+const SAFE_PATH_RE = /^\/[A-Za-z0-9_./-]{1,255}$/;
 
 const ORIGIN_RE = /^https?:\/\/[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?$/;
 
@@ -59,6 +71,16 @@ export function loadServerConfig(env: Readonly<Record<string, string | undefined
   const dbPath = env.GA_DB_PATH ?? '/data/db/gen.sqlite';
   if (!/^\/[A-Za-z0-9_./-]{1,255}$/.test(dbPath))
     throw new ServerConfigError('GA_DB_PATH phải là đường tuyệt đối an toàn');
+  const trustedProxies = (env.GA_TRUSTED_PROXIES ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const p of trustedProxies) if (isIP(p) === 0) throw new ServerConfigError('GA_TRUSTED_PROXIES phải là IP');
+  const seedPath = env.GA_SEED_PATH ?? DEFAULT_SEED_PATH;
+  const firstPasswordPath = env.GA_FIRST_PASSWORD_PATH ?? FIRST_PASSWORD_PATH;
+  if (!SAFE_PATH_RE.test(seedPath) || !SAFE_PATH_RE.test(firstPasswordPath)) {
+    throw new ServerConfigError('GA_SEED_PATH / GA_FIRST_PASSWORD_PATH phải là đường tuyệt đối an toàn');
+  }
   const secure = env.GA_SECURE_COOKIES ?? '0';
   if (secure !== '0' && secure !== '1') throw new ServerConfigError('GA_SECURE_COOKIES phải là 0 hoặc 1');
   return {
@@ -68,6 +90,9 @@ export function loadServerConfig(env: Readonly<Record<string, string | undefined
     secureCookies: secure === '1',
     dbPath,
     masterKeyFile: keyFilePath('masterKey', env),
+    trustedProxies,
+    seedPath,
+    firstPasswordPath,
   };
 }
 
@@ -96,8 +121,13 @@ export async function startServer(created: CreatedApp, opts: { host: string; por
   };
 }
 
-/** Dựng toàn bộ phụ thuộc production từ cấu hình. RecoveryProvider của L-SYS chưa có ⇒ fail-closed (coi như recovery). */
-export function buildProductionApp(cfg: ServerConfig, opts: { clock?: Clock; logger?: Logger } = {}): CreatedApp {
+export interface ProductionApp extends CreatedApp {
+  /** Seed global → owner (mật khẩu lần đầu) → workspace tenant + membership owner. Idempotent; gọi trước khi mở cổng. */
+  runBootstrap(): Promise<{ ownerCreated: boolean; tenantCreated: boolean }>;
+}
+
+/** Dựng toàn bộ phụ thuộc production từ cấu hình. O4 = RecoveryProvider đọc `v_core_agent_status` (L-SYS). */
+export function buildProductionApp(cfg: ServerConfig, opts: { clock?: Clock; logger?: Logger } = {}): ProductionApp {
   const clock = opts.clock ?? systemClock;
   const logger = opts.logger ?? createStderrLogger();
   const keyring = loadMasterKeyringFromFile(cfg.masterKeyFile);
@@ -106,17 +136,41 @@ export function buildProductionApp(cfg: ServerConfig, opts: { clock?: Clock; log
   const keys: Record<string, Buffer> = {};
   for (const id of keyring.ids()) keys[id] = keyring.get(id)?.key as Buffer;
   const store = createSqliteStore({ writer, reader, auditKeys: masterKeyring(keys, keyring.current.id) });
+  const authStore = new SqliteAuthStore(writer);
   const auth = new AuthService({
-    store: new SqliteAuthStore(writer),
+    store: authStore,
     clock,
     csrfKey: deriveSubkey(keyring.current.key, 'csrf'),
     secureCookies: cfg.secureCookies,
     allowedOrigins: cfg.allowedOrigins,
+    firstPassword: firstPasswordFile(cfg.firstPasswordPath),
   });
-  return createApp(
-    { writer, reader, store, auth, clock, events: new InMemoryEventBus({ clock }), logger },
+  const created = createApp(
+    {
+      writer,
+      reader,
+      store,
+      auth,
+      clock,
+      events: new InMemoryEventBus({ clock }),
+      recovery: createDbRecoveryProvider({ store, reader }),
+      logger,
+      allowedOrigins: cfg.allowedOrigins,
+      trustedProxies: cfg.trustedProxies,
+    },
     PRODUCTION_HANDLERS,
   );
+  return Object.freeze({
+    ...created,
+    runBootstrap: () =>
+      bootstrapInstall({
+        store,
+        auth,
+        findUserId: (u) => authStore.findUserByUsername(u)?.id ?? null,
+        ownerUsername: OWNER_USERNAME,
+        seed: verifySeedReference(JSON.parse(readFileSync(cfg.seedPath, 'utf8'))),
+      }),
+  });
 }
 
 /** Điểm vào: `node apps/control-plane/src/server.ts` (image: entrypoint `control-plane`). */
@@ -124,6 +178,8 @@ export async function main(env: Readonly<Record<string, string | undefined>> = p
   const cfg = loadServerConfig(env);
   const logger = createStderrLogger();
   const created = buildProductionApp(cfg, { logger });
+  const boot = await created.runBootstrap();
+  logger.log('info', 'server.bootstrap', boot);
   const running = await startServer(created, { host: cfg.host, port: cfg.port });
   logger.log('info', 'server.listening', { host: cfg.host, port: running.port, routes: created.mounted.length });
   return running;

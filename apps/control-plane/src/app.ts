@@ -17,6 +17,7 @@ import { type IdempotencyStore, InMemoryIdempotencyStore } from './http/idempote
 import type { Logger } from './http/logger.ts';
 import { type AppEnv, declaredKeys, errorResponse, type PipelineDeps, runRoute } from './http/pipeline.ts';
 import { FAIL_CLOSED_RECOVERY, type RecoveryProvider } from './http/recovery.ts';
+import { type AccountService, DEFAULT_SSE_LIMITS, isAccountService, type SseLimits } from './http/request-extras.ts';
 import type { SessionAuthenticator } from './http/session.ts';
 
 export interface AppDeps {
@@ -32,6 +33,14 @@ export interface AppDeps {
   logger: Logger;
   /** Mặc định: bản trong bộ nhớ (TTL 24 h) — xem http/idempotency.ts. */
   idempotency?: IdempotencyStore;
+  /** EXT-01 / 02 / 04. Mặc định: `auth` nếu nó là AuthService đầy đủ (login / changePassword / logout). */
+  accounts?: AccountService;
+  /** Origin GUI hợp lệ (login CSRF của EXT-01). Mặc định rỗng ⇒ login có Origin bị từ chối (fail-closed). */
+  allowedOrigins?: readonly string[];
+  /** IP socket của proxy tin cậy (Caddy). Mặc định rỗng ⇒ không tin `X-Forwarded-For`. */
+  trustedProxies?: readonly string[];
+  /** SYS-85: nhịp giữ kết nối / tuổi tối đa của luồng (mặc định 15 s / 10 phút). */
+  sse?: Partial<SseLimits>;
 }
 
 export interface CreatedApp {
@@ -99,6 +108,10 @@ export function createApp(deps: AppDeps, handlers: readonly Handler[]): CreatedA
     recovery: deps.recovery ?? FAIL_CLOSED_RECOVERY,
     logger: deps.logger,
     idempotency: deps.idempotency ?? new InMemoryIdempotencyStore({ clock: deps.clock }),
+    accounts: deps.accounts ?? (isAccountService(deps.auth) ? deps.auth : null),
+    allowedOrigins: Object.freeze([...(deps.allowedOrigins ?? [])]),
+    trustedProxies: Object.freeze([...(deps.trustedProxies ?? [])]),
+    sse: Object.freeze({ ...DEFAULT_SSE_LIMITS, ...deps.sse }),
   };
   const app = new Hono<AppEnv>();
 

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { migrate, openWriter, SQLITE_MIGRATIONS_DIR } from '@ga/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PRODUCTION_HANDLERS } from '../../src/http/handlers.ts';
 import {
   buildProductionApp,
   loadServerConfig,
@@ -114,7 +115,7 @@ describe('startServer — socket thật', () => {
 });
 
 describe('buildProductionApp — dây nối production (khoá từ TỆP, chưa có handler production ⇒ mọi route 404)', () => {
-  it('mở DB + keyring từ tệp 0600, mount 0 route, 404 có header bảo mật', async () => {
+  it('mở DB + keyring từ tệp 0600, mount đúng PRODUCTION_HANDLERS, route chưa có handler ⇒ 404 có header bảo mật', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ga-cp-prod-'));
     try {
       const dbPath = join(dir, 'gen.sqlite');
@@ -126,7 +127,7 @@ describe('buildProductionApp — dây nối production (khoá từ TỆP, chưa 
       const cfg = loadServerConfig({ GA_DB_PATH: dbPath, GENAGENTS_MASTER_KEY_FILE: keyFile });
       const logs: string[] = [];
       const app = buildProductionApp(cfg, { logger: { log: (_l, e) => void logs.push(e) } });
-      expect(app.mounted).toHaveLength(0);
+      expect(app.mounted).toHaveLength(PRODUCTION_HANDLERS.length);
       const res = await app.fetch(new Request('http://x/api/v1/health'));
       expect(res.status).toBe(404);
       expect(res.headers.get('cache-control')).toBe('no-store');

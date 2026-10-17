@@ -70,6 +70,11 @@ export const OWNER_USERNAME = 'admin';
 export const FIRST_PASSWORD_PATH = '/data/run/first-password';
 const USERNAME_MAX = 64;
 const USER_AGENT_MAX = 256;
+/**
+ * Trần số tên đăng nhập "ma" (user lạ / bị vô hiệu) được nhớ bộ đếm sai trong bộ nhớ. Đầy ⇒ bỏ tên cũ nhất. Giới hạn toàn
+ * cục (120 lượt / phút) làm cho việc đẩy bảng tới trần mất > 80 phút.
+ */
+export const PHANTOM_LOCKOUT_MAX = 10_000;
 
 // ---------------------------------------------------------------- ULID (26 ký tự Crockford, 48 bit thời gian + 80 bit ngẫu nhiên)
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -176,6 +181,11 @@ export class AuthService {
   private readonly ipLimiter: SlidingWindowLimiter;
   private readonly accountLimiter: SlidingWindowLimiter;
   private readonly globalLimiter: SlidingWindowLimiter;
+  /**
+   * Khoá tạm cho tên KHÔNG ứng với tài khoản dùng được (lạ / bị vô hiệu): cùng chính sách đếm sai + khoá như user thật, để
+   * phản hồi (mã, HTTP, retryAfterS) và thời gian (đúng một lần băm) KHÔNG phân biệt được user có tồn tại hay không.
+   */
+  private readonly phantom = new Map<string, { failed: number; lockedUntilMs: number }>();
 
   constructor(opts: AuthServiceOptions) {
     this.o = opts;
@@ -230,6 +240,30 @@ export class AuthService {
     }
     for (const [l, k] of keys) l.hit(k);
     return null;
+  }
+
+  private phantomLockedFor(username: string): number {
+    const p = this.phantom.get(username);
+    if (!p) return 0;
+    const ms = p.lockedUntilMs - this.now().getTime();
+    return ms > 0 ? Math.ceil(ms / 1000) : 0;
+  }
+
+  /** Như `registerFailedLogin` của user thật (đếm +1, khoá theo cùng chính sách); trả số giây khoá (0 = chưa khoá). */
+  private registerPhantomFailure(username: string): number {
+    const prev = this.phantom.get(username);
+    const failed = (prev?.failed ?? 0) + 1;
+    const secs = accountLockSeconds(failed, this.policy.lockout);
+    const at = this.now().getTime();
+    // cùng độ phân giải ms như toDbTimestamp của user thật
+    const lockedUntilMs = secs > 0 ? at + secs * 1000 : (prev?.lockedUntilMs ?? 0);
+    this.phantom.delete(username);
+    if (this.phantom.size >= PHANTOM_LOCKOUT_MAX) {
+      const oldest = this.phantom.keys().next().value;
+      if (oldest !== undefined) this.phantom.delete(oldest);
+    }
+    this.phantom.set(username, { failed, lockedUntilMs });
+    return secs > 0 ? Math.ceil((lockedUntilMs - at) / 1000) : 0;
   }
 
   private lockedFor(user: AuthUser): number {
@@ -288,27 +322,28 @@ export class AuthService {
       }
       return { ok: false, code: 'invalid_credentials' };
     }
-    const user = this.o.store.findUserByUsername(username);
-    if (user && !user.disabledAt) {
-      const locked = this.lockedFor(user);
-      if (locked > 0) return { ok: false, code: 'locked', retryAfterSeconds: locked };
-    }
+    const found = this.o.store.findUserByUsername(username);
+    const user = found && !found.disabledAt ? found : null;
+    // Khoá tạm (thật hoặc "ma") quyết TRƯỚC nhưng vẫn tốn đúng một lần băm như mọi nhánh khác (không oracle thời gian).
+    const locked = user ? this.lockedFor(user) : this.phantomLockedFor(username);
     let ok = false;
     try {
       ok =
-        user && !user.disabledAt
-          ? await verifyPassword(password, user.passwordHash)
-          : await verifyAgainstDummy(password);
+        user && locked === 0 ? await verifyPassword(password, user.passwordHash) : await verifyAgainstDummy(password);
     } catch (e) {
       if (e instanceof PasswordHasherBusyError) return { ok: false, code: 'rate_limited', retryAfterSeconds: 5 };
       throw e;
     }
+    if (locked > 0) return { ok: false, code: 'locked', retryAfterSeconds: locked };
     if (!ok || !user) {
-      if (user && !user.disabledAt) {
+      if (user) {
         const r = this.o.store.registerFailedLogin(user.id, this.now(), (n) =>
           accountLockSeconds(n, this.policy.lockout),
         );
         if (r.lockedUntil) return { ok: false, code: 'locked', retryAfterSeconds: this.lockedFor({ ...user, ...r }) };
+      } else {
+        const secs = this.registerPhantomFailure(username);
+        if (secs > 0) return { ok: false, code: 'locked', retryAfterSeconds: secs };
       }
       return { ok: false, code: 'invalid_credentials' };
     }

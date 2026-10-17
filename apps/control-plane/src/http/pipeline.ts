@@ -31,7 +31,7 @@ import type { AppConnection } from '@ga/db';
 import type { DataStore } from '@ga/db/repos';
 import type { Context } from 'hono';
 import type { z } from 'zod';
-import { ALLOWED_DURING_PASSWORD_CHANGE } from '../auth/index.ts';
+import { ALLOWED_DURING_PASSWORD_CHANGE, type AuthContext } from '../auth/index.ts';
 import { createHandlerContext, createPublicContext } from '../context/context.ts';
 import type { EventBus } from '../events/bus.ts';
 import { parseJsonBody, readBodyCapped } from './body.ts';
@@ -47,6 +47,15 @@ import {
 } from './idempotency.ts';
 import type { Logger } from './logger.ts';
 import { guardBeforeValidation, guardCoreTarget, type RecoveryProvider, recoveryStateOf } from './recovery.ts';
+import {
+  type AccountService,
+  bindRequestExtras,
+  clientIp,
+  createRequestExtras,
+  type RequestExtras,
+  type RequestMeta,
+  type SseLimits,
+} from './request-extras.ts';
 import { type Actor, resolveMembership, type SessionAuthenticator } from './session.ts';
 
 export interface PipelineDeps {
@@ -58,6 +67,13 @@ export interface PipelineDeps {
   recovery: RecoveryProvider;
   logger: Logger;
   idempotency: IdempotencyStore;
+  /** EXT-01 / 02 / 04 (L-SEC AuthService). null ⇒ các route đó 500 (fail-closed). */
+  accounts: AccountService | null;
+  /** Origin GUI hợp lệ (kiểm login CSRF ở EXT-01). Rỗng ⇒ request có Origin bị từ chối. */
+  allowedOrigins: readonly string[];
+  /** IP socket của proxy tin cậy (Caddy) — chỉ khi đó mới đọc `X-Forwarded-For`. */
+  trustedProxies: readonly string[];
+  sse: SseLimits;
 }
 
 export type AppEnv = { Variables: { requestId: string; routeId: string } };
@@ -185,6 +201,19 @@ function buildResponse(
   }
 }
 
+/** Gắn Set-Cookie do request-extras gom (chỉ trên response thành công). */
+function withCookies(res: Response, extras: RequestExtras | null): Response {
+  const cookies = extras?.cookies ?? [];
+  for (const c of cookies) res.headers.append('set-cookie', c);
+  return res;
+}
+
+function socketIpOf(c: Context<AppEnv>): string | null {
+  const env = c.env as { incoming?: { socket?: { remoteAddress?: unknown } } } | undefined;
+  const ip = env?.incoming?.socket?.remoteAddress;
+  return typeof ip === 'string' ? ip : null;
+}
+
 function jsonResponse(r: StoredResult, extraHeaders: Record<string, string> = {}): Response {
   if (r.status === 204) return new Response(null, { status: 204, headers: extraHeaders });
   return new Response(JSON.stringify(r.body), {
@@ -210,9 +239,18 @@ export async function runRoute(
   c.set('routeId', route.id);
   const req = c.req.raw;
   let idem: { key: IdempotencyKeyRef; ticket: number } | null = null;
+  let extras: RequestExtras | null = null;
+  const meta: RequestMeta = Object.freeze({
+    ip: clientIp(socketIpOf(c), req.headers.get('x-forwarded-for'), deps.trustedProxies),
+    userAgent: req.headers.get('user-agent')?.slice(0, 256) ?? null,
+    origin: req.headers.get('origin'),
+    secFetchSite: req.headers.get('sec-fetch-site'),
+    method: req.method,
+  });
   try {
     // 1–4. phiên → cổng đổi mật khẩu → CSRF → actor + quyền tối thiểu
     let actor: Actor | null = null;
+    let session: AuthContext | null = null;
     if (route.auth !== 'public') {
       const r = deps.auth.authenticate({
         method: req.method,
@@ -229,7 +267,7 @@ export async function runRoute(
           r.clearCookie ? { headers: { 'set-cookie': r.clearCookie } } : {},
         );
       }
-      const session = r.ctx;
+      session = r.ctx;
       if (session.mustChangePassword && !allowedDuringPasswordChange(route)) {
         throw new ApiError('auth.must_change_password');
       }
@@ -299,6 +337,12 @@ export async function runRoute(
       actor === null
         ? createPublicContext(deps, { requestId, route })
         : createHandlerContext(deps, { requestId, route, actor });
+    extras = createRequestExtras(deps, {
+      meta,
+      session,
+      actor: actor && { userId: actor.userId, workspaceId: actor.workspaceId, authLevel: actor.authLevel },
+    });
+    bindRequestExtras(ctx, extras);
 
     // 9. ownerWhen trên input đã validate (coerce / transform không hạ được mức) + trạng thái đã lưu (hook `stored`)
     if (actor !== null && route.ownerWhen.length > 0) {
@@ -359,12 +403,12 @@ export async function runRoute(
 
     // 13. validate response
     const built = buildResponse(route, out, { requestId, logger: deps.logger });
-    if (built instanceof Response) return built;
+    if (built instanceof Response) return withCookies(built, extras);
     if (idem !== null) {
       deps.idempotency.complete(idem.key, idem.ticket, built);
       idem = null;
     }
-    return jsonResponse(built);
+    return withCookies(jsonResponse(built), extras);
   } catch (err) {
     return errorResponse(mapError(err, { requestId, routeId: route.id, logger: deps.logger }));
   } finally {

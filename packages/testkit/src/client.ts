@@ -57,12 +57,33 @@ export function buildPath(route: Pick<Route, 'mount' | 'path'>, params: Record<s
   return p;
 }
 
+/**
+ * Trường token mà HỢP ĐỒNG trả có chủ đích: `csrfToken` của EXT-01 / EXT-03 (HMAC gắn phiên, base64url 43 ký tự — client
+ * cần nó để gửi `x-ga-csrf`). Chỉ bỏ qua đúng trường cấp 1 đó, đúng dạng đó, ở đúng route đó; mọi chỗ khác vẫn quét.
+ */
+const DECLARED_TOKEN_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  'EXT-01': ['csrfToken'],
+  'EXT-03': ['csrfToken'],
+};
+const CSRF_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
+
+function scanTarget(json: unknown, label: string): unknown {
+  const fields = DECLARED_TOKEN_FIELDS[label];
+  if (!fields || json === null || typeof json !== 'object' || Array.isArray(json)) return json;
+  const copy: Record<string, unknown> = { ...(json as Record<string, unknown>) };
+  for (const f of fields) {
+    const v = copy[f];
+    if (typeof v === 'string' && CSRF_TOKEN_RE.test(v)) delete copy[f];
+  }
+  return copy;
+}
+
 export async function readResult(res: Response, label: string): Promise<CallResult> {
   const text = await res.text();
   let json: unknown = null;
   if ((res.headers.get('content-type') ?? '').startsWith('application/json') && text.length > 0) {
     json = JSON.parse(text) as unknown;
-    const hit = findCredentialLike(json);
+    const hit = findCredentialLike(scanTarget(json, label));
     if (hit) throw new CredentialLeakError(label, hit.patternId);
   }
   const err = (json as { error?: { code?: unknown; detail?: unknown } } | null)?.error;

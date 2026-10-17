@@ -50,7 +50,15 @@ export interface TestAppOptions {
   auth?: SessionAuthenticator;
   events?: Partial<InMemoryEventBusOptions>;
   idempotency?: IdempotencyStore;
+  /** SYS-85: mặc định luồng sống 50 ms (test đọc hết thân response). */
+  sse?: { keepAliveMs?: number; maxDurationMs?: number };
 }
+
+/**
+ * Route KẾT THÚC phiên (đăng xuất / đổi mật khẩu thu hồi mọi phiên): gọi bằng tên một user ⇒ harness dùng một phiên MỚI
+ * (vứt đi) của chính user đó, để phiên cố định của world không bị thu hồi giữa các test. Truyền `cookie` tường minh ⇒ giữ nguyên.
+ */
+export const SESSION_ENDING_ROUTES: ReadonlySet<string> = new Set(['EXT-02', 'EXT-04']);
 
 export interface TestApp {
   readonly world: TestWorld;
@@ -102,10 +110,24 @@ export function makeTestApp(opts: TestAppOptions): TestApp {
       ...(recovery ? { recovery } : {}),
       logger,
       ...(opts.idempotency ? { idempotency: opts.idempotency } : {}),
+      allowedOrigins: [world.origin],
+      sse: { keepAliveMs: 20, maxDurationMs: 50, ...opts.sse },
     },
     spied,
   );
   const client = tk.makeClient(world, (req) => app.fetch(req));
+  const as: TestApp['as'] = (who) => {
+    const caller = client.as(who);
+    if (who === 'anon') return caller;
+    return {
+      call: (routeId, input = {}) => {
+        if (!SESSION_ENDING_ROUTES.has(routeId) || input.cookie !== undefined) return caller.call(routeId, input);
+        const fresh = world.newSession(world.user(who).userId);
+        const csrf = input.csrf === undefined || input.csrf === true ? fresh.csrf : input.csrf;
+        return caller.call(routeId, { ...input, cookie: fresh.cookie, csrf });
+      },
+    };
+  };
   return {
     world,
     app,
@@ -113,7 +135,7 @@ export function makeTestApp(opts: TestAppOptions): TestApp {
     events,
     logger,
     calls,
-    as: client.as,
+    as,
     raw: client.raw,
     base: client.base,
     close: () => {
