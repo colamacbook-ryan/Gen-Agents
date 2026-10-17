@@ -16,7 +16,7 @@
 
 Ghi chú thành phần nhúng: `better-sqlite3` kèm SQLite (public domain — sqlite.org/copyright.html) trong bản build N-API.
 
-## Chỉ dùng lúc dev / build / test — không đóng gói vào sản phẩm (54 gói)
+## Chỉ dùng lúc dev / build / test — không đóng gói vào sản phẩm (55 gói)
 
 | Gói | Phiên bản | License | Nhận ra từ tệp LICENSE | Ghi chú |
 |---|---|---|---|---|
