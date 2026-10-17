@@ -1,10 +1,12 @@
 {
   "files": [],
   "references": [
+    { "path": "apps/control-plane" },
     { "path": "packages/chibi" },
     { "path": "packages/contracts" },
     { "path": "packages/db" },
     { "path": "packages/engines" },
+    { "path": "packages/security" },
     { "path": "testing/fakes" }
   ]
 }
