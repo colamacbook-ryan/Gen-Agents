@@ -1161,9 +1161,11 @@ export const SYS_78 = hr({
   method: 'POST',
   path: '/cards/{cardRef}/resume',
   auth: 'A',
-  o4: 'open',
+  // Review bảo mật PR #7 (M5): suspend là công tắc dừng nên mở khi recovery; resume khởi động lại container có credential
+  // ⇒ KHÔNG mở khi `mode = recovery` (423 recovery.blocked). Muốn nối lại trong sự cố: gỡ sự cố trước (CLI `emergency`).
+  o4: 'blocked',
   request: { params: z.strictObject({ cardRef: Ref('CD') }) },
-  // `suspended → issued`; guard O4 không chặn.
+  // `suspended → issued`.
   response: ok(CardRow),
   cli: ['card resume', 'emergency'],
 });

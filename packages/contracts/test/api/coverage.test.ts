@@ -52,7 +52,7 @@ describe('độ phủ FRONTEND-SPEC §3.11', () => {
     expect(() => expandIds('SYS-09..01')).toThrow();
     expect(FS_COVERAGE.G2.length).toBe(20);
     expect(FS_COVERAGE.A6.length).toBe(13);
-    expect(FS_COVERAGE.O4.length).toBe(25);
+    expect(FS_COVERAGE.O4.length).toBe(24); // 25 trong đặc tả − SYS-78 (M5: resume không mở khi recovery)
     expect(FS_COVERAGE.A3.length).toBe(17);
     expect(FS_COVERAGE.A10.length).toBe(16);
   });

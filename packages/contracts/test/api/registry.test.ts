@@ -261,7 +261,7 @@ describe('registry — quyền', () => {
 
 describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
   const OPEN = [
-    ...ids('SYS-08..13', 'SYS-14', 'SYS-15', 'SYS-77', 'SYS-78', 'SYS-81..85', 'SYS-06'),
+    ...ids('SYS-08..13', 'SYS-14', 'SYS-15', 'SYS-77', 'SYS-81..85', 'SYS-06'),
     ...ids('GW-01', 'GW-02', 'GW-18', 'GW-25'),
     ...ids('WRK-09', 'WRK-14'),
     ...ids('OPS-01', 'OPS-12..16', 'OPS-19', 'OPS-20..25'),
@@ -292,6 +292,15 @@ describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
         .sort(),
     ).toEqual([...SETUP].sort());
     for (const r of ROUTES) if (r.setupOnly) expect(r.recovery, r.id).toBe(false);
+  });
+
+  it('suspend mở khi recovery (công tắc dừng), resume thì không (khởi động lại container có credential)', () => {
+    const suspend = routeById('SYS-77');
+    const resume = routeById('SYS-78');
+    expect(suspend?.recovery).toBe(true);
+    expect(resume?.recovery).toBe(false);
+    expect(resume && recoveryDecision(resume, { isCoreAgentAccount: true })).toBe('blocked');
+    expect(resume && recoveryDecision(resume, { isCoreAgentAccount: false })).toBe('blocked');
   });
 
   it('recoveryDecision: ✗ luôn chặn; ✓ cho qua; ✓* chỉ với tài khoản Core agent', () => {

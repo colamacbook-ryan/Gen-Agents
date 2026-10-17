@@ -94,7 +94,6 @@ export const FS_COVERAGE = {
     'GW-14',
     'GW-25',
     'SYS-77',
-    'SYS-78',
     'WRK-09',
     'WRK-14',
     'OPS-12..15',
