@@ -384,7 +384,9 @@ describe('mcp + settings + errors + events', () => {
     expect(SETTINGS['backup.remote_anchor'].writers).toEqual(['owner', 'system']);
     expect(settingWritableBy('backup.remote_anchor', 'admin')).toBe(false);
     expect(settingWritableBy('backup.remote_anchor', 'owner')).toBe(true);
-    expect(settingWritableBy('chat.attachment_max_bytes', 'admin')).toBe(true);
+    // Review bảo mật PR #7: trần dung lượng upload là NỚI hàng rào ⇒ owner-only; admin chỉ ghi khoá thuần giao diện.
+    expect(settingWritableBy('chat.attachment_max_bytes', 'admin')).toBe(false);
+    expect(settingWritableBy('ui.avatar_motion', 'admin')).toBe(true);
     const ok = { url: 'https://git.example.com/afi/anchors.git', secret_id: ULID };
     expect(settingValueJson('backup.remote_anchor', ok)).toBe(JSON.stringify(ok));
     expect(remoteAnchorAuthority(ok.url)).toBe('git.example.com');

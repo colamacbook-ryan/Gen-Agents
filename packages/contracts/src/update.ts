@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOUNDS, DbTimestamp } from './bounds.ts';
 
 // Hợp đồng ga-app ↔ ga-updater (BUILD-PLAN §B.3, §B.9; CNS-141; G-25 [Gen quyết 2026-10-16]).
 // Từ ga-app updater CHỈ nhận: GET trạng thái + HAI lệnh đóng không tham số — `start_update`, `rollback_previous`.
@@ -23,18 +24,18 @@ export const UPDATE_STEPS = ['download', 'backup', 'migrate', 'restart', 'health
 export type UpdateStep = (typeof UPDATE_STEPS)[number];
 
 export const UpdaterStatus = z.strictObject({
-  currentVersion: z.string(),
+  currentVersion: z.string().max(BOUNDS.version),
   /** Bản mới nhất có chữ ký hợp lệ trên feed; null nếu chưa kiểm hoặc đang là mới nhất. */
-  availableVersion: z.string().nullable(),
-  checkedAt: z.string().nullable(),
+  availableVersion: z.string().max(BOUNDS.version).nullable(),
+  checkedAt: DbTimestamp.nullable(),
   autoUpdate: z.boolean(),
   run: z
     .strictObject({
       trigger: z.enum(['auto', 'manual', 'rollback']),
       status: z.enum(['running', 'succeeded', 'rolled_back', 'failed']),
       step: z.enum(UPDATE_STEPS),
-      startedAt: z.string(),
-      error: z.string().nullable(),
+      startedAt: DbTimestamp,
+      error: z.string().max(BOUNDS.message).nullable(),
     })
     .nullable(),
   /** Có bản trước để "Chạy lại bản cũ" không (updater tự chọn từ lịch sử của chính nó). */
