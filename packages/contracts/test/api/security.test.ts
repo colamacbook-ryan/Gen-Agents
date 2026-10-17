@@ -95,6 +95,31 @@ describe('secret chỉ trong body', () => {
     expect(seenExempt).toEqual(['SYS-45.dailyTokenQuota']);
   });
 
+  it('ngoại lệ `dailyTokenQuota` được GHIM KIỂU: số nguyên không âm (không phải chuỗi), cả request lẫn response', () => {
+    const body = routeById('SYS-45')?.request.body;
+    expect(body).toBeDefined();
+    const node = collectNodes(body as never, 'body').find((n) => n.key === 'dailyTokenQuota' && n.type === 'number');
+    expect(node, 'dailyTokenQuota phải là number').toBeDefined();
+    // schema thật từ chối chuỗi / số thực / số âm / số quá lớn; chỉ nhận số nguyên an toàn ≥ 0
+    const parse = (v: unknown) => (body as z.ZodType).safeParse({ dailyTokenQuota: v }).success;
+    expect(parse(5)).toBe(true);
+    expect(parse(0)).toBe(true);
+    expect(parse('5')).toBe(false);
+    expect(parse('sk-live-xxxx')).toBe(false);
+    expect(parse(1.5)).toBe(false);
+    expect(parse(-1)).toBe(false);
+    expect(parse(Number.MAX_SAFE_INTEGER + 1)).toBe(false);
+    expect(parse(null)).toBe(false);
+    // response
+    const res = routeById('SYS-44')?.response;
+    const rnode =
+      res?.kind === 'json'
+        ? collectNodes(res.schema).find((n) => n.key === 'dailyTokenQuota' && n.type === 'number')
+        : undefined;
+    expect(rnode, 'response dailyTokenQuota phải là number').toBeDefined();
+    // ngoại lệ không lan sang route khác: mọi trường tên giống secret còn lại đều là SecretInput (test tên trường ở trên)
+  });
+
   it('SecretInput: không rỗng, có trần theo loại; nhận diện được qua optional()', () => {
     const s = SecretInput('api_key');
     expect(s.safeParse('').success).toBe(false);
