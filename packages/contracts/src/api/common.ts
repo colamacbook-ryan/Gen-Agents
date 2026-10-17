@@ -45,6 +45,8 @@ export const API_LIMITS = {
   gridPageMax: 500,
   cursorChars: 256,
   idempotencyKeyChars: 128,
+  /** Trần số hàng của một lần xuất CSV (OPS-23, OPS-34). */
+  csvMaxRows: 100_000,
   /** Tên thực thể dài nhất cho ConfirmName (tên Role ≤ 60, workspace ≤ 80, nhãn tài khoản ≤ 60). */
   confirmChars: 200,
   /** `Json` tự do: mỗi chuỗi = trần chuỗi của gateway (mcp.ts); sâu ≤ 8; ≤ 1000 phần tử / khoá. */

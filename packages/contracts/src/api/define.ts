@@ -96,7 +96,7 @@ export type ResponseSpec =
   | { kind: 'json'; status: 200 | 201 | 202; schema: z.ZodType; noStore: boolean }
   | { kind: 'empty'; status: 204 }
   | { kind: 'sse'; events: z.ZodType }
-  | { kind: 'csv' }
+  | { kind: 'csv'; formulaEscape: true; maxRows: number; streamed: true }
   | { kind: 'binary'; contentType: 'application/octet-stream' }
   | { kind: 'ws'; client: z.ZodType; server: z.ZodType };
 
@@ -133,7 +133,38 @@ export const okNoStore = <S extends z.ZodType>(schema: S): JsonResponse<S, 200> 
 });
 export const noContent = (): { kind: 'empty'; status: 204 } => ({ kind: 'empty', status: 204 });
 export const sse = <E extends z.ZodType>(events: E): { kind: 'sse'; events: E } => ({ kind: 'sse', events });
-export const csv = (): { kind: 'csv' } => ({ kind: 'csv' });
+/**
+ * Xuất `text/csv` + header `X-Content-SHA256`. BẮT BUỘC khai `formulaEscape: true` (mọi ô văn bản đi qua `csvCell`, chống CSV /
+ * formula injection — review bảo mật PR #7, L3) và `maxRows` (trần số hàng; vượt ⇒ cắt kèm dòng báo, không buffer vô hạn). Luôn
+ * `streamed`: handler ghi theo luồng (đọc dòng từ connection chỉ đọc → ghi ngay), KHÔNG gom cả tệp vào bộ nhớ.
+ */
+export const csv = (opts: {
+  formulaEscape: true;
+  maxRows: number;
+}): { kind: 'csv'; formulaEscape: true; maxRows: number; streamed: true } => {
+  if (!Number.isInteger(opts.maxRows) || opts.maxRows < 1) throw new Error('csv: maxRows phải là số nguyên dương');
+  return { kind: 'csv', formulaEscape: opts.formulaEscape, maxRows: opts.maxRows, streamed: true };
+};
+
+const CSV_FORMULA_START = /^(?:[\t\r]|[ ]*[=+\-@])/;
+
+/**
+ * Một ô CSV. Ô VĂN BẢN: bắt đầu bằng `=` `+` `-` `@` (sau khoảng trắng đầu) hoặc tab / CR ⇒ thêm tiền tố `'` (Excel / Sheets không
+ * chạy công thức), rồi bọc ngoặc kép đầy đủ (`"` → `""`, nên dấu phẩy / xuống dòng trong ô an toàn). Ô SỐ giữ nguyên (`-500` là
+ * số, không phải công thức); `null` / `undefined` / số không hữu hạn ⇒ ô rỗng.
+ */
+export function csvCell(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  const text = CSV_FORMULA_START.test(value) ? `'${value}` : value;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+/** Một dòng CSV (kết thúc CRLF). */
+export function csvRow(cells: readonly (string | number | boolean | null | undefined)[]): string {
+  return `${cells.map(csvCell).join(',')}\r\n`;
+}
 export const binary = (): { kind: 'binary'; contentType: 'application/octet-stream' } => ({
   kind: 'binary',
   contentType: 'application/octet-stream',

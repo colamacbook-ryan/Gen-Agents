@@ -7,6 +7,7 @@ import { READABLE_PREFIXES } from './access.ts';
 import { WorkspaceView } from './auth.ts';
 import {
   AnyId,
+  API_LIMITS,
   ConfirmName,
   DisplayId,
   IanaTimezone,
@@ -533,7 +534,7 @@ export const OPS_23 = ops({
   o4: 'open',
   // Bộ lọc như OPS-20 (không phân trang). `text/csv` + header `X-Content-SHA256`; ô công thức được thoát (xem grids.ts).
   request: { query: z.strictObject(AuditFilters) },
-  response: csv(),
+  response: csv({ formulaEscape: true, maxRows: API_LIMITS.csvMaxRows }),
   cli: ['audit export --out'],
 });
 
@@ -736,7 +737,7 @@ export const OPS_34 = ops({
   o4: 'blocked',
   // Chạy đúng cùng truy vấn với OPS-33, theo luồng; `text/csv` + `X-Content-SHA256`; ô công thức được thoát.
   request: { params: GridParams, query: z.strictObject(gridSelectShape), refine: refineGridSelection },
-  response: csv(),
+  response: csv({ formulaEscape: true, maxRows: API_LIMITS.csvMaxRows }),
   errors: ['query.invalid'],
   cli: ['grid --csv'],
 });
