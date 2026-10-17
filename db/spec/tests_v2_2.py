@@ -5293,7 +5293,11 @@ def t_v2213_owner_create():
                     ('tác tử Trainer của workspace hệ thống', X['A'][(X['SYS'], 'trainer')]), ('actor system của workspace hệ thống', X['A'][(X['SYS'], 'system')])):
         case(f"bootstrap qua capture bởi {nm}", lambda who=who: D.ins('telegram_allowlist', workspace_id=W, bot_id=tb, tg_user_id=999, display_name='Owner mới',
                                                                      is_owner=1, added_via='capture', created_by=who, _actor=who), MSG_AL_NEW_T)
+    capr = _val(add(tb, 998, 'capture', tele, 0))                              # hàng capture thường (tác tử Telegram) trên bot CHƯA có owner
+    for nm, who in (('admin', adm), ('tác tử Telegram', tele), ('viewer', vw)):
+        case(f"bootstrap qua NÂNG hàng capture lên owner bởi {nm}", upd(capr, "is_owner=1", who), MSG_AL_NEW_T)
     boot = _try(add(tb, 999, 'capture', X['A'][(W, 'system')]))                 # dịch vụ app (actor system của chính workspace) — bootstrap
+    case("sau bootstrap: actor system của workspace NÂNG hàng capture lên owner thứ hai", upd(capr, "is_owner=1", X['A'][(W, 'system')]), MSG_AL_NEW_T)
     case("sau bootstrap: tác tử thêm owner thứ hai qua capture", add(tb, 1001, 'capture', tele), MSG_AL_NEW_T)
     case("sau bootstrap: actor system của workspace thêm owner thứ hai qua capture", add(tb, 1002, 'capture', X['A'][(W, 'system')]), MSG_AL_NEW_T)
     # --- khôi phục bot đã xoá mềm: chỉ owner của workspace
@@ -5309,7 +5313,7 @@ def t_v2213_owner_create():
     D.ctx.maint = 1
     maint_ok = _try(add(tg, 9001, 'manual', adm))
     D.ctx.maint = 0
-    ok = (all(x[1] for x in c) and a3t_add and a3t_rm and own_a3t == [8001] and re_own and up_own and boot and rest_ok and maint_ok
+    ok = (all(x[1] for x in c) and a3t_add and a3t_rm and own_a3t == [8001] and re_own and up_own and boot and rest_ok and maint_ok and capr is not None
           and owners(tg) == [999, 4343, 8001, 9001] and owners(tb) == [999])
     report("AL-owner-create", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn: admin / tác tử thêm owner (bot đã có owner), owner thêm qua nhập tay, admin nâng "
            f"(kể cả tự đổi added_via), owner nâng hàng nhập tay, tác tử nâng hàng capture, admin gỡ owner thật, admin kích hoạt lại owner đã gỡ, bootstrap qua "
@@ -7698,6 +7702,7 @@ def t_v235_root_authz():
     _pos(pos, ins_m(ssys, gu, 'viewer', W2))
     _pos(pos, _raw(D, own2, "UPDATE workspace_members SET removed_at=? WHERE workspace_id=? AND user_id=?", (now(), W2, gu)))
     _pos(pos, ins_m(own, gu, 'viewer'))
+    _pos(pos, _raw(D, own2, "UPDATE workspace_members SET removed_at=? WHERE workspace_id=? AND user_id=?", (now(), W2, gu)))   # đổi mốc gỡ, vẫn gỡ
     # ---- actors
     act = lambda who, aid, ws, kind, **kw: _raw(D, who, f"INSERT INTO actors(id,workspace_id,kind,label{''.join(',' + k for k in kw)}) VALUES(?,?,?,?{',?' * len(kw)})",
                                                 (aid, ws, kind, 'x', *kw.values()))
@@ -7791,6 +7796,7 @@ def t_v235_root_authz():
     for col, v in (('id', f"'{uid('as:ra-nid')}'"), ('user_id', f"'{ryan}'"), ('token_hash', "'th-forged'"), ('created_at', "'2000-01-01T00:00:00.000Z'"),
                    ('expires_at', "'2099-01-01T00:00:00.000Z'"), ('last_seen_at', "'2099-01-01T00:00:00.000Z'"), ('ip', "'6.6.6.6'"), ('user_agent', "'evil'")):
         case(f"tự thu hồi KÈM đổi {col}", _raw(D, adm, f"UPDATE auth_sessions SET revoked_at=?, {col}={v} WHERE id=?", (now(), s_x)), _m(S.MSG_AS))
+    case("tự ghi phiên của mình mà không thu hồi (no-op)", _raw(D, adm, "UPDATE auth_sessions SET user_agent=user_agent WHERE id=?", (s_x,)), _m(S.MSG_AS))
     case("admin xoá phiên của owner", _raw(D, adm, "DELETE FROM auth_sessions WHERE id=?", (s_ry,)), _m(S.MSG_AS))
     case("actor system tenant A xoá phiên", _raw(D, sysW, "DELETE FROM auth_sessions WHERE id=?", (s_ry,)), _m(S.MSG_AS))
     _pos(pos, _raw(D, adm, "DELETE FROM auth_sessions WHERE id=?", (s_au,)))  # tự xoá phiên của mình
