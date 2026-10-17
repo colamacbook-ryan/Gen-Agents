@@ -120,7 +120,8 @@ describe('runner — checksum + chế độ tương thích (§10.4)', () => {
         `INSERT INTO schema_migrations (version, name, kind, checksum, dialect, compat_min_app_version, is_expand_only, app_version)
          VALUES (?, 'from_newer_app', 'standard', 'x', 'sqlite', ?, 1, '0.3.0')`,
       );
-      ins.run(9001, '0.3.0');
+      // DB v2.3.5: schema_migrations chỉ ghi trong bảo trì (runner) — giả lập hàng do bản app mới hơn ghi
+      conn.maintenance('test: hàng migration của bản app mới hơn', () => ins.run(9001, '0.3.0'));
       expect(() => migrate(conn, { dir: tmp.dir, appVersion: '0.2.9' })).toThrow(IncompatibleSchemaError);
       const ok = migrate(conn, { dir: tmp.dir, appVersion: '0.3.0' });
       expect(ok.mode).toBe('compat');

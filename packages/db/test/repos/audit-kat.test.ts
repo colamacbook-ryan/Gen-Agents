@@ -1,5 +1,5 @@
 // Audit HMAC — vector đáp án biết trước (KAT) tính ĐỘC LẬP với src: cột lấy từ DDL baseline (không từ AUDIT_HASHED_COLUMNS),
-// HKDF viết tay theo RFC 5869, JCS viết tay cho giá trị chuỗi / số nguyên / null, thông điệp (prev_hash ?? '') ‖ JCS(body).
+// HKDF viết tay theo RFC 5869, JCS viết tay cho giá trị chuỗi / số nguyên / null, thông điệp UTF-8(JCS(hàng)) (CHANGELOG v2.3.5).
 // Không dùng fixture (ghi audit) ⇒ đột biến danh sách cột / thông điệp / info HKDF đỏ qua dòng assert, không qua ngoại lệ.
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -53,7 +53,7 @@ const jcsFlat = (o: Record<string, string | number | null>) =>
     .join(',')}}`;
 
 const WS = '01JTN0000000000000000000W1';
-const MASTER = Buffer.alloc(32, 7); // khoá test entropy thấp, dựng lúc chạy
+const MASTER = Buffer.from(Array.from({ length: 32 }, (_, i) => i)); // = MASTER của bộ test Python (bytes(range(32)))
 
 function sampleRow(cols: string[], prevHash: string | null): Record<string, string | number | null> {
   const row: Record<string, string | number | null> = {};
@@ -71,14 +71,12 @@ describe('audit HMAC — KAT độc lập', () => {
     expect([...AUDIT_HASHED_COLUMNS].sort()).toEqual([...cols].sort());
   });
 
-  it('row_hash = HMAC(HKDF(master, "genagents-audit", "audit-chain:v1:" ‖ ws), (prev_hash ?? "") ‖ JCS(mọi cột trừ row_hash))', () => {
+  it('row_hash = HMAC(HKDF(master, "genagents-audit", "audit-chain:v1:" ‖ ws), UTF-8(JCS(mọi cột trừ row_hash, kể cả prev_hash)))', () => {
     const cols = auditColumnsFromDdl().filter((c) => c !== 'row_hash');
     const key = hkdfManual(MASTER, 'genagents-audit', `audit-chain:v1:${WS}`, 32);
     for (const prev of ['ab'.repeat(32), null]) {
       const row = sampleRow(cols, prev);
-      const want = createHmac('sha256', key)
-        .update(`${prev ?? ''}${jcsFlat(row)}`, 'utf8')
-        .digest('hex');
+      const want = createHmac('sha256', key).update(jcsFlat(row), 'utf8').digest('hex');
       expect(auditRowHash(deriveAuditKey(MASTER, WS), row as AuditHashInput), String(prev)).toBe(want);
     }
   });

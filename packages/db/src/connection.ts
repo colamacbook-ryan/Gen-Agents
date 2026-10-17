@@ -169,6 +169,8 @@ interface FnState {
   clock: Clock;
   /** actor của giao dịch ghi hiện tại — chỉ write() đặt / xoá. */
   actor: string | null;
+  /** DB v2.3.5: id workspace đang dựng — CHỈ bootstrap() đặt / xoá (app_bootstrap()); null ở mọi chỗ khác. */
+  boot: string | null;
 }
 
 type AppFunctionImpl = (db: SqliteDatabase, state: FnState) => void;
@@ -192,6 +194,12 @@ const APP_FUNCTIONS: Record<string, { impl: AppFunctionImpl; onReader: boolean }
   app_actor: {
     onReader: false,
     impl: (db, st) => db.function('app_actor', { deterministic: false }, () => st.actor),
+  },
+  // DB v2.3.5: workspace đang dựng trong bootstrap() — trigger cho tạo hàng workspaces / actor system đầu tiên CHỈ khi
+  // app_bootstrap() = id workspace đó (ngoài bootstrap: NULL ⇒ chặn, trừ bảo trì / actor system của workspace hệ thống).
+  app_bootstrap: {
+    onReader: false,
+    impl: (db, st) => db.function('app_bootstrap', { deterministic: false }, () => st.boot),
   },
 };
 
@@ -269,21 +277,26 @@ function wrap(db: SqliteDatabase, role: AppConnection['role'], opts: OpenOptions
           `workspace ${target.workspaceId} đã có actor system ${existing} — bootstrap phải dùng đúng id đó`,
         );
       }
-      return withActor(
-        db,
-        state,
-        target.systemActorId,
-        () => {
-          const out = fn(statementContext(db, target.systemActorId));
-          if (workspaceSystemActor(db, target.workspaceId) !== target.systemActorId) {
-            throw new ConnectionContractError(
-              'bootstrap() phải tạo / giữ hàng actors (kind system, system_key system) của workspace với đúng systemActorId',
-            );
-          }
-          return out;
-        },
-        'bootstrap()',
-      );
+      state.boot = target.workspaceId; // app_bootstrap() — chỉ trong đúng giao dịch này
+      try {
+        return withActor(
+          db,
+          state,
+          target.systemActorId,
+          () => {
+            const out = fn(statementContext(db, target.systemActorId));
+            if (workspaceSystemActor(db, target.workspaceId) !== target.systemActorId) {
+              throw new ConnectionContractError(
+                'bootstrap() phải tạo / giữ hàng actors (kind system, system_key system) của workspace với đúng systemActorId',
+              );
+            }
+            return out;
+          },
+          'bootstrap()',
+        );
+      } finally {
+        state.boot = null;
+      }
     },
     maintenance<T>(
       reason: string,
@@ -424,7 +437,7 @@ export function openWriter(path: string, opts: OpenOptions): AppConnection {
   assertFilePath(path);
   const db = new Database(path);
   try {
-    const state: FnState = { maint: false, clock: opts.clock, actor: null };
+    const state: FnState = { maint: false, clock: opts.clock, actor: null, boot: null };
     applyAndVerifyPragmas(db, 'writer');
     registerAppFunctions(db, state, 'writer');
     return wrap(db, 'writer', opts, state);
@@ -439,7 +452,7 @@ export function openReader(path: string, opts: OpenOptions): AppConnection {
   assertFilePath(path);
   const db = new Database(path, { readonly: true, fileMustExist: true });
   try {
-    const state: FnState = { maint: false, clock: opts.clock, actor: null };
+    const state: FnState = { maint: false, clock: opts.clock, actor: null, boot: null };
     applyAndVerifyPragmas(db, 'reader');
     registerAppFunctions(db, state, 'reader');
     return wrap(db, 'reader', opts, state);
@@ -452,7 +465,7 @@ export function openReader(path: string, opts: OpenOptions): AppConnection {
 /** DB trong RAM cho công cụ (sinh kiểu, parity, test). Cùng hàm + pragma trừ WAL / mmap. Không dùng trong app. */
 export function openScratch(opts: OpenOptions): AppConnection {
   const db = new Database(':memory:');
-  const state: FnState = { maint: false, clock: opts.clock, actor: null };
+  const state: FnState = { maint: false, clock: opts.clock, actor: null, boot: null };
   applyAndVerifyPragmas(db, 'scratch');
   registerAppFunctions(db, state, 'scratch');
   return wrap(db, 'scratch', opts, state);

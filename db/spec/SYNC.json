@@ -2,29 +2,30 @@
   "source": "repo",
   "rev": "repo",
   "source_dir": "db/spec",
-  "database_version": "2.3.4",
+  "database_version": "2.3.5",
   "files": {
     "schema_v2_2.py": {
-      "sha256": "5e73cb743c0f65beb49354b3005b7c8ad56a5461961f3b4ad2ec6a82d32ce4f4"
+      "sha256": "44f0a4ceac16913a293b1627068ca3b8471525b8e5aaf28bc620fae9a3d68f66"
     },
     "schema_v2_2.sql": {
-      "sha256": "5d87098d019d0da13a77d20a1deafa13b8c4474db607597a07437ebb33260d43"
+      "sha256": "898f63c54fcd6c6f343a293bd1a8c1482207957bdc742f4796f624506aeeaacd"
     },
     "views_v2_2.sql": {
       "sha256": "d74f8852bf88861451e0da9c4f000c1d13550571e92f89eedc35256e19fe4ac6"
     },
     "tests_v2_2.py": {
-      "sha256": "cbd752140e7099adc79de499c4e9ab26f58e06558b18af5003da7161469d6895"
+      "sha256": "3adcf437457d738163d8012cc76cf3acb7477bcdabcd0fe11306dd6c36b0cbea"
     },
     "gen_seed.py": {
       "sha256": "416eea5a52aa8f7ab937151af78a189469040ed47167142d0d31a470482179f5"
     },
     "seed_reference.json": {
-      "sha256": "85f0bcf8f72ed51bb1a333ecedf0a1b3880c7b5ea8db01c7b7a035f687929543"
+      "sha256": "6bd594fe5a72cb477a6e433842b503d8edd3841fa8455d8c78bc3dc15aa2b71b"
     }
   },
   "app_functions": [
     "app_actor",
+    "app_bootstrap",
     "app_local_time",
     "app_maint",
     "app_now"
@@ -33,13 +34,13 @@
     "tables": 81,
     "virtual_tables": 1,
     "indexes": 284,
-    "triggers": 564,
+    "triggers": 905,
     "views": 31
   },
   "python_tests": {
-    "passed": 117,
-    "total": 117,
+    "passed": 125,
+    "total": 125,
     "sqlite": "3.45.1"
   },
-  "synced_at": "2026-10-17T01:02:13Z"
+  "synced_at": "2026-10-17T07:24:25Z"
 }
