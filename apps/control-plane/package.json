@@ -1,0 +1,19 @@
+{
+  "name": "@ga/control-plane",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Control plane (Hono API, SSE, scheduler, gateway…) — BUILD-PLAN §B.4. Khung tối thiểu: hiện mới có module auth/ (L-SEC).",
+  "exports": {
+    "./auth": "./src/auth/index.ts"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs"
+  },
+  "dependencies": {
+    "@ga/contracts": "workspace:*",
+    "@ga/db": "workspace:*",
+    "@ga/security": "workspace:*"
+  }
+}
