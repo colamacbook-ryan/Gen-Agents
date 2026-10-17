@@ -1,7 +1,8 @@
 import { ENTITY_TYPES, type EntityPrefix } from '../ids.ts';
 import { Anchor } from '../mcp.ts';
-import { type AuthLevel, maxAuth } from './define.ts';
+import { type AuthLevel, authAtLeast, maxAuth } from './define.ts';
 import { GRID_KEYS, GRID_PREFIX, type GridKeyName } from './grids.ts';
+import { SSE_EVENT_AUDIENCE, type SseEventTypeName } from './sse.ts';
 
 // Quyền ĐỌC của các route đọc TỔNG QUÁT (OPS-33/34 lưới, OPS-35 bản ghi, OPS-36 tìm kiếm, SYS-23 anchor, SYS-17/19 ghim vào chat)
 // — review bảo mật PR #7 (HIGH). Các route này nhận prefix / lưới do client chọn, nên quyền route (`V`) KHÔNG đủ: mỗi loại bản ghi
@@ -125,3 +126,23 @@ export const ReadableAnchor = Anchor.refine((a) => {
   const prefix = anchorEntityPrefix(a);
   return prefix === null || RECORD_ACCESS[prefix] !== 'deny';
 }, 'anchor trỏ vào bản ghi không đọc được qua API').meta({ example: 'role:RL-0001' });
+
+/**
+ * Người này có được nhận sự kiện SSE này không (fail-closed). `viewer.auth = null` (access_level lạ) ⇒ không nhận gì.
+ * `grid.changed` còn phải đạt `GRID_MIN_AUTH[grid]`; `recipient` chỉ khi `isRecipient`.
+ */
+export function sseEventAllows(
+  event: { readonly type: SseEventTypeName; readonly grid?: GridKeyName },
+  viewer: { readonly auth: Exclude<AuthLevel, 'public'> | null; readonly isRecipient: boolean },
+): boolean {
+  if (viewer.auth === null) return false;
+  const audience = SSE_EVENT_AUDIENCE[event.type];
+  if (audience === undefined) return false;
+  if (audience === 'recipient') return viewer.isRecipient;
+  let need: AuthLevel = audience;
+  if (event.type === 'grid.changed') {
+    if (event.grid === undefined || GRID_MIN_AUTH[event.grid] === undefined) return false;
+    need = maxAuth(need, GRID_MIN_AUTH[event.grid]);
+  }
+  return authAtLeast(viewer.auth, need);
+}

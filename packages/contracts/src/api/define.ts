@@ -131,6 +131,8 @@ export const ws = <C extends z.ZodType, S extends z.ZodType>(
 ): { kind: 'ws'; client: C; server: S } => ({ kind: 'ws', client, server });
 
 /** Đầu vào khai báo một route ở tệp lane. */
+export type RouteScope = 'workspace' | 'self';
+
 export interface RouteInput<Q extends RequestSpec, S extends ResponseSpec> {
   /** `SYS-01`, `GW-12`, `EXT-05`… — duy nhất toàn registry. */
   id: string;
@@ -172,6 +174,11 @@ export interface RouteInput<Q extends RequestSpec, S extends ResponseSpec> {
   cliOnly?: string;
   /** Chưa có nguồn dữ liệu ở DB (T8: SYS-62). */
   pendingDb?: boolean;
+  /**
+   * `self` = dữ liệu của RIÊNG người gọi (lọc `user_id = người dùng của phiên`, HANDLER-OBLIGATIONS #7): route không nhận
+   * tham số chọn người dùng khác, và owner / admin cũng không đọc hộ người khác. Mặc định `workspace`.
+   */
+  scope?: RouteScope;
 }
 
 export interface RouteDraft<Q extends RequestSpec = RequestSpec, S extends ResponseSpec = ResponseSpec> {
@@ -201,6 +208,7 @@ export interface RouteDraft<Q extends RequestSpec = RequestSpec, S extends Respo
   readonly noCli?: string;
   readonly cliOnly?: string;
   readonly pendingDb: boolean;
+  readonly scope: RouteScope;
 }
 
 /** Route đã vào registry: thêm `fs` (mã màn / thành phần FRONTEND-SPEC) dẫn xuất từ bảng §3.11 (`coverage.ts`). */
@@ -273,6 +281,7 @@ export function defineLane(lane: Lane) {
       ...(input.noCli ? { noCli: input.noCli } : {}),
       ...(input.cliOnly ? { cliOnly: input.cliOnly } : {}),
       pendingDb: input.pendingDb ?? false,
+      scope: input.scope ?? 'workspace',
     };
   };
 }

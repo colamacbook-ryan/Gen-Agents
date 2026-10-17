@@ -822,6 +822,7 @@ export const SYS_82 = sys({
 
 export const SYS_83 = sys({
   id: 'SYS-83',
+  scope: 'self',
   method: 'GET',
   path: '/notifications',
   auth: 'V',
@@ -845,6 +846,7 @@ export const SYS_83 = sys({
 
 export const SYS_84 = sys({
   id: 'SYS-84',
+  scope: 'self',
   method: 'POST',
   path: '/notifications/read',
   auth: 'V',
