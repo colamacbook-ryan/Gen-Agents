@@ -2247,6 +2247,10 @@ MSG_WS = 'workspaces (v2.3.5): sửa workspace chỉ owner / admin còn là thà
 MSG_WS_NEW = ('workspaces (v2.3.5): tạo workspace chỉ trong conn.bootstrap của chính workspace đó (app_bootstrap() = id), bảo trì, hoặc actor system của '
               'workspace hệ thống')
 MSG_WS_DEL = 'workspaces (v2.3.5): xoá cứng workspace chỉ trong bảo trì (purge)'
+MSG_SEC_DEL = ('secrets (v2.3.5): xoá cứng bí mật theo luật ghi của kind — anchor_remote_token chỉ owner; telegram_bot_token owner / actor system; còn lại '
+               'owner / admin / actor system (hoặc bảo trì)')
+MSG_TG_DEL = 'telegram_bots (v2.3.5): xoá cứng bot chỉ owner còn là thành viên hoặc actor system của workspace (admin cũng không — như luật ghi cấu hình bot)'
+MSG_EI_DEL = 'engine_installs (v2.3.5): xoá cứng trạng thái cài CLI chỉ actor system của workspace (như luật ghi)'
 MSG_MIG = 'schema_migrations (v2.3.5): lịch sử migration chỉ ghi / sửa / xoá trong bảo trì (runner — conn.maintenance)'
 MSG_CT = 'containers (v2.3.5): container chỉ owner / admin hoặc actor system của workspace ghi; cột cấu hình (image / CLI / tài nguyên) chỉ actor system'
 MSG_AL = ('telegram_allowlist (v2.3.5): danh sách người được nhắn bot chỉ owner / admin còn là thành viên hoặc actor system ghi; tác tử Telegram chỉ thêm '
@@ -2387,6 +2391,12 @@ f"""CREATE TRIGGER containers_sys_u BEFORE UPDATE OF {', '.join(CT_SYS_COLS)} ON
 WHEN app_maint() = 0 AND NOT {SYS_ACTOR(ACTOR)}
 BEGIN SELECT RAISE(ABORT, '{MSG_CT}'); END""",
 _writer_d('containers'),
+# --- xoá cứng KHÔNG lỏng hơn luật ghi (bảng credential có luật ghi chặt hơn mặc định owner / admin / system)
+_writer_d('secrets', f"(CASE WHEN OLD.kind = 'anchor_remote_token' THEN {_owner_of('OLD.workspace_id')} "
+                     f"WHEN OLD.kind = 'telegram_bot_token' THEN ({_owner_of('OLD.workspace_id')} OR {_sys_of('OLD.workspace_id')}) ELSE {OA_SYS_OLD} END)",
+          MSG_SEC_DEL),
+_writer_d('telegram_bots', f"({_owner_of('OLD.workspace_id')} OR {_sys_of('OLD.workspace_id')})", MSG_TG_DEL),
+_writer_d('engine_installs', _sys_of('OLD.workspace_id'), MSG_EI_DEL),
 # --- engines (MEDIUM, pD): danh mục dùng chung
 f"""CREATE TRIGGER engines_writer_i BEFORE INSERT ON engines
 WHEN app_maint() = 0 AND NOT {SYS_SYS}

@@ -3957,6 +3957,18 @@ CREATE TRIGGER containers_writer_d BEFORE DELETE ON containers
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'containers (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
 
+CREATE TRIGGER secrets_writer_d BEFORE DELETE ON secrets
+WHEN app_maint() = 0 AND NOT ((CASE WHEN OLD.kind = 'anchor_remote_token' THEN EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = OLD.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') WHEN OLD.kind = 'telegram_bot_token' THEN (EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = OLD.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') OR EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system')) ELSE (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))) END))
+BEGIN SELECT RAISE(ABORT, 'secrets (v2.3.5): xoá cứng bí mật theo luật ghi của kind — anchor_remote_token chỉ owner; telegram_bot_token owner / actor system; còn lại owner / admin / actor system (hoặc bảo trì)'); END;
+
+CREATE TRIGGER telegram_bots_writer_d BEFORE DELETE ON telegram_bots
+WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors ow JOIN workspace_members om ON om.workspace_id = ow.workspace_id AND om.user_id = ow.user_id WHERE ow.id = app_actor() AND ow.workspace_id = OLD.workspace_id AND ow.kind = 'user' AND om.removed_at IS NULL AND om.access_level = 'owner') OR EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system')))
+BEGIN SELECT RAISE(ABORT, 'telegram_bots (v2.3.5): xoá cứng bot chỉ owner còn là thành viên hoặc actor system của workspace (admin cũng không — như luật ghi cấu hình bot)'); END;
+
+CREATE TRIGGER engine_installs_writer_d BEFORE DELETE ON engine_installs
+WHEN app_maint() = 0 AND NOT (EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system'))
+BEGIN SELECT RAISE(ABORT, 'engine_installs (v2.3.5): xoá cứng trạng thái cài CLI chỉ actor system của workspace (như luật ghi)'); END;
+
 CREATE TRIGGER engines_writer_i BEFORE INSERT ON engines
 WHEN app_maint() = 0 AND NOT EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = '00000000000000000000000000' AND sy.system_key = 'system')
 BEGIN SELECT RAISE(ABORT, 'engines (v2.3.5): danh mục engine dùng chung — chỉ bảo trì hoặc actor system của workspace hệ thống ghi'); END;
@@ -4134,10 +4146,6 @@ CREATE TRIGGER usage_daily_writer_d BEFORE DELETE ON usage_daily
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'usage_daily (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
 
-CREATE TRIGGER engine_installs_writer_d BEFORE DELETE ON engine_installs
-WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
-BEGIN SELECT RAISE(ABORT, 'engine_installs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
-
 CREATE TRIGGER engine_accounts_writer_d BEFORE DELETE ON engine_accounts
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'engine_accounts (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
@@ -4157,10 +4165,6 @@ BEGIN SELECT RAISE(ABORT, 'capabilities (v2.3.5): xoá cứng chỉ owner / admi
 CREATE TRIGGER model_ranks_writer_d BEFORE DELETE ON model_ranks
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'model_ranks (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
-
-CREATE TRIGGER telegram_bots_writer_d BEFORE DELETE ON telegram_bots
-WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
-BEGIN SELECT RAISE(ABORT, 'telegram_bots (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
 
 CREATE TRIGGER proactive_jobs_writer_d BEFORE DELETE ON proactive_jobs
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
@@ -4205,10 +4209,6 @@ BEGIN SELECT RAISE(ABORT, 'backups (v2.3.5): xoá cứng chỉ owner / admin cò
 CREATE TRIGGER update_runs_writer_d BEFORE DELETE ON update_runs
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
 BEGIN SELECT RAISE(ABORT, 'update_runs (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
-
-CREATE TRIGGER secrets_writer_d BEFORE DELETE ON secrets
-WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))
-BEGIN SELECT RAISE(ABORT, 'secrets (v2.3.5): xoá cứng chỉ owner / admin còn là thành viên hoặc actor system của workspace (hoặc bảo trì)'); END;
 
 CREATE TRIGGER search_documents_writer_d BEFORE DELETE ON search_documents
 WHEN app_maint() = 0 AND NOT ((EXISTS (SELECT 1 FROM actors sy WHERE sy.id = app_actor() AND sy.workspace_id = OLD.workspace_id AND sy.system_key = 'system') OR EXISTS (SELECT 1 FROM actors sa JOIN workspace_members sm ON sm.workspace_id = sa.workspace_id AND sm.user_id = sa.user_id WHERE sa.id = app_actor() AND sa.workspace_id = OLD.workspace_id AND sa.kind = 'user' AND sm.removed_at IS NULL AND sm.access_level IN ('owner', 'admin'))))

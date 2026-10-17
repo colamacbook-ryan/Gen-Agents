@@ -5,16 +5,16 @@
   "database_version": "2.3.5",
   "files": {
     "schema_v2_2.py": {
-      "sha256": "cce1fa10e3f8b4eb690f240e5530b1f324b578d6084965083338a784a23b109f"
+      "sha256": "44f0a4ceac16913a293b1627068ca3b8471525b8e5aaf28bc620fae9a3d68f66"
     },
     "schema_v2_2.sql": {
-      "sha256": "31abf167bc628c9528ab906877fb513483548e8ae248aad83897016b010d9d96"
+      "sha256": "898f63c54fcd6c6f343a293bd1a8c1482207957bdc742f4796f624506aeeaacd"
     },
     "views_v2_2.sql": {
       "sha256": "d74f8852bf88861451e0da9c4f000c1d13550571e92f89eedc35256e19fe4ac6"
     },
     "tests_v2_2.py": {
-      "sha256": "48d0224f093622d17b06c2ec40f610d2a9b7409a36e53456234d3421742fa023"
+      "sha256": "9525955613152397b9c391d5afbba3730485ffc8e9a30f24806ce0280bdf7c32"
     },
     "gen_seed.py": {
       "sha256": "416eea5a52aa8f7ab937151af78a189469040ed47167142d0d31a470482179f5"
@@ -38,9 +38,9 @@
     "views": 31
   },
   "python_tests": {
-    "passed": 124,
-    "total": 124,
+    "passed": 125,
+    "total": 125,
     "sqlite": "3.45.1"
   },
-  "synced_at": "2026-10-17T03:26:37Z"
+  "synced_at": "2026-10-17T03:52:40Z"
 }

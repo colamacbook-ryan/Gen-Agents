@@ -9,7 +9,7 @@ Quy trình: sửa `schema_v2_2.py` / `views_v2_2.sql` / `tests_v2_2.py` → `pnp
 ## v2.3.5 — 2026-10-17
 
 Nguồn: review bảo mật tay trên `2bbd12b` (chặn merge M0, probe pA…pI) + 3 lượt auto-review trên các commit v2.3.5 + review hợp đồng API (mục a).
-Trigger 564 → 905 (+342 / −1 `schema_migrations_no_replace_u`); bộ test Python 117 → 124; hàm SQL mới `app_bootstrap()`.
+Trigger 564 → 905 (+342 / −1 `schema_migrations_no_replace_u`); bộ test Python 117 → 125; hàm SQL mới `app_bootstrap()`.
 
 ### Vá bảo mật
 - **HIGH (pA) — bảng gốc phân quyền không có cổng người ghi** (`workspace_members`, `actors`, `users`): admin tự nâng owner rồi đi qua mọi cổng owner-only.
@@ -36,7 +36,9 @@ Trigger 564 → 905 (+342 / −1 `schema_migrations_no_replace_u`); bộ test Py
   `proactive_policies_writer_*`, `max_per_day` số nguyên 0–20 (giữ trần 20 đã có trong DDL), giờ yên tĩnh số nguyên.
 - **`_writer_pair` ⇒ `_writer_gates`** (ba cổng I / U / D; D = điều kiện U đổi `NEW.*` ⇒ `OLD.*`, bảng nhạy cảm truyền `cond_d` chặt hơn).
 - **DELETE mặc định** (`{t}_writer_d`, sinh từ DDL): mọi bảng có `workspace_id` chưa có cổng xoá riêng / append-only ⇒ xoá cứng ngoài bảo trì chỉ owner / admin
-  còn là thành viên hoặc actor system (`system`) của `OLD.workspace_id` (43 bảng).
+  còn là thành viên hoặc actor system (`system`) của `OLD.workspace_id` (40 bảng). **Xoá cứng không lỏng hơn luật ghi**: `secrets_writer_d` theo kind
+  (anchor_remote_token chỉ owner; telegram_bot_token owner / system; còn lại owner / admin / system), `telegram_bots_writer_d` (owner / system — admin không),
+  `engine_installs_writer_d` (chỉ actor system).
 - **Bảng không có cột người ghi** (`{t}_ws_actor_i/_u`, sinh từ DDL): `change_set_items`, `compiled_prompt_segments` (chỉ I — append-only), `id_counters`,
   `knowledge_chunks`, `search_documents`, `skill_engine_support`, `skill_files`, `usage_daily` — ghi ngoài bảo trì cần actor của CHÍNH workspace (trước: ghi vô danh).
 - **`schema_migrations_maint_i/_u/_d`**: lịch sử migration chỉ ghi trong bảo trì (runner).
@@ -93,20 +95,24 @@ Trigger 564 → 905 (+342 / −1 `schema_migrations_no_replace_u`); bộ test Py
   đồng bộ của `search_documents`); cột `workspaces.core_agent_locked_at` (trigger `probe_runs_core_lock_*` ghi; guard riêng ghi một lần).
 
 ### Trigger mới (tên — cho L-DB)
-- Viết tay (47): `workspace_members_writer_i/_u`, `workspace_members_cross_i/_u`, `workspace_members_owner_last_u`, `workspace_members_delete_d`,
+- Viết tay (50): `workspace_members_writer_i/_u`, `workspace_members_cross_i/_u`, `workspace_members_owner_last_u`, `workspace_members_delete_d`,
   `actors_writer_i/_u/_d`, `actors_lock_u`, `users_writer_i/_u/_d`, `auth_sessions_writer_i/_u/_d`, `schema_migrations_maint_i/_u/_d`,
   `workspaces_writer_i/_u/_d`, `containers_writer_i/_u/_d`, `containers_sys_u`, `engines_writer_i/_u/_d`, `settings_retention_i/_u/_d`,
-  `{settings, telegram_allowlist, tool_grants, egress_rules, proactive_policies}_writer_i/_u/_d`.
-- Sinh từ DDL: `{t}_notnull_i` 78, `{t}_notnull_u` 78, `{t}_rowid_lock` 81, `{t}_writer_d` mặc định 43, `{t}_ws_actor_i` 8, `{t}_ws_actor_u` 7.
+  `{settings, telegram_allowlist, tool_grants, egress_rules, proactive_policies}_writer_i/_u/_d`, `secrets_writer_d`, `telegram_bots_writer_d`,
+  `engine_installs_writer_d`.
+- Sinh từ DDL: `{t}_notnull_i` 78, `{t}_notnull_u` 78, `{t}_rowid_lock` 81, `{t}_writer_d` mặc định 40, `{t}_ws_actor_i` 8, `{t}_ws_actor_u` 7.
 - Sửa: `telegram_allowlist_owner_new_i/_u` (bootstrap), `{t}_no_replace_i` (+ khoá rowid ẩn), `{t}_no_replace_u` (bỏ khoá rowid / INTEGER PK).
 
-### Test (bộ Python 117 → 124)
-- Mới: `ROOT-authz` (77 ca âm / 45 thuận), `REPLACE-notnull`, `ROUTE-writers` (44 / 14), `ROWID-lock` (rowid / "rowid" / ROWID / _rowid_ / oid / INTEGER PK ×2,
+### Test (bộ Python 117 → 125)
+- Mới: `ROOT-authz` (86 ca âm / 46 thuận), `REPLACE-notnull`, `ROUTE-writers` (54 / 23), `WS-actor` (29 / 7), `ROWID-lock` (rowid / "rowid" / ROWID / _rowid_ / oid / INTEGER PK ×2,
   bảo trì REPLACE ON / OFF), `BLOB-check`, `AUDIT-hmac` (sửa 8 cột kể cả `prev_hash`, NULL ↔ giá trị), `WRITER-all` (meta-test + 12 đối chứng âm).
 - `GEN-guards` + `_notnull_i/_u`, `_rowid_lock`, `_writer_d` (mặc định + viết tay), `_ws_actor_i/_u`: 554/554 guard sinh / cổng xoá có ca âm tự dựng.
 - `AL-owner-create` + bootstrap bởi admin / viewer / tác tử Telegram / actor system tenant khác / tác tử + actor system workspace hệ thống ⇒ chặn.
 - Probe pA…pI của review (`scratchpad/m1/review-db/probe`) chạy lại trên schema v2.3.5 (dựng người thử bằng actor system + bảo trì): mọi bước khai thác `ERR`;
   pG: sửa audit ⇒ `verify_chain` báo hàng bị sửa.
+- **Bộ đệm seed trong một tiến trình** (`seed()` = `_seed_fresh` lần đầu, sau đó bản sao sqlite backup + đặt lại đồng hồ giả về mốc ngay sau seed + bản sao
+  X): 125 / 125 PASS, mọi dòng báo cáo trùng bản không đệm (`GA_SEED_NOCACHE=1`); 95 s → 18 s dưới tải ⇒ mutation toàn bộ khả thi. Mỗi lượt mutation
+  vẫn là tiến trình mới (seed đầu tiên dựng dưới schema đột biến).
 - Fixture: repository giả lập đặt `app_bootstrap()` khi dựng workspace, `SYS_SYS` cho bảng toàn cục / membership chéo, actor system cho DELETE và bảng không có
   `created_by`; TS: `seedMinimal` tạo workspace trong `conn.bootstrap`; runner test ghi `schema_migrations` trong `conn.maintenance`.
 

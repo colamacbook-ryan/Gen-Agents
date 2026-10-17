@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Bằng chứng kiểm thử cho DB spec v2.2 → v2.3.4 (từ v2.3.4: nguồn = db/spec của repo code) — chạy: python3 -B -I tests_v2_2.py [--perf]"""
-import sqlite3, hashlib, hmac, json, os, sys, time, re, datetime, zoneinfo
+import sqlite3, hashlib, hmac, json, os, sys, time, re, datetime, zoneinfo, copy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -599,7 +599,26 @@ TQ_CODES = [t[0] for t in TQ_CHIBI]
 
 INSTALLED_CLI = (('antigravity', '1.3.5'), ('claude-code', '2.1.299'))   # v2.3.1: version mock (Spike 1b), không phải giá trị registry
 
+# v2.3.5: BỘ ĐỆM SEED trong MỘT tiến trình — seed() dựng thật lần đầu (_seed_fresh, dưới schema của chính tiến trình: đột biến vẫn áp vào seed), chụp bản
+# sạch (sqlite backup) + mốc đồng hồ giả ngay sau seed + bản sao X; các lần sau = bản sao DB mới (kết nối mới, Ctx mới, hàm app_* mới) + đặt lại đồng hồ giả
+# về đúng mốc đó ⇒ mỗi test thấy đúng trạng thái "vừa seed xong" như dựng lại (đo: 125 / 125 PASS, mọi dòng báo cáo trùng bản không đệm; 95 s → 18 s).
+# Mỗi lượt mutation vẫn là tiến trình mới (bộ đệm không qua lượt). Tắt: GA_SEED_NOCACHE=1.
+_SEED_CACHE = {}
 def seed(with_fn=True):
+    c = _SEED_CACHE.get(with_fn)
+    if c is None or os.environ.get('GA_SEED_NOCACHE'):
+        D, X = _seed_fresh(with_fn)
+        snap = sqlite3.connect(':memory:', isolation_level=None)
+        D.raw.backup(snap)
+        _SEED_CACHE[with_fn] = {'db': snap, 'clock': _CLOCK[0], 'X': copy.deepcopy(X)}
+        return D, X
+    ctx = Ctx()
+    db = connect(ctx, with_fn)
+    c['db'].backup(db)
+    _CLOCK[0] = c['clock']
+    return DB(db, ctx), copy.deepcopy(c['X'])
+
+def _seed_fresh(with_fn=True):
     ctx = Ctx()
     db = connect(ctx, with_fn)
     load_schema(db)
@@ -5276,6 +5295,7 @@ def t_v2213_owner_create():
                                                                      is_owner=1, added_via='capture', created_by=who, _actor=who), MSG_AL_NEW_T)
     boot = _try(add(tb, 999, 'capture', X['A'][(W, 'system')]))                 # dịch vụ app (actor system của chính workspace) — bootstrap
     case("sau bootstrap: tác tử thêm owner thứ hai qua capture", add(tb, 1001, 'capture', tele), MSG_AL_NEW_T)
+    case("sau bootstrap: actor system của workspace thêm owner thứ hai qua capture", add(tb, 1002, 'capture', X['A'][(W, 'system')]), MSG_AL_NEW_T)
     # --- khôi phục bot đã xoá mềm: chỉ owner của workspace
     db.execute("UPDATE telegram_bots SET deleted_at=?, updated_by=? WHERE id=?", (now(), own, tb))
     # v2.3.3: admin khôi phục bot ⇒ cổng mới telegram_bots_writer_u (chỉ owner / system ghi bot) chặn TRƯỚC — cùng kết luận; telegram_bots_owner_u câu 1 (khôi
@@ -7594,6 +7614,15 @@ def _mk_member(D, ws, key, level, n):
     D.db.execute("INSERT INTO workspace_members(workspace_id,user_id,access_level) VALUES(?,?,?)", (ws, u, level))
     return u, a
 
+def _by_table(c):
+    """Đếm ca âm đã chặn theo bảng = từ đầu thông điệp lỗi ('users (v2.3.5): …' ⇒ users; 'CHECK constraint failed: …' ⇒ CHECK)."""
+    n = {}
+    for x in c:
+        if x[1]:
+            k = re.split(r"[ :(]", x[2], maxsplit=1)[0]
+            n[k] = n.get(k, 0) + 1
+    return ', '.join(f"{k} ×{v}" for k, v in sorted(n.items()))
+
 def _in_boot(D, ws, fn):
     """Chạy fn như trong conn.bootstrap của workspace ws (app_bootstrap() = ws)."""
     def run():
@@ -7664,6 +7693,7 @@ def t_v235_root_authz():
     case("owner A kích hoạt lại thành viên đang active ở tenant B", upd_m(own, "removed_at=NULL", vu), _m(S.MSG_WM_X))
     case("actor system tenant A kích hoạt lại thành viên đang active ở B", upd_m(sysW, "removed_at=NULL", vu), _m(S.MSG_WM_X))
     _pos(pos, upd_m(ssys, "removed_at=NULL", vu))                            # kích hoạt lại qua luồng mời
+    _pos(pos, upd_m(own, "removed_at=NULL, access_level='operator'", nu))   # sửa thành viên đang active (UI gửi kèm removed_at=NULL)
     gu = _mk_user(D, 'ra-gone', 35)                                          # user từng ở B nhưng đã bị gỡ (không active) ⇒ owner A thêm được
     _pos(pos, ins_m(ssys, gu, 'viewer', W2))
     _pos(pos, _raw(D, own2, "UPDATE workspace_members SET removed_at=? WHERE workspace_id=? AND user_id=?", (now(), W2, gu)))
@@ -7756,6 +7786,11 @@ def t_v235_root_authz():
     _pos(pos, _raw(D, ssys, "UPDATE auth_sessions SET last_seen_at=?, ip='10.0.0.1' WHERE id=?", (now(), s_ry)))
     _pos(pos, _raw(D, adm, "UPDATE auth_sessions SET revoked_at=? WHERE id=?", (now(), s_au)))   # tự thu hồi (đăng xuất)
     case("tự bỏ thu hồi phiên đã thu hồi", _raw(D, adm, "UPDATE auth_sessions SET revoked_at=NULL WHERE id=?", (s_au,)), _m(S.MSG_AS))
+    case("tự đổi mốc thu hồi của phiên đã thu hồi", _raw(D, adm, "UPDATE auth_sessions SET revoked_at='2099-01-01T00:00:00.000Z' WHERE id=?", (s_au,)),
+         _m(S.MSG_AS))
+    for col, v in (('id', f"'{uid('as:ra-nid')}'"), ('user_id', f"'{ryan}'"), ('token_hash', "'th-forged'"), ('created_at', "'2000-01-01T00:00:00.000Z'"),
+                   ('expires_at', "'2099-01-01T00:00:00.000Z'"), ('last_seen_at', "'2099-01-01T00:00:00.000Z'"), ('ip', "'6.6.6.6'"), ('user_agent', "'evil'")):
+        case(f"tự thu hồi KÈM đổi {col}", _raw(D, adm, f"UPDATE auth_sessions SET revoked_at=?, {col}={v} WHERE id=?", (now(), s_x)), _m(S.MSG_AS))
     case("admin xoá phiên của owner", _raw(D, adm, "DELETE FROM auth_sessions WHERE id=?", (s_ry,)), _m(S.MSG_AS))
     case("actor system tenant A xoá phiên", _raw(D, sysW, "DELETE FROM auth_sessions WHERE id=?", (s_ry,)), _m(S.MSG_AS))
     _pos(pos, _raw(D, adm, "DELETE FROM auth_sessions WHERE id=?", (s_au,)))  # tự xoá phiên của mình
@@ -7781,8 +7816,7 @@ def t_v235_root_authz():
     _pos(pos, act(adm, uid('ra:u3'), W, 'user', user_id=hu))                # admin tạo actor user cho người được mời
     _pos(pos, _in_maint(D, _raw(D, None, "DELETE FROM workspace_members WHERE workspace_id=? AND user_id=?", (W, fu))))   # bảo trì (purge)
     ok = all(x[1] for x in c) and not pa and not chain and all(pos)
-    report("ROOT-authz", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn (workspace_members ×16 gồm chéo workspace ×5, actors ×13, workspaces ×9, users ×24, "
-           f"auth_sessions ×10, schema_migrations ×3); chuỗi pA: admin tự nâng owner {'BỊ CHẶN' if not pa else 'LỌT'} ⇒ token neo "
+    report("ROOT-authz", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn ({_by_table(c)}); chuỗi pA: admin tự nâng owner {'BỊ CHẶN' if not pa else 'LỌT'} ⇒ token neo "
            f"{'bị chặn' if not chain else 'LỌT'}; thuận {sum(pos)}/{len(pos)} (owner thêm user mới, luồng mời SYS_SYS thêm / kích hoạt lại user chéo, user đã "
            f"rời B vào A, owner / system xoá actor, tạo workspace bằng SYS_SYS / bootstrap / bảo trì, tự đăng ký trong bootstrap, purge workspace, tự sửa hồ "
            f"sơ / mật khẩu, đặt lại mật khẩu + khoá đăng nhập qua SYS_SYS, admin / SYS_SYS tạo user, SYS_SYS xoá user, phiên: tạo / sửa / xoá bằng SYS_SYS, tự "
@@ -7910,12 +7944,46 @@ def t_v235_route_writers():
     _pos(pos, _raw(D, own, "DELETE FROM egress_rules WHERE id=?", (egx,)))
     _pos(pos, _raw(D, own, "DELETE FROM settings WHERE id=?", (ret,)))
     _pos(pos, _raw(D, adm, "DELETE FROM settings WHERE id=?", (ui,)))
+    p1 = _val(lambda: D.ins('positions', workspace_id=W, title='Vị trí thử xoá 1', created_by=own))
+    p2 = _val(lambda: D.ins('positions', workspace_id=W, title='Vị trí thử xoá 2', created_by=own))
+    case("Role Mai xoá cứng vị trí (cổng xoá mặc định)", _raw(D, mai_a, "DELETE FROM positions WHERE id=?", (p1,)), _m(S.MSG_DEL.format(t='positions')))
+    case("actor system tenant B xoá cứng vị trí của A", _raw(D, sysW2, "DELETE FROM positions WHERE id=?", (p1,)), _m(S.MSG_DEL.format(t='positions')))
+    _pos(pos, _raw(D, own, "DELETE FROM positions WHERE id=?", (p1,)))
+    _pos(pos, _raw(D, adm, "DELETE FROM positions WHERE id=?", (p2,)))
+    # xoá cứng không lỏng hơn luật ghi: secrets theo kind, telegram_bots owner / system, engine_installs system
+    sec = lambda key, kind, who, host=None: _val(lambda: D.ins('secrets', workspace_id=W, kind=kind, label=key, ciphertext=b'x', nonce=b'n', wrapped_dek=b'd',
+                                                               dek_nonce=b'n', kek_id='kek1', fingerprint='fp-' + key, allowed_host=host, created_by=who))
+    s_an, s_an2 = sec('rw-an1', 'anchor_remote_token', own, 'git.example'), sec('rw-an2', 'anchor_remote_token', own, 'git.example')
+    s_tg, s_tg2 = sec('rw-tg1', 'telegram_bot_token', own), sec('rw-tg2', 'telegram_bot_token', own)
+    s_ak = sec('rw-ak1', 'engine_api_key', adm)
+    case("admin xoá cứng token neo audit (anchor_remote_token — chỉ owner)", _raw(D, adm, "DELETE FROM secrets WHERE id=?", (s_an,)), _m(S.MSG_SEC_DEL))
+    case("actor system xoá cứng token neo audit", _raw(D, sysW, "DELETE FROM secrets WHERE id=?", (s_an,)), _m(S.MSG_SEC_DEL))
+    case("admin xoá cứng token bot Telegram", _raw(D, adm, "DELETE FROM secrets WHERE id=?", (s_tg,)), _m(S.MSG_SEC_DEL))
+    case("Role Mai xoá cứng engine_api_key", _raw(D, mai_a, "DELETE FROM secrets WHERE id=?", (s_ak,)), _m(S.MSG_SEC_DEL))
+    _pos(pos, _raw(D, own, "DELETE FROM secrets WHERE id=?", (s_an,)))
+    _pos(pos, _raw(D, sysW, "DELETE FROM secrets WHERE id=?", (s_tg,)))
+    _pos(pos, _raw(D, own, "DELETE FROM secrets WHERE id=?", (s_tg2,)))
+    _pos(pos, _raw(D, adm, "DELETE FROM secrets WHERE id=?", (s_ak,)))
+    bot = lambda key: _val(lambda: D.ins('telegram_bots', workspace_id=W, role_id=_role(D, W, key), bot_username=f'{key.lower()}_bot',
+                                         secret_id=sec('rw-b' + key, 'telegram_bot_token', own), status='pending', created_by=own))
+    b1, b2 = bot('Tb1'), bot('Tb2')
+    case("admin xoá cứng bot Telegram (chỉ owner / system)", _raw(D, adm, "DELETE FROM telegram_bots WHERE id=?", (b1,)), _m(S.MSG_TG_DEL))
+    case("actor system tenant B xoá cứng bot Telegram của A", _raw(D, sysW2, "DELETE FROM telegram_bots WHERE id=?", (b1,)), _m(S.MSG_TG_DEL))
+    _pos(pos, _raw(D, own, "DELETE FROM telegram_bots WHERE id=?", (b1,)))
+    _pos(pos, _raw(D, sysW, "DELETE FROM telegram_bots WHERE id=?", (b2,)))
+    ei = D.one("SELECT id FROM engine_installs WHERE workspace_id=? AND engine_slug='claude-code'", W)
+    for nm, who in (('owner', own), ('admin', adm)):
+        case(f"{nm} xoá cứng trạng thái cài CLI (chỉ actor system)", _raw(D, who, "DELETE FROM engine_installs WHERE id=?", (ei,)), _m(S.MSG_EI_DEL))
+    _pos(pos, _raw(D, sysW, "DELETE FROM engine_installs WHERE id=?", (ei,)))
+    made = [s_an, s_an2, s_tg, s_tg2, s_ak, b1, b2, ei, p1, p2]                  # hàng dựng cho ca xoá phải có thật, ca thuận phải xoá thật
+    gone = (D.one("SELECT count(*) FROM secrets WHERE id IN (?,?,?,?)", s_an, s_tg, s_tg2, s_ak) == 0
+            and D.one("SELECT count(*) FROM telegram_bots WHERE id IN (?,?)", b1, b2) == 0 and D.one("SELECT count(*) FROM engine_installs WHERE id=?", ei) == 0
+            and D.one("SELECT count(*) FROM positions WHERE id IN (?,?)", p1, p2) == 0)
     _pos(pos, _raw(D, own, "DELETE FROM telegram_allowlist WHERE id=?", (alx,)))
-    ok = all(x[1] for x in c) and all(pos) and pp is not None and gid is not None
-    report("ROUTE-writers", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn (containers ×5, allowlist ×6, engines ×5, tool_grants ×5, egress ×4, settings ×13, "
-           f"proactive_policies ×6); thuận {sum(pos)}/{len(pos)} (owner thêm / xoá hàng allowlist, owner mở / xoá egress, system đổi image, tác tử Telegram thêm "
+    ok = all(x[1] for x in c) and all(pos) and pp is not None and gid is not None and None not in made and gone
+    report("ROUTE-writers", ok, f"{sum(x[1] for x in c)}/{len(c)} ca bị chặn ({_by_table(c)}); thuận {sum(pos)}/{len(pos)} (owner thêm / xoá hàng allowlist, owner mở / xoá egress, system đổi image, tác tử Telegram thêm "
            f"capture, system workspace hệ thống / bảo trì sửa engines, owner retention đúng khoảng + xoá, owner / admin chỉnh chính sách, owner xoá grant, admin "
-           f"xoá setting thường)")
+           f"xoá setting thường, owner / admin xoá vị trí qua cổng xoá mặc định, xoá bí mật đúng luật kind, owner / system xoá bot, system xoá trạng thái cài CLI)")
     _show(c)
 
 def t_v235_rowid_lock():
@@ -7958,6 +8026,30 @@ def t_v235_rowid_lock():
     report("ROWID-lock", ok, f"{sum(x[1] for x in c)}/{len(c)} lối đổi rowid bị {{t}}_rowid_lock chặn (allowlist: rowid / \"rowid\" / ROWID / _rowid_ / oid; "
            f"search_documents: id INTEGER PK / oid; schema_migrations: version INTEGER PK; bảo trì UPDATE OR REPLACE sang rowid hàng owner, pragma ON / OFF); owner "
            f"active còn {owners}; thuận {sum(pos)}/{len(pos)} (bảo trì đổi sang rowid trống ⇒ {moved}, UPDATE không đổi rowid, SET rowid = rowid)")
+    _show(c)
+
+def t_v235_ws_actor():
+    """v2.3.5: {t}_ws_actor_i/_u — bảng không có cột người ghi (dẫn xuất / hàng con / bộ cấp số): actor system của tenant KHÁC chép (INSERT) / sửa (UPDATE) hàng
+    của tenant A ⇒ chặn ở MỌI bảng loại này; actor system của chính workspace sửa được (job dẫn xuất)."""
+    D, X = seed()
+    _gen_fixture(D, X)
+    W = X['W']
+    sysW, sysW2 = X['A'][(W, 'system')], X['A'][(X['W2'], 'system')]
+    in_db = {r[0] for r in D.raw.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+    c, case = _cases(D.raw)
+    pos, tabs = [], sorted(t for t, k in WRITER_ALL_ACTOR_ONLY.items() if k == 'derived')
+    for t in tabs:
+        rid = D.one(f"SELECT rowid FROM {t} WHERE workspace_id=? ORDER BY rowid LIMIT 1", W)
+        msg = _m(S.MSG_TENANT.format(t=t))
+        case(f"{t}: actor system tenant B chép hàng của A (INSERT)", _raw(D, sysW2, f"INSERT INTO {t} SELECT * FROM {t} WHERE rowid=?", (rid,)), msg)
+        if f'{t}_ws_actor_u' in in_db:
+            case(f"{t}: actor system tenant B sửa hàng của A", _raw(D, sysW2, f"UPDATE {t} SET workspace_id = workspace_id WHERE rowid=?", (rid,)), msg)
+            case(f"{t}: actor system tenant B kéo hàng của A sang B", _raw(D, sysW2, f"UPDATE {t} SET workspace_id = ? WHERE rowid=?", (X['W2'], rid)), msg)
+            case(f"{t}: actor system của A đẩy hàng sang B", _raw(D, sysW, f"UPDATE {t} SET workspace_id = ? WHERE rowid=?", (X['W2'], rid)), msg)
+            _pos(pos, _raw(D, sysW, f"UPDATE {t} SET workspace_id = workspace_id WHERE rowid=?", (rid,)))
+    ok = all(x[1] for x in c) and all(pos) and len(c) == 29
+    report("WS-actor", ok, f"{sum(x[1] for x in c)}/{len(c)} lối ghi chéo tenant bị {{t}}_ws_actor_i/_u chặn ({', '.join(tabs)}); actor system của chính "
+           f"workspace sửa được {sum(pos)}/{len(pos)}")
     _show(c)
 
 def t_v235_blob_checks():
@@ -8161,5 +8253,5 @@ if __name__ == '__main__':
     t_v233_actor_meta(); t_v233_actor_guard(); t_v233_actor_claims(); t_v233_actor_inner(); t_v233_cred_writer(); t_v233_anchor_parse()
     t_v234_nul_checks(); t_v234_sql_noname(); t_v234_secret_kind(); t_v234_generated_guards(); t_v234_fts_sync(); t_v234_pair_u(); t_v234_engine_unrestricted(); t_v234_seed_reference(); t_v234_hand_guards()
     t_v235_root_authz(); t_v235_replace_notnull(); t_v235_route_writers(); t_v235_rowid_lock(); t_v235_blob_checks(); t_v235_audit_hmac()
-    t_v235_writer_all()
+    t_v235_writer_all(); t_v235_ws_actor()
     print("\nTỔNG:", sum(1 for r in RESULTS if r[1]), "/", len(RESULTS), "PASS — SQLite", sqlite3.sqlite_version)
