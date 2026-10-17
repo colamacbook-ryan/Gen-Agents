@@ -88,6 +88,25 @@ export type AuditResult = AuditRow['result'];
 export type SecretKind = SecretRow['kind'];
 export type TelegramBotStatus = TelegramBotRow['status'];
 
+export type PolarisCheckRow = Row<'polaris_checks'>;
+export type ProactivePolicyRow = Row<'proactive_policies'>;
+
+/**
+ * Đối chiếu Polaris (PC-, DATABASE §5.10) đi kèm hành động do Role khởi xướng — tin chủ động, đề xuất change set, nhận việc,
+ * xin quyền. DB đòi hàng này có TRƯỚC chủ thể (trigger *_polaris); repo ghi nó trong cùng giao dịch, ngay trước chủ thể.
+ */
+export interface PolarisCheckInput {
+  /** Lợi ích ₲ kỳ vọng (minor, ≥ 0). */
+  expectedGainMinor: number;
+  /** Luật đã áp, vd 'P1,P3' (không rỗng). */
+  rulesApplied: string;
+  rationale?: string | null;
+  balanceMinorAt?: number | null;
+  rankAt?: number | null;
+  sessionId?: string | null;
+  auditId?: string | null;
+}
+
 /** Phân trang keyset theo display_seq (DATABASE §8.3): không OFFSET; tối đa 500 hàng. */
 export interface PageRequest {
   /** Mặc định 100, trần 500. */

@@ -3,7 +3,7 @@
 // 'permission.*'); repo không có lối vòng.
 import { invalidInput } from '../errors.ts';
 import type { TelegramRepo } from '../telegram.ts';
-import type { ProactiveSendRow, TelegramAllowlistRow, TelegramBotRow } from '../types.ts';
+import type { ProactivePolicyRow, ProactiveSendRow, TelegramAllowlistRow, TelegramBotRow } from '../types.ts';
 import {
   audited,
   type Ctx,
@@ -18,8 +18,10 @@ import {
   updateRow,
   Where,
 } from './ctx.ts';
+import { insertPolarisCheck } from './polaris.ts';
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const flag = (v: boolean | undefined): 0 | 1 | undefined => (v === undefined ? undefined : v ? 1 : 0);
 
 export function telegramRepo(ctx: Ctx): TelegramRepo {
   const live = () => new Where(ctx, { live: true });
@@ -67,6 +69,44 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
         new Where(ctx).eq('role_id', f?.roleId).in('status', f?.status),
         f?.page,
       ),
+    proactivePolicy: (roleId) => selectOne<ProactivePolicyRow>(ctx, 'proactive_policies', live().eq('role_id', roleId)),
+    setProactivePolicy: (roleId, i) => {
+      const before = selectOne<ProactivePolicyRow>(ctx, 'proactive_policies', live().eq('role_id', roleId));
+      const minute = (v: number | undefined, what: string) => {
+        if (v !== undefined && (!Number.isSafeInteger(v) || v < 0 || v > 1439))
+          throw invalidInput(`${what}: phút 0–1439`);
+        return v;
+      };
+      const values: Record<string, unknown> = {
+        is_enabled: i.isEnabled === undefined ? undefined : i.isEnabled ? 1 : 0,
+        max_per_day: i.maxPerDay,
+        quiet_start_min: minute(i.quietStartMin, 'quietStartMin'),
+        quiet_end_min: minute(i.quietEndMin, 'quietEndMin'),
+        timezone: i.timezone,
+        break_quiet_level: i.breakQuietLevel,
+        channel: i.channel,
+        allow_commitment_reminder: flag(i.allow?.commitmentReminder),
+        allow_task_done: flag(i.allow?.taskDone),
+        allow_opportunity: flag(i.allow?.opportunity),
+        allow_incident: flag(i.allow?.incident),
+        allow_heartbeat_digest: flag(i.allow?.heartbeatDigest),
+      };
+      if (i.weekend !== undefined) {
+        values.weekend_differs = i.weekend === null ? 0 : 1;
+        values.weekend_quiet_start_min =
+          i.weekend === null ? null : minute(i.weekend.quietStartMin, 'weekend.quietStartMin');
+        values.weekend_quiet_end_min = i.weekend === null ? null : minute(i.weekend.quietEndMin, 'weekend.quietEndMin');
+      }
+      if (before === null) {
+        if (i.quietStartMin === undefined || i.quietEndMin === undefined || i.timezone === undefined) {
+          throw invalidInput('tạo hợp đồng giờ làm cần quietStartMin, quietEndMin, timezone');
+        }
+        const row = insertRow<ProactivePolicyRow>(ctx, 'proactive_policies', { role_id: roleId, ...values });
+        return audited(ctx, { action: 'proactive_policy.create', table: 'proactive_policies', row, roleId });
+      }
+      const row = updateRow<ProactivePolicyRow>(ctx, 'proactive_policies', before.id, values);
+      return audited(ctx, { action: 'proactive_policy.update', table: 'proactive_policies', row, before, roleId });
+    },
     sentCount: (roleId, dayLocal) =>
       ctx.r.get<{ n: number }>(
         "SELECT count(*) AS n FROM proactive_sends WHERE workspace_id = ? AND role_id = ? AND day_local = ? AND status IN ('sent', 'reserved')",
@@ -129,8 +169,11 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
     },
     removeAllowed: (id) => allowUpdate(id, { status: 'removed' }, 'telegram_allowlist.remove'),
 
-    reserveSend: (i) =>
-      insertRow<ProactiveSendRow>(ctx, 'proactive_sends', {
+    reserveSend: (i) => {
+      const id = ctx.newId();
+      insertPolarisCheck(ctx, i.roleId, { kind: 'proactive', proactiveSendId: id }, i.polaris);
+      return insertRow<ProactiveSendRow>(ctx, 'proactive_sends', {
+        id,
         role_id: i.roleId,
         trigger_kind: i.triggerKind,
         urgency: i.urgency,
@@ -143,7 +186,8 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
         task_id: i.taskId ?? null,
         commitment_id: i.commitmentId ?? null,
         proactive_job_id: i.proactiveJobId ?? null,
-      }),
+      });
+    },
     recordSuppressed: (i) =>
       insertRow<ProactiveSendRow>(ctx, 'proactive_sends', {
         role_id: i.roleId,

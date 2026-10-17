@@ -26,6 +26,7 @@ import type {
   DnaSheetView,
   InstructionRow,
   InstructionVersionRow,
+  PolarisCheckRow,
   PositionRow,
   RevisionKind,
   RevisionRow,
@@ -42,12 +43,14 @@ import {
   insertRow,
   mustGetRow,
   nowTs,
+  pageOf,
   selectAll,
   selectOne,
   softDeleteRow,
   updateRow,
   Where,
 } from './ctx.ts';
+import { insertPolarisCheck } from './polaris.ts';
 import { enqueueJob } from './work.ts';
 
 const ROLE_NAME_MAX = 120;
@@ -71,6 +74,8 @@ export function roleRepo(ctx: Ctx): RoleRepo {
         id,
       ),
     positions: () => selectAll<PositionRow>(ctx, 'positions', new Where(ctx, { live: true })),
+    polarisChecks: (roleId, page) =>
+      pageOf<PolarisCheckRow>(ctx, 'polaris_checks', new Where(ctx).eq('role_id', roleId), page),
     defaultPosition: () =>
       selectOne<PositionRow>(ctx, 'positions', new Where(ctx, { live: true }).add('is_default = 1')),
     create: (i) => {
@@ -516,7 +521,15 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
       const actor = actorOf(ctx);
       if (i.items.length === 0) throw invalidInput('change set không có mục nào');
       if (i.title.trim().length === 0) throw invalidInput('change set cần tiêu đề');
+      const csId = ctx.newId();
+      if (i.polaris) {
+        const polarisRole = actor.role_id ?? i.roleId ?? null;
+        if (polarisRole === null)
+          throw invalidInput('polaris của đề xuất cần Role (actor Role hoặc change set scope role)');
+        insertPolarisCheck(ctx, polarisRole, { kind: 'proposal', changeSetId: csId }, i.polaris);
+      }
       const cs = insertRow<ChangeSetRow>(ctx, 'change_sets', {
+        id: csId,
         scope: i.scope,
         role_id: i.roleId ?? null,
         position_id: i.positionId ?? null,

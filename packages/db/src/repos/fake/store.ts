@@ -173,6 +173,24 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
       if (o.bump !== false && hasCol(table, 'version')) full.version = Number(cur.version) + 1;
       return T(table).update(id, full);
     };
+    /** Ghi PC- trước chủ thể (fake không ép trigger Polaris; giữ hình dạng). Trả id chủ thể. */
+    const polarisFor = (
+      roleId: string,
+      kind: string,
+      column: string,
+      p: { expectedGainMinor: number; rulesApplied: string; rationale?: string | null },
+      subjectId: string = newId(),
+    ): string => {
+      insertE('polaris_checks', {
+        role_id: roleId,
+        subject_kind: kind,
+        [column]: subjectId,
+        expected_gain_minor: p.expectedGainMinor,
+        rules_applied: p.rulesApplied,
+        rationale: p.rationale ?? null,
+      });
+      return subjectId;
+    };
     const softDelete = (table: string, id: string) =>
       updateE(
         table,
@@ -452,6 +470,11 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
       promptBudget: () => null,
       positions: () => cast(live('positions')),
       defaultPosition: () => cast(live('positions', (r) => r.is_default === 1)[0] ?? null),
+      polarisChecks: (roleId, page) =>
+        pageOf(
+          T('polaris_checks').find((r) => r.workspace_id === ws && r.role_id === roleId),
+          page,
+        ),
       create: (i) => {
         const row = insertE('roles', {
           name: i.name,
@@ -570,7 +593,11 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
       propose: (i) => {
         const by = requireWrite();
         if (i.items.length === 0) throw invalidInput('change set không có mục nào');
+        const csId = i.polaris
+          ? polarisFor((actorRow as ActorRow).role_id ?? i.roleId ?? '', 'proposal', 'change_set_id', i.polaris)
+          : newId();
         const cs = insertE('change_sets', {
+          id: csId,
           scope: i.scope,
           role_id: i.roleId ?? null,
           position_id: i.positionId ?? null,
@@ -1317,6 +1344,8 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
         ),
       transition: (id, to, o) => {
         const cur = mustGet('tasks', id);
+        if (o?.polaris && to === 'running')
+          polarisFor(String(cur.assignee_role_id), 'task_accept', 'task_id', o.polaris, id);
         const done = to === 'done' || to === 'failed' || to === 'cancelled';
         return cast(
           audited(
@@ -1628,6 +1657,24 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
           ),
           f?.page,
         ),
+      proactivePolicy: (roleId) => cast(live('proactive_policies', (r) => r.role_id === roleId)[0] ?? null),
+      setProactivePolicy: (roleId, i) => {
+        const cur = live('proactive_policies', (r) => r.role_id === roleId)[0];
+        const values = {
+          is_enabled: i.isEnabled,
+          max_per_day: i.maxPerDay,
+          quiet_start_min: i.quietStartMin,
+          quiet_end_min: i.quietEndMin,
+          timezone: i.timezone,
+          break_quiet_level: i.breakQuietLevel,
+          channel: i.channel,
+        };
+        return cast(
+          cur
+            ? updateE('proactive_policies', String(cur.id), values)
+            : insertE('proactive_policies', { role_id: roleId, ...values }),
+        );
+      },
       sentCount: (roleId, day) =>
         T('proactive_sends').find(
           (r) =>
@@ -1719,6 +1766,7 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
       reserveSend: (i) =>
         cast(
           insertE('proactive_sends', {
+            id: polarisFor(i.roleId, 'proactive', 'proactive_send_id', i.polaris),
             role_id: i.roleId,
             trigger_kind: i.triggerKind,
             urgency: i.urgency,

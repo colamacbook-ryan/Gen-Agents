@@ -7,6 +7,7 @@ import type {
   JobStatus,
   Page,
   PageRequest,
+  PolarisCheckInput,
   TaskPriority,
   TaskRow,
   TaskSource,
@@ -60,7 +61,13 @@ export interface TaskRepo extends TaskReads {
   transition(
     taskId: string,
     to: TaskStatus,
-    opts?: { detail?: string | null; resultSummary?: string | null; expectedVersion?: number },
+    opts?: {
+      detail?: string | null;
+      resultSummary?: string | null;
+      expectedVersion?: number;
+      /** Bắt buộc khi chuyển sang 'running' với Role được giao (DB: tasks_accept_polaris). */
+      polaris?: PolarisCheckInput | null;
+    },
   ): TaskRow;
   /** Đánh giá kết quả (owner / admin): verified ⇒ verified_by = actor giao dịch, verified_at. */
   verify(taskId: string, verdict: Exclude<TaskRow['verification'], 'unverified'>): TaskRow;

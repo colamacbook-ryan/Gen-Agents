@@ -9,6 +9,8 @@
 import type {
   Page,
   PageRequest,
+  PolarisCheckInput,
+  ProactivePolicyRow,
   ProactiveSendRow,
   TelegramAllowlistRow,
   TelegramBotRow,
@@ -29,8 +31,24 @@ export interface TelegramReads {
     status?: readonly ProactiveSendRow['status'][];
     page?: PageRequest;
   }): Page<ProactiveSendRow>;
+  /** Hợp đồng giờ làm A3.P (PP-) sống của Role — null = chưa có (DB: trần tin / ngày = 0). */
+  proactivePolicy(roleId: string): ProactivePolicyRow | null;
   /** Số tin chủ động đã gửi / giữ chỗ trong ngày địa phương (trần A3.P). */
   sentCount(roleId: string, dayLocal: string): number;
+}
+
+export interface ProactivePolicyInput {
+  isEnabled?: boolean;
+  maxPerDay?: number;
+  /** Phút trong ngày 0–1439 (bắt buộc khi tạo). */
+  quietStartMin?: number;
+  quietEndMin?: number;
+  /** IANA (bắt buộc khi tạo). */
+  timezone?: string;
+  weekend?: { quietStartMin: number; quietEndMin: number } | null;
+  breakQuietLevel?: ProactivePolicyRow['break_quiet_level'];
+  channel?: ProactivePolicyRow['channel'];
+  allow?: Partial<Record<'commitmentReminder' | 'taskDone' | 'opportunity' | 'incident' | 'heartbeatDigest', boolean>>;
 }
 
 export interface TelegramRepo extends TelegramReads {
@@ -61,7 +79,13 @@ export interface TelegramRepo extends TelegramReads {
   /** active → removed. Hàng chủ sở hữu cuối cùng không gỡ được ('telegram.owner_invariant'). */
   removeAllowed(entryId: string): TelegramAllowlistRow;
 
-  /** Outbox (proactive_sends, PN-): giữ chỗ trước khi gửi; idempotencyKey trùng ⇒ 'unique.duplicate'. */
+  /** Tạo / sửa hợp đồng giờ làm của Role (owner / admin). Trường không truyền giữ nguyên (mặc định DB khi tạo). */
+  setProactivePolicy(roleId: string, input: ProactivePolicyInput): ProactivePolicyRow;
+
+  /**
+   * Outbox (proactive_sends, PN-): giữ chỗ trước khi gửi; idempotencyKey trùng ⇒ 'unique.duplicate'; vượt trần /
+   * ngày của policyId ⇒ 'proactive.daily_cap' (không có policy ⇒ trần 0).
+   */
   reserveSend(input: {
     roleId: string;
     triggerKind: ProactiveSendRow['trigger_kind'];
@@ -74,6 +98,8 @@ export interface TelegramRepo extends TelegramReads {
     taskId?: string | null;
     commitmentId?: string | null;
     proactiveJobId?: string | null;
+    /** Đối chiếu Polaris của tin chủ động (DB đòi với trạng thái 'reserved'). */
+    polaris: PolarisCheckInput;
   }): ProactiveSendRow;
   /** Bỏ qua có lý do (giờ im lặng, vượt trần, tắt, Trọng thương…) — ghi thẳng trạng thái suppressed_*. */
   recordSuppressed(input: {

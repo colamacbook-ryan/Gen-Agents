@@ -20,6 +20,7 @@ import {
   updateRow,
   Where,
 } from './ctx.ts';
+import { insertPolarisCheck } from './polaris.ts';
 
 const TERMINAL: ReadonlySet<TaskRow['status']> = new Set(['done', 'failed', 'cancelled']);
 
@@ -76,6 +77,10 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       const before = mustGetRow<TaskRow>(ctx, 'tasks', id);
       if (TERMINAL.has(before.status) && before.status !== to) {
         throw new DbRuleError('repo.version_conflict', `việc ${before.display_id} đã kết thúc (${before.status})`);
+      }
+      if (o?.polaris && to === 'running') {
+        if (before.assignee_role_id === null) throw invalidInput('polaris nhận việc cần Role được giao');
+        insertPolarisCheck(ctx, before.assignee_role_id, { kind: 'task_accept', taskId: id }, o.polaris);
       }
       const row = updateRow<TaskRow>(
         ctx,

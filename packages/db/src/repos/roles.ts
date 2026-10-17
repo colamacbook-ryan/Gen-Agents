@@ -11,6 +11,10 @@ import type {
   InstructionLayer,
   InstructionRow,
   InstructionVersionRow,
+  Page,
+  PageRequest,
+  PolarisCheckInput,
+  PolarisCheckRow,
   PositionRow,
   RevisionKind,
   RevisionRow,
@@ -38,6 +42,8 @@ export interface RoleReads {
   promptBudget(roleId: string): RolePromptBudgetView | null;
   positions(): PositionRow[];
   defaultPosition(): PositionRow | null;
+  /** Lưới "Đối chiếu Polaris" của Role (PC-). */
+  polarisChecks(roleId: string, page?: PageRequest): Page<PolarisCheckRow>;
 }
 
 export interface CreateRoleInput {
@@ -166,6 +172,8 @@ export interface ProposeChangeSetInput {
   title: string;
   source?: { threadId?: string | null; messageId?: string | null; sessionId?: string | null };
   items: readonly ChangeItemInput[];
+  /** Bắt buộc khi người đề xuất là actor Role (DB: change_sets_polaris). */
+  polaris?: PolarisCheckInput | null;
 }
 
 export interface ApplyChangeSetInput {
