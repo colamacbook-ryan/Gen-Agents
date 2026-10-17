@@ -1,0 +1,7 @@
+Usage: agy mcp list [flags]
+
+List all configured MCP servers
+
+Flags:
+  -h      Show help
+  --help  Show help

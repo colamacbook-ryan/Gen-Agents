@@ -46,6 +46,7 @@ jobs:
       - run: pnpm test
         env:
           CHIBI_REQUIRE_BROWSER: '1'
+      - run: pnpm --filter @ga/fakes test
       - run: pnpm license:check
       - run: pnpm license:check --selftest
 
