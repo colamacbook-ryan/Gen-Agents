@@ -143,7 +143,7 @@ describe('route chạm credential = owner (touchesCredential, không ngoại l�
     for (const r of ROUTES) {
       if (!r.touchesCredential) continue;
       expect(r.auth, `${r.id} chạm credential nhưng quyền ${r.auth}`).toBe('O');
-      expect(r.ownerWhen, r.id).toBeUndefined();
+      expect(r.ownerWhen, r.id).toEqual([]);
     }
   });
 

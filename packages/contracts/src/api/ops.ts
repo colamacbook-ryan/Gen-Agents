@@ -203,6 +203,10 @@ export const OPS_07 = ops({
   method: 'POST',
   path: '/egress-rules',
   auth: 'A',
+  // Thêm luật `allow` = mở đường cho dữ liệu đi ra ⇒ NỚI hàng rào ⇒ owner (Gen, fail-closed). Thêm `deny` = siết ⇒ A.
+  // Dịch vụ còn PHẢI kiểm `appliesTo` khớp đích (roleRef / positionRef / toolSlug) và đích cùng workspace (HANDLER-OBLIGATIONS #2).
+  ownerWhen: { in: 'body', field: 'action', equals: 'allow' },
+  writesAccessPolicy: ['egress_rules'],
   o4: 'blocked',
   request: {
     body: z.strictObject({
@@ -226,6 +230,10 @@ export const OPS_08 = ops({
   method: 'DELETE',
   path: '/egress-rules/{egressRef}',
   auth: 'A',
+  // Xoá luật `deny` = nới ⇒ owner; xoá luật `allow` = siết ⇒ A. Chiều do luật ĐÃ LƯU quyết định: dịch vụ tra DB theo ref rồi gọi
+  // `requiredAccess(route, { stored: { egressAction } })`; thiếu thông tin ⇒ O (fail-closed). Luật `isBuiltin` không xoá được.
+  ownerWhen: { rule: 'egress_loosen' },
+  writesAccessPolicy: ['egress_rules'],
   o4: 'blocked',
   request: { params: z.strictObject({ egressRef: Ref('EG') }) },
   // `conflict` khi `isBuiltin`.

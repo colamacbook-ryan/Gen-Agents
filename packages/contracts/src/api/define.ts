@@ -26,11 +26,32 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
 export const O4_MODES = ['open', 'blocked', 'setup', 'core'] as const;
 export type O4Mode = (typeof O4_MODES)[number];
 
-/** Route `A` nhưng một giá trị của request nâng lên `O` (vd WRK-03 `purpose = owner_change`). */
-export type OwnerWhen =
+/**
+ * Quy tắc chung (Gen, fail-closed): MỌI route NỚI một hàng rào bảo mật = `O`; siết chặt giữ `A`. Khi chiều thay đổi phụ thuộc
+ * một giá trị trong request / trạng thái đã lưu, route khai `ownerWhen` (một điều kiện hoặc danh sách; khớp BẤT KỲ điều kiện
+ * nào ⇒ `O`). `requiredAccess()` đánh giá SAU khi parse request; dịch vụ PHẢI gọi trước khi ghi.
+ */
+export type OwnerWhenField =
+  /** `body[field] === equals` (vd `action = 'allow'`). */
   | { in: 'body' | 'query'; field: string; equals: string | boolean }
+  /** `body[field]` thuộc danh sách (vd `decision ∈ {allow, ask}`: mọi giá trị khác `deny` đều nới). */
+  | { in: 'body' | 'query'; field: string; equalsAny: readonly (string | boolean)[] }
+  /** Khoá có mặt (kể cả `null`) — đặt / đổi / gỡ một hạn mức là nới (vd `dailyTokenQuota`). */
+  | { in: 'body' | 'query'; field: string; present: true };
+
+export type OwnerWhen =
+  | OwnerWhenField
   /** Khoá `SETTINGS[key]` mà admin không ghi được (`settingWritableBy(key, 'admin') = false`) ⇒ owner. */
-  | { rule: 'setting_writers' };
+  | { rule: 'setting_writers' }
+  /**
+   * Xoá một luật egress: xoá luật `deny` = nới ⇒ owner; xoá luật `allow` = siết ⇒ A. Chiều do TRẠNG THÁI ĐÃ LƯU quyết định
+   * (`req.stored.egressAction`, dịch vụ tra DB theo ref); thiếu ⇒ `O` (fail-closed).
+   */
+  | { rule: 'egress_loosen' };
+
+/** Bảng chính sách truy cập mà việc ghi có thể nới hàng rào (route ghi phải `O` hoặc có `ownerWhen`). */
+export const ACCESS_POLICY_TABLES = ['egress_rules', 'tool_grants'] as const;
+export type AccessPolicyTable = (typeof ACCESS_POLICY_TABLES)[number];
 
 export interface RequestSpec {
   /** Tham số đường dẫn: khoá = `{tên}` trong path (contract test khớp hai chiều). */
@@ -104,7 +125,13 @@ export interface RouteInput<Q extends RequestSpec, S extends ResponseSpec> {
   /** `api` = dưới `/api/v1` (mặc định); `edge` = gốc edge (WS `/term`). */
   mount?: 'api' | 'edge';
   auth: AuthLevel;
-  ownerWhen?: OwnerWhen;
+  /** Nâng lên `O` khi khớp (xem `OwnerWhen`). */
+  ownerWhen?: OwnerWhen | readonly OwnerWhen[];
+  /**
+   * Route GHI `egress_rules` / `tool_grants` (nới hoặc siết). Contract test: có cờ ⇒ `auth = 'O'` hoặc có `ownerWhen`
+   * (chỉ phần SIẾT được ở mức A). Khai tường minh, không suy từ tên route.
+   */
+  writesAccessPolicy?: readonly AccessPolicyTable[];
   /**
    * Route TẠO / SỬA / XOÁ / THU HỒI / XUẤT credential (khoá API, token bot, token neo, tài khoản engine + volume `/auth`,
    * đồng ý Clause 6 gắn tài khoản, đổi chủ Telegram) HOẶC mở PTY đăng nhập. Contract test: cờ này ⇒ `auth = 'O'`, KHÔNG ngoại lệ
@@ -139,7 +166,8 @@ export interface RouteDraft<Q extends RequestSpec = RequestSpec, S extends Respo
   readonly mount: 'api' | 'edge';
   readonly lane: Lane;
   readonly auth: AuthLevel;
-  readonly ownerWhen?: OwnerWhen;
+  readonly ownerWhen: readonly OwnerWhen[];
+  readonly writesAccessPolicy: readonly AccessPolicyTable[];
   readonly touchesCredential: boolean;
   readonly userPassword: boolean;
   readonly o4: O4Mode;
@@ -212,7 +240,9 @@ export function defineLane(lane: Lane) {
       mount: input.mount ?? 'api',
       lane,
       auth: input.auth,
-      ...(input.ownerWhen ? { ownerWhen: input.ownerWhen } : {}),
+      ownerWhen:
+        input.ownerWhen === undefined ? [] : Array.isArray(input.ownerWhen) ? input.ownerWhen : [input.ownerWhen],
+      writesAccessPolicy: input.writesAccessPolicy ?? [],
       touchesCredential: input.touchesCredential ?? false,
       userPassword: input.userPassword ?? false,
       o4: input.o4,

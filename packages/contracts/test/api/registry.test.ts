@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { collectNodes, defOf } from '../../src/api/introspect.ts';
 import {
   ALL_ERROR_CODES,
   API_ERROR_CODES,
@@ -174,10 +175,10 @@ describe('registry — quyền', () => {
   });
 
   it('ownerWhen: trường tồn tại trong request; requiredAccess nâng lên O đúng lúc', () => {
-    const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen)
+    const withOwnerWhen = ROUTES.filter((r) => r.ownerWhen.length > 0)
       .map((r) => r.id)
       .sort();
-    expect(withOwnerWhen).toEqual(['OPS-03', 'WRK-03', 'WRK-05']);
+    expect(withOwnerWhen).toEqual(['OPS-03', 'OPS-07', 'OPS-08', 'WRK-03', 'WRK-05']);
     const wrk03 = routeById('WRK-03');
     const wrk05 = routeById('WRK-05');
     const ops03 = routeById('OPS-03');
@@ -191,6 +192,15 @@ describe('registry — quyền', () => {
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'purge.grace_days' } })).toBe('A');
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'no.such_key' } })).toBe('O');
     expect(ops03 && requiredAccess(ops03, {})).toBe('O');
+    // OPS-07: thêm luật `allow` (mở đường dữ liệu đi ra) = nới ⇒ O; thêm `deny` = siết ⇒ A.
+    const ops07 = routeById('OPS-07');
+    expect(ops07 && requiredAccess(ops07, { body: { action: 'allow' } })).toBe('O');
+    expect(ops07 && requiredAccess(ops07, { body: { action: 'deny' } })).toBe('A');
+    // OPS-08: xoá luật `deny` = nới ⇒ O; xoá `allow` = siết ⇒ A; không biết luật đã lưu ⇒ O (fail-closed).
+    const ops08 = routeById('OPS-08');
+    expect(ops08 && requiredAccess(ops08, { stored: { egressAction: 'deny' } })).toBe('O');
+    expect(ops08 && requiredAccess(ops08, { stored: { egressAction: 'allow' } })).toBe('A');
+    expect(ops08 && requiredAccess(ops08, {})).toBe('O');
     // route không có ownerWhen: giữ nguyên.
     const sys15 = routeById('SYS-15');
     expect(sys15 && requiredAccess(sys15, { body: { purpose: 'owner_change' } })).toBe('A');
@@ -249,6 +259,44 @@ describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
     expect(open && recoveryDecision(open, { isCoreAgentAccount: false })).toBe('allow');
     expect(core && recoveryDecision(core, { isCoreAgentAccount: true })).toBe('allow');
     expect(core && recoveryDecision(core, { isCoreAgentAccount: false })).toBe('blocked');
+  });
+});
+
+describe('registry — ownerWhen khớp schema request', () => {
+  it('mỗi điều kiện ownerWhen dạng trường trỏ tới khoá CÓ THẬT; giá trị so sánh hợp lệ theo schema (enum / boolean)', () => {
+    let checked = 0;
+    for (const r of ROUTES) {
+      for (const w of r.ownerWhen) {
+        if ('rule' in w) continue;
+        const root = r.request[w.in];
+        expect(root, `${r.id}: ownerWhen.in = ${w.in} nhưng route không khai ${w.in}`).toBeDefined();
+        const nodes = collectNodes(root as never, w.in).filter((n) => n.key === w.field && n.type !== 'object');
+        expect(nodes.length, `${r.id}: ownerWhen.field ${w.field} không có trong ${w.in}`).toBeGreaterThan(0);
+        const values = 'equals' in w ? [w.equals] : 'equalsAny' in w ? [...w.equalsAny] : [];
+        for (const node of nodes) {
+          const def = defOf(node.schema);
+          for (const v of values) {
+            if (def.type === 'enum') expect(Object.values(def.entries as object), `${r.id}.${w.field}`).toContain(v);
+            else if (def.type === 'boolean') expect(typeof v, `${r.id}.${w.field}`).toBe('boolean');
+          }
+        }
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('registry — route ghi chính sách truy cập (egress_rules / tool_grants)', () => {
+  it('mọi route ghi egress_rules / tool_grants phải O hoặc có ownerWhen (chỉ phần SIẾT được ở mức A)', () => {
+    const writers = ROUTES.filter((r) => r.writesAccessPolicy.length > 0);
+    for (const r of writers)
+      expect(r.auth === 'O' || r.ownerWhen.length > 0, `${r.id} ghi chính sách truy cập mà ai cũng nới được`).toBe(
+        true,
+      );
+    // golden: thêm / bớt route ghi chính sách phải sửa test có chủ đích
+    expect(writers.map((r) => r.id).sort()).toEqual(['OPS-07', 'OPS-08']);
+    expect(writers.map((r) => r.writesAccessPolicy.join(',')).sort()).toEqual(['egress_rules', 'egress_rules']);
   });
 });
 
