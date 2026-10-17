@@ -28,6 +28,7 @@ import {
 } from './common.ts';
 import { accepted, binary, csv, defineLane, noContent, ok, sse } from './define.ts';
 import { ColumnName, GRID_PAGE_MAX, GridInfo, GridKey, GridRowsPage, gridSelectShape } from './grids.ts';
+import { Redacted } from './masking.ts';
 import { LogLine, LogLineEvent } from './sse.ts';
 
 // L-OPS — cài đặt, cập nhật, backup, audit, log, brain-export, lưới chung / Data Console (BACKEND-TRIAL §3.6: 36 route).
@@ -496,8 +497,11 @@ export const OPS_21 = ops({
   request: { params: z.strictObject({ auditRef: Ref('AU') }) },
   response: ok(
     AuditRow.extend({
+      // Viewer: `before = after = null`, chỉ có `changedKeys` (V_MASKED_FIELDS).
       before: Json,
       after: Json,
+      changedKeys: list(KeyStr, 200),
+      redacted: Redacted,
       prevHash: HexHash,
       rowHash: HexHash,
       keyId: str(64, 1),
@@ -733,6 +737,7 @@ export const OPS_35 = ops({
       // Chỉ cột whitelist.
       fields: z.record(ColumnName, Json).refine((o) => Object.keys(o).length <= 64, 'quá nhiều cột'),
       routeHint: KeyStr,
+      redacted: Redacted,
     }),
   ),
   cli: ['show <ID>', 'REPL (giá trị đích Soi)'],
@@ -754,6 +759,7 @@ export const OPS_36 = ops({
         label: str(200),
         snippet: str(500),
         routeHint: KeyStr,
+        redacted: Redacted,
       }),
       50,
     ),

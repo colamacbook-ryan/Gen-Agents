@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type EntityPrefix, isEntityPrefix } from '../ids.ts';
 import { Json, KeyStr, list, Nat, PageOf, queryList, str, Ulid } from './common.ts';
+import { Redacted } from './masking.ts';
 import { RouteIdRef } from './shapes.ts';
 
 // Data Console (STD-07; BACKEND-TRIAL §3.6 OPS-32…36; DATABASE §6, §8): grid có phân trang keyset, lọc (ô truy vấn §8.1), sắp xếp,
@@ -257,6 +258,8 @@ export const GridRow = z.strictObject({
   supersededBy: str(20, 6).nullable(),
   /** Giá trị ô theo tên cột (chỉ cột whitelist, đã che theo quyền `confidential`). */
   cells: z.record(ColumnName, Json).refine((o) => Object.keys(o).length <= 64, 'quá nhiều cột'),
+  /** Viewer + hàng `confidential`: ô nội dung `null` (V_MASKED_FIELDS). */
+  redacted: Redacted,
 });
 
 export const GridRowsPage = PageOf(GridRow).extend({

@@ -23,6 +23,7 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok } from './define.ts';
+import { Redacted } from './masking.ts';
 import {
   ACCOUNT_LOGIN_STATUSES,
   Budget,
@@ -270,6 +271,7 @@ export const DnaRow = z.strictObject({
   tokenCount: Nat,
   version: Nat,
   isCore: z.boolean(),
+  redacted: Redacted,
 });
 
 export const SYS_37 = hr({
@@ -292,7 +294,7 @@ export const SYS_37 = hr({
           sections: list(
             z.strictObject({
               group: KeyStr,
-              items: list(z.strictObject({ key: str(128, 1), itemIndex: Nat, value: Json }), 200),
+              items: list(z.strictObject({ key: str(128, 1), itemIndex: Nat, value: Json, redacted: Redacted }), 200),
             }),
             64,
           ),
@@ -687,6 +689,7 @@ export const KnowledgeRow = z.strictObject({
   lastRecalledAt: Ts.nullable(),
   recallCount: Nat,
   category: IdOf('TX').nullable(),
+  redacted: Redacted,
 });
 
 export const SYS_54 = hr({

@@ -27,6 +27,7 @@ import {
   Ulid,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok, sse } from './define.ts';
+import { Redacted } from './masking.ts';
 import {
   AccountSummary,
   ANCHOR_KINDS,
@@ -623,6 +624,7 @@ export const SYS_23 = sys({
       snapshot: str(16_384),
       snapshotHash: str(128, 1),
       version: Nat.nullable(),
+      redacted: Redacted,
     }),
   ),
   cli: ['REPL (in đích của ghim / Soi)'],

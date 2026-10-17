@@ -6,6 +6,7 @@ export * from './coverage.ts';
 export * from './grids.ts';
 export * from './gw.ts';
 export * from './hr.ts';
+export * from './masking.ts';
 export * from './ops.ts';
 export * from './routes.ts';
 export * from './shapes.ts';

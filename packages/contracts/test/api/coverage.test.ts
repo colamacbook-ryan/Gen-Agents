@@ -173,6 +173,7 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
           state: 'proposed',
           supersededBy: null,
           cells: { status: 'active', tokens: 120 },
+          redacted: false,
         },
       ],
       nextCursor: null,
