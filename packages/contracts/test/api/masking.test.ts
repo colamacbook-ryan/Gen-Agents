@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { collectNodes } from '../../src/api/introspect.ts';
 import { responseSchemaOf } from '../../src/api/routes.ts';
-import { idPrefixOf, RECORD_ACCESS, ROUTES, routeById, V_MASKED_FIELDS } from '../../src/index.ts';
+import { idPrefixOf, Json, RECORD_ACCESS, ROUTES, routeById, V_MASKED_FIELDS } from '../../src/index.ts';
 
 // Review bảo mật PR #7 (M6, HANDLER-OBLIGATIONS #5): bảng "che cho viewer" khớp schema thật, không route nào mang cờ `redacted` mà không khai.
 
@@ -21,6 +21,10 @@ const OBLIGATION_5 = [
   'OPS-02',
   'GW-05',
   'GW-06',
+  // round 6: anh em của SYS-37.
+  'SYS-26',
+  'SYS-42',
+  'SYS-25',
 ];
 
 const pathsOf = (id: string): string[] => {
@@ -58,7 +62,7 @@ describe('V_MASKED_FIELDS', () => {
         seen++;
       }
     }
-    expect(seen).toBe(13);
+    expect(seen).toBe(17);
   });
 
   it('trường che / cờ chỉ rỗng ở OPS-34 (CSV, không có schema JSON); route khác phải khai ít nhất một trường VÀ một cờ', () => {
@@ -96,9 +100,25 @@ describe('V_MASKED_FIELDS', () => {
 // V_MASKED_FIELDS của route, (b) hoặc route đã ≥ A, (c) hoặc nằm trong danh sách ngoại lệ HẸP bên dưới (kèm lý do). Thêm route /
 // trường mới mà quên ⇒ đỏ — chặn "đường anh em" của các review trước (OPS-02, GW-05/06, SYS-16/18/22).
 const SENSITIVE_NAME = /hint|email|value|content|body|summary|snippet/i;
+// Round 6: tên của nội dung tự do (diff / prompt đã biên dịch), bắt theo TÊN CHÍNH XÁC.
+const FREE_CONTENT_NAME = /^(before|after|text|segments|diff|prompt)$/i;
+// Round 6: bắt theo KIỂU — Json tự do hoặc chuỗi dài từ 1000 ký tự là nội dung tự do dù tên vô hại.
+const FREE_STRING_MIN = 1000;
 
 // route:đường-dẫn-trường (hoặc route:* cho cả route) → lý do vì sao không che.
 const EXEMPT: Record<string, string> = {
+  'SYS-80:.kpis[].sub': 'chi tiết số liệu tổng hợp của dashboard (xu hướng, nhãn), không phải nội dung bản ghi',
+  'SYS-44:.jd': 'JD của vị trí: nội dung Role không có cột sensitivity, như SYS-46. Gen duyệt',
+  'SYS-44:.kpi': 'KPI của vị trí, như SYS-44 jd. Gen duyệt',
+  'SYS-49:.rows[].description': 'mô tả skill, như SYS-49 contentMd. Gen duyệt',
+  'WRK-16:.description': 'mô tả công việc, như WRK-16 resultSummary. Gen duyệt',
+  'SYS-64:.params': 'tham số ngoại hình nhân vật (chibi), không có nội dung người dùng',
+  'SYS-64:.identity': 'nét / màu / đạo cụ / ref của nhân vật (chibi), không có nội dung người dùng',
+  'WRK-20:[].statement': 'câu cam kết của Role: Data Console đọc cùng dữ liệu ở V, không có cột sensitivity. Gen duyệt',
+  'WRK-27:.block.text': 'khối Polaris do compiler sinh từ luật hệ thống + số ví, KHÔNG chứa DNA / trí nhớ / tri thức',
+  'OPS-12:.run.error':
+    'thông điệp lỗi hệ thống của lần cập nhật (đã che secret ở lớp log), không phải nội dung người dùng',
+  'OPS-12:.changelog': 'ghi chú phát hành công khai',
   'SYS-37:.rows[].valueType': 'tên kiểu dữ liệu của mục DNA (text / list …), không phải nội dung',
   'SYS-80:.kpis[].value': 'số liệu tổng hợp của dashboard, không phải nội dung bản ghi',
   'SYS-46:.rows[].content':
@@ -141,17 +161,34 @@ function isExempt(id: string, path: string): boolean {
   });
 }
 
+/** Nội dung tự do theo KIỂU: Json (BoundedJson) hoặc chuỗi có `max` ≥ FREE_STRING_MIN. */
+function isFreeContent(nodes: ReturnType<typeof collectNodes>, path: string): boolean {
+  return nodes.some((x) => {
+    if (x.path !== path) return false;
+    if (x.schema === (Json as unknown)) return true;
+    if (x.type !== 'string') return false;
+    const checks = (
+      (x.schema as unknown as { _zod: { def: { checks?: Array<{ _zod: { def: Record<string, unknown> } }> } } })._zod
+        .def.checks ?? []
+    ).map((c) => c._zod.def);
+    return checks.some((c) => c.check === 'max_length' && (c.maximum as number) >= FREE_STRING_MIN);
+  });
+}
+
 describe('hàng rào hệ thống: route V không để lọt trường đã bị hạn chế', () => {
   const vRoutes = ROUTES.filter((r) => r.auth === 'V' && r.response.kind === 'json');
 
-  it('route V có trường tên nhạy cảm (hint / email / value / content / body / summary / snippet) ⇒ đã khai che hoặc có ngoại lệ có lý do', () => {
+  it('route V có trường tên nhạy cảm (hint / email / value / content / body / summary / snippet / before / after / text / segments / diff / prompt) HOẶC nội dung tự do theo kiểu (Json, chuỗi ≥ 1000) ⇒ đã khai che hoặc có ngoại lệ có lý do', () => {
     const leaks: string[] = [];
     for (const r of vRoutes) {
       const nodes = collectNodes(responseSchemaOf(r) as never, '');
       const seen = new Set<string>();
       const reported = new Set<string>();
       for (const n of nodes) {
-        if (n.key === null || !SENSITIVE_NAME.test(n.key) || seen.has(n.path)) continue;
+        if (n.key === null || seen.has(n.path)) continue;
+        const byName = SENSITIVE_NAME.test(n.key) || FREE_CONTENT_NAME.test(n.key);
+        const byType = isFreeContent(nodes, n.path);
+        if (!byName && !byType) continue;
         seen.add(n.path);
         if (n.type === 'object') continue;
         // chỉ báo nút NGOÀI CÙNG (Json tự do bung thành nhiều nhánh `|n` bên dưới).
@@ -188,6 +225,17 @@ describe('hàng rào hệ thống: route V không để lọt trường đã b�
       }
     }
     expect(leaks, 'route V trả ID của loại bản ghi mức A / O / deny').toEqual([]);
+  });
+
+  it('round 6: GW-21 (prompt đã biên dịch) và SYS-72 (ca thử) ở A; SYS-26 / SYS-42 giữ V nhưng che before / after từng mục', () => {
+    expect(routeById('GW-21')?.auth).toBe('A');
+    expect(routeById('SYS-72')?.auth).toBe('A');
+    for (const id of ['SYS-26', 'SYS-42']) {
+      expect(routeById(id)?.auth, id).toBe('V');
+      expect(V_MASKED_FIELDS[id as 'SYS-26'].fields, id).toEqual(
+        expect.arrayContaining(['.items[].before', '.items[].after']),
+      );
+    }
   });
 
   it('SYS-16 / SYS-18 / SYS-22 (nội dung chat) đã nâng lên A; mọi route nhận thread / message ref không còn ở V', () => {

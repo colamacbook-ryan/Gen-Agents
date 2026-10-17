@@ -663,6 +663,8 @@ export const ChangeSetRow = z.strictObject({
   status: z.enum(CHANGE_SET_STATUSES),
   sourceMessage: IdOf('MSG').nullable(),
   createdAt: Ts,
+  // Viewer: `reason` (lời giải thích của AI, có thể trích nội dung nhạy cảm) bị che — V_MASKED_FIELDS.
+  redacted: Redacted,
 });
 
 export const SYS_25 = sys({
@@ -697,8 +699,10 @@ export const SYS_26 = sys({
           target: AnyId.nullable(),
           op: z.enum(CHANGE_ITEM_OPS),
           field: str(128, 1),
+          // Viewer: che khi mục thuộc lớp nhạy cảm (V_MASKED_FIELDS, HANDLER-OBLIGATIONS #5).
           before: Json,
           after: Json,
+          redacted: Redacted,
         }),
         500,
       ),
