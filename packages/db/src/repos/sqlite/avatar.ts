@@ -3,10 +3,25 @@
 import type { AvatarRepo } from '../avatar.ts';
 import { invalidInput } from '../errors.ts';
 import type { AvatarRow, CharacterLibraryView, RoleAvatarStateView, RoleRow, SkinAssetRow } from '../types.ts';
-import { audited, type Ctx, getRow, insertRow, mustGetRow, selectAll, updateRow, Where } from './ctx.ts';
+import {
+  allow,
+  audited,
+  type Ctx,
+  getRow,
+  insertRow,
+  mustGetRow,
+  OWNER_ADMIN,
+  OWNER_ADMIN_SYSTEM,
+  ref,
+  selectAll,
+  updateRow,
+  Where,
+} from './ctx.ts';
 
 export function avatarRepo(ctx: Ctx): AvatarRepo {
   const assign = (roleId: string, values: Record<string, unknown>) => {
+    allow(ctx, 'avatar.assign', OWNER_ADMIN_SYSTEM);
+    ref(ctx, 'blobs', values.blob_id as string | undefined);
     const before = mustGetRow<RoleRow>(ctx, 'roles', roleId);
     const avatar = insertRow<AvatarRow>(ctx, 'avatars', { role_id: roleId, ...values });
     const role = updateRow<RoleRow>(ctx, 'roles', roleId, { avatar_id: avatar.id });
@@ -65,11 +80,14 @@ export function avatarRepo(ctx: Ctx): AvatarRepo {
     },
     assignMonogram: (roleId) => assign(roleId, { source: 'monogram' }),
     restore: (roleId, avatarId) => {
+      allow(ctx, 'avatar.restore', OWNER_ADMIN);
+      ref(ctx, 'avatars', avatarId);
       const before = mustGetRow<RoleRow>(ctx, 'roles', roleId);
       const role = updateRow<RoleRow>(ctx, 'roles', roleId, { avatar_id: avatarId });
       return audited(ctx, { action: 'avatar.restore', table: 'roles', row: role, before, roleId });
     },
     setSkinEnabled: (id, enabled) => {
+      allow(ctx, 'avatar.setSkinEnabled', OWNER_ADMIN);
       const before = mustGetRow<SkinAssetRow>(ctx, 'skin_assets', id);
       const row = updateRow<SkinAssetRow>(ctx, 'skin_assets', id, { is_enabled: enabled ? 1 : 0 });
       return audited(ctx, { action: 'skin_asset.enable', table: 'skin_assets', row, before });

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '@ga/contracts';
 import { displaySeqFor } from '../../ids/index.ts';
 import { foldVi } from '../../search/normalize.ts';
-import { DbRuleError, invalidInput } from '../errors.ts';
+import { DbRuleError, invalidInput, permissionDenied } from '../errors.ts';
 import type {
   ApplyChangeSetInput,
   ApplyChangeSetResult,
@@ -36,6 +36,7 @@ import type {
 } from '../types.ts';
 import {
   actorOf,
+  allow,
   audited,
   type Ctx,
   getByDisplayId,
@@ -43,7 +44,10 @@ import {
   insertRow,
   mustGetRow,
   nowTs,
+  OWNER_ADMIN,
   pageOf,
+  ref,
+  refEngine,
   selectAll,
   selectOne,
   softDeleteRow,
@@ -79,6 +83,7 @@ export function roleRepo(ctx: Ctx): RoleRepo {
     defaultPosition: () =>
       selectOne<PositionRow>(ctx, 'positions', new Where(ctx, { live: true }).add('is_default = 1')),
     create: (i) => {
+      allow(ctx, 'roles.create', OWNER_ADMIN);
       const name = i.name.trim();
       if (name.length === 0 || name.length > ROLE_NAME_MAX) throw invalidInput('tên Role rỗng / quá dài');
       const row = insertRow<RoleRow>(ctx, 'roles', {
@@ -92,6 +97,7 @@ export function roleRepo(ctx: Ctx): RoleRepo {
       return audited(ctx, { action: 'role.create', table: 'roles', row, roleId: row.id });
     },
     update: (id, p, expectedVersion) => {
+      allow(ctx, 'roles.update', OWNER_ADMIN);
       const before = mustGetRow<RoleRow>(ctx, 'roles', id);
       const name = p.name?.trim();
       if (name !== undefined && (name.length === 0 || name.length > ROLE_NAME_MAX))
@@ -112,6 +118,7 @@ export function roleRepo(ctx: Ctx): RoleRepo {
       return audited(ctx, { action: 'role.update', table: 'roles', row, before, roleId: id });
     },
     setLifecycle: (id, to, o) => {
+      allow(ctx, 'roles.setLifecycle', OWNER_ADMIN);
       const before = mustGetRow<RoleRow>(ctx, 'roles', id);
       const born = to !== 'draft' && before.born_at === null;
       const row = updateRow<RoleRow>(ctx, 'roles', id, {
@@ -121,18 +128,22 @@ export function roleRepo(ctx: Ctx): RoleRepo {
       });
       return audited(ctx, { action: 'role.lifecycle', table: 'roles', row, before, roleId: id });
     },
-    setRuntimeState: (id, state, detail) =>
-      updateRow<RoleRow>(
+    setRuntimeState: (id, state, detail) => {
+      allow(ctx, 'roles.setRuntimeState', ['system']);
+      return updateRow<RoleRow>(
         ctx,
         'roles',
         id,
         { runtime_state: state, runtime_detail: detail ?? null, runtime_state_at: nowTs(ctx) },
         { bumpVersion: false },
-      ),
+      );
+    },
     touchActive: (id) => {
+      allow(ctx, 'roles.touchActive', ['system']);
       updateRow<RoleRow>(ctx, 'roles', id, { last_active_at: nowTs(ctx) }, { bumpVersion: false });
     },
     softDelete: (id) => {
+      allow(ctx, 'roles.softDelete', OWNER_ADMIN);
       const before = mustGetRow<RoleRow>(ctx, 'roles', id);
       const row = softDeleteRow<RoleRow>(ctx, 'roles', id);
       audited(ctx, { action: 'role.delete', table: 'roles', row, before, roleId: id });
@@ -255,7 +266,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
         const isInPrompt = b01(it.isInPrompt, 1);
         field = insertRow<DnaFieldRow>(ctx, 'dna_fields', {
           role_id: cs.role_id,
-          def_id: it.defId,
+          def_id: ref(ctx, 'dna_field_defs', it.defId),
           item_index: it.itemIndex ?? 0,
           value_json: it.valueJson,
           value_num: it.valueNum ?? null,
@@ -265,7 +276,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
           tokenizer: it.tokenizer,
           source: it.source,
           status: 'proposed',
-          source_message_id: it.sourceMessageId ?? null,
+          source_message_id: ref(ctx, 'chat_messages', it.sourceMessageId) ?? null,
         });
         data = dnaData(field);
       } else {
@@ -327,6 +338,13 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
       data = inData(ins);
     } else {
       ins = mustGetRow<InstructionRow>(ctx, 'instructions', it.instructionId);
+      const inScope =
+        ins.layer === 'house_rules'
+          ? cs.scope === 'workspace'
+          : ins.layer === 'position'
+            ? ins.position_id === cs.position_id
+            : ins.role_id === cs.role_id;
+      if (!inScope) throw invalidInput('khối IN không thuộc phạm vi của change set');
       base = it.baseVersion;
       tokenDelta = it.tokenCount - ins.token_count;
       const p = it.patch;
@@ -518,7 +536,18 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
         new Where(ctx, { live: true }).add("status = 'open'").eq('role_id', f?.roleId).eq('scope', f?.scope),
       ),
     propose: (i: ProposeChangeSetInput) => {
-      const actor = actorOf(ctx);
+      const actor = allow(ctx, 'changeSets.propose', ['owner', 'admin', 'operator', 'system', 'role']);
+      if (actor.kind === 'role' && i.roleId !== undefined && i.roleId !== actor.role_id) {
+        throw permissionDenied('changeSets.propose: Role chỉ đề xuất cho chính mình');
+      }
+      ref(ctx, 'roles', i.roleId);
+      ref(ctx, 'positions', i.positionId);
+      ref(ctx, 'chat_threads', i.source?.threadId);
+      ref(ctx, 'chat_messages', i.source?.messageId);
+      ref(ctx, 'sessions', i.source?.sessionId);
+      for (const it of i.items) if (it.target === 'instruction' && it.op === 'create') refEngine(ctx, it.engineScope);
+      for (const it of i.items)
+        if (it.target === 'instruction' && it.op === 'update') refEngine(ctx, it.patch.engineScope);
       if (i.items.length === 0) throw invalidInput('change set không có mục nào');
       if (i.title.trim().length === 0) throw invalidInput('change set cần tiêu đề');
       const csId = ctx.newId();
@@ -550,7 +579,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
       return { changeSet: cs, items: out };
     },
     apply: (id, input: ApplyChangeSetInput = {}): ApplyChangeSetResult => {
-      const actor = actorOf(ctx);
+      const actor = allow(ctx, 'changeSets.apply', OWNER_ADMIN);
       const cs = mustGetRow<ChangeSetRow>(ctx, 'change_sets', id);
       if (cs.status !== 'open' || cs.deleted_at !== null) {
         throw new DbRuleError('repo.version_conflict', `change set ${cs.display_id} không còn mở (${cs.status})`);
@@ -658,7 +687,7 @@ export function changeSetRepo(ctx: Ctx): ChangeSetRepo {
       return { changeSet, revision, accepted: acceptedItems, rejected: rejectedItems, stale: staleItems };
     },
     reject: (id, reason) => {
-      const actor = actorOf(ctx);
+      const actor = allow(ctx, 'changeSets.reject', OWNER_ADMIN);
       const cs = mustGetRow<ChangeSetRow>(ctx, 'change_sets', id);
       if (cs.status !== 'open')
         throw new DbRuleError('repo.version_conflict', `change set ${cs.display_id} không còn mở`);

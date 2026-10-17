@@ -25,6 +25,7 @@ import type {
 } from './roles.ts';
 import type { ChatReads, ChatRepo, SessionReads, SessionRepo } from './sessions.ts';
 import type { TelegramReads, TelegramRepo } from './telegram.ts';
+import type { ToolReads, ToolRepo } from './tools.ts';
 import type { ActorRow, UserRow, WorkspaceRow, WriteOptions } from './types.ts';
 import type { WalletReads, WalletRepo } from './wallet.ts';
 import type { JobReads, JobRepo, TaskReads, TaskRepo } from './work.ts';
@@ -62,6 +63,7 @@ export interface ReadTx {
   readonly jobs: JobReads;
   readonly wallet: WalletReads;
   readonly telegram: TelegramReads;
+  readonly tools: ToolReads;
   readonly audit: AuditReads;
   readonly avatar: AvatarReads;
 }
@@ -85,6 +87,7 @@ export interface WriteTx extends ReadTx {
   readonly jobs: JobRepo;
   readonly wallet: WalletRepo;
   readonly telegram: TelegramRepo;
+  readonly tools: ToolRepo;
   readonly audit: AuditRepo;
   readonly avatar: AvatarRepo;
 }

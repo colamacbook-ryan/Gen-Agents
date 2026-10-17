@@ -12,7 +12,7 @@ import type { StatementRunner, WriteContext } from '../../connection.ts';
 import { allocateDisplayId, type IdGenerator, prefixOf } from '../../ids/index.ts';
 import { stampInsert, stampSoftDelete, stampUpdate } from '../../stamp.ts';
 import type { AuditEntryInput } from '../audit.ts';
-import { DbRuleError, invalidInput, notFound } from '../errors.ts';
+import { DbRuleError, invalidInput, notFound, permissionDenied } from '../errors.ts';
 import { dml } from '../sql.ts';
 import {
   type ActorRow,
@@ -53,6 +53,96 @@ export function requireW(ctx: Ctx): WriteContext {
 export function actorOf(ctx: Ctx): ActorRow {
   if (ctx.actor === null) throw new DbRuleError('repo.invalid_input', 'giao dịch chỉ đọc không có actor');
   return ctx.actor;
+}
+
+// ------------------------------------------------------------------ quyền theo actor (rào ở repo — nhiều lớp với DB)
+/**
+ * Ai được ghi: 'owner' / 'admin' / 'operator' = actor user là thành viên ĐANG hoạt động với mức đó; 'system' = actor
+ * kind system của workspace; 'role' = actor Role. 'viewer' và người đã rời workspace không ghi được gì.
+ */
+export type Who = 'owner' | 'admin' | 'operator' | 'system' | 'role';
+export const OWNER_ADMIN: readonly Who[] = ['owner', 'admin'];
+export const OWNER_ADMIN_SYSTEM: readonly Who[] = ['owner', 'admin', 'system'];
+export const STAFF_SYSTEM: readonly Who[] = ['owner', 'admin', 'operator', 'system'];
+
+const accessCache = new WeakMap<Ctx, Who | 'viewer' | null>();
+
+/** Mức của actor giao dịch trong workspace (null = không phải thành viên đang hoạt động). */
+export function accessOf(ctx: Ctx): Who | 'viewer' | null {
+  if (accessCache.has(ctx)) return accessCache.get(ctx) ?? null;
+  const a = actorOf(ctx);
+  let level: Who | 'viewer' | null = null;
+  if (a.purged_at === null && a.workspace_id === ctx.ws) {
+    if (a.kind === 'system') level = 'system';
+    else if (a.kind === 'role') level = a.role_id === null ? null : 'role';
+    else {
+      const m = ctx.r.get<{ access_level: Who | 'viewer' }>(
+        'SELECT access_level FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND removed_at IS NULL',
+        [ctx.ws, a.user_id],
+      );
+      level = m?.access_level ?? null;
+    }
+  }
+  accessCache.set(ctx, level);
+  return level;
+}
+
+/** Chặn thao tác `what` nếu actor không thuộc `who` ⇒ DbRuleError 'permission.denied'. Trả actor. */
+export function allow(ctx: Ctx, what: string, who: readonly Who[]): ActorRow {
+  requireW(ctx);
+  const actor = actorOf(ctx);
+  const level = accessOf(ctx);
+  if (level === null || level === 'viewer' || !who.includes(level)) {
+    throw permissionDenied(
+      `${what}: actor ${actor.kind}${level ? `/${level}` : ''} không được phép (cần ${who.join(' | ')})`,
+    );
+  }
+  return actor;
+}
+
+// ------------------------------------------------------------------ tham chiếu từ input (chống IDOR chéo tenant)
+/** Bảng tham chiếu đặc biệt: danh mục dùng chung (workspace hệ thống) được phép. */
+const SHARED_WITH_SYSTEM: ReadonlySet<string> = new Set(['dna_field_defs']);
+
+/**
+ * id tham chiếu nhận từ input phải tồn tại TRONG workspace của giao dịch (bảng có workspace_id). null / undefined ⇒ trả
+ * nguyên. Khác tenant / không có ⇒ 'repo.invalid_ref' (cùng mã API "không tìm thấy" — không lộ hàng tenant khác).
+ */
+export function ref<T extends string | null | undefined>(ctx: Ctx, table: string, id: T): T {
+  if (id === null || id === undefined) return id;
+  if (typeof id !== 'string' || id.length === 0 || id.length > 64)
+    throw new DbRuleError('repo.invalid_ref', `${table}: id lạ`);
+  const cols = columnsOf(ctx.r, table);
+  let ok: unknown;
+  if (table === 'users') {
+    ok = ctx.r.get('SELECT 1 AS ok FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [ctx.ws, id]);
+  } else if (!cols.has('workspace_id')) {
+    throw invalidInput(`ref(): bảng ${table} không có workspace_id — dùng kiểm riêng`);
+  } else if (SHARED_WITH_SYSTEM.has(table)) {
+    ok = ctx.r.get(
+      `SELECT 1 AS ok FROM ${q(table)} WHERE id = ? AND workspace_id IN (?, '00000000000000000000000000')`,
+      [id, ctx.ws],
+    );
+  } else {
+    ok = ctx.r.get(`SELECT 1 AS ok FROM ${q(table)} WHERE id = ? AND workspace_id = ?`, [id, ctx.ws]);
+  }
+  if (ok === undefined) throw new DbRuleError('repo.invalid_ref', `${table} ${id} không thuộc workspace của giao dịch`);
+  return id;
+}
+
+/** Như ref() nhưng trả hàng (dùng khi cần cột của hàng được tham chiếu). */
+export function refRow<R>(ctx: Ctx, table: string, id: string): R {
+  ref(ctx, table, id);
+  return getRow<R>(ctx, table, id) as R;
+}
+
+/** Slug engine phải có trong danh mục (bảng toàn cục của workspace hệ thống). */
+export function refEngine<T extends string | null | undefined>(ctx: Ctx, slug: T): T {
+  if (slug === null || slug === undefined) return slug;
+  if (ctx.r.get('SELECT 1 AS ok FROM engines WHERE slug = ?', [slug]) === undefined) {
+    throw new DbRuleError('repo.invalid_ref', `engine ${slug} không có trong danh mục`);
+  }
+  return slug;
 }
 
 // ------------------------------------------------------------------ định danh

@@ -6,40 +6,43 @@
 
 export const FOLD_MAX_CHARS = 1_048_576;
 
-const COMBINING_RE = /[̀-ͯ]/g;
-const cache = new Map<string, string>();
+const COMBINING_RE = /[\u0300-\u036f]/g;
+/** Bảng tra theo code unit (0 = chưa tính). Mỗi code unit đổi thành ĐÚNG MỘT code unit ⇒ giữ độ dài. */
+const table = new Uint16Array(65_536);
 
-function foldChar(ch: string): string {
-  const hit = cache.get(ch);
-  if (hit !== undefined) return hit;
-  let out: string;
-  if (ch === 'đ' || ch === 'Đ') out = 'd';
-  else {
-    // lint-allow no-raw-normalize: NFD của đúng MỘT ký tự (độ dài bị chặn), không phải chuỗi người dùng
+function foldUnit(c: number): number {
+  const hit = table[c] as number;
+  if (hit !== 0) return hit;
+  let out = c;
+  if (c >= 0x41 && c <= 0x5a) out = c + 32;
+  else if (c === 0x0110 || c === 0x0111)
+    out = 0x64; // Đ / đ → d
+  else if (c >= 0x80 && (c < 0xd800 || c > 0xdfff)) {
+    const ch = String.fromCharCode(c);
+    // lint-allow no-raw-normalize: NFD của đúng MỘT code unit (độ dài bị chặn), không phải chuỗi người dùng
     const base = ch.normalize('NFD').replace(COMBINING_RE, '').toLowerCase();
     const lower = ch.toLowerCase();
-    out = base.length === 1 ? base : lower.length === 1 ? lower : ch;
+    out = base.length === 1 ? base.charCodeAt(0) : lower.length === 1 ? lower.charCodeAt(0) : c;
   }
-  if (cache.size < 65_536) cache.set(ch, out);
+  table[c] = out === 0 ? c : out;
   return out;
 }
 
-/** Chuẩn hoá để so khớp / index: 'Đặng Thị Hoà' ⇒ 'dang thi hoa'. Độ dài kết quả = độ dài bản NFC. */
+const CHUNK = 8192;
+
+/** Chuẩn hoá để so khớp / index: 'Đặng Thị Hoà' ⇒ 'dang thi hoa'. Độ dài kết quả = độ dài bản NFC. Tuyến tính. */
 export function foldVi(input: string): string {
   if (input.length > FOLD_MAX_CHARS) throw new RangeError(`foldVi: đầu vào vượt trần ${FOLD_MAX_CHARS} ký tự`);
   // lint-allow no-raw-normalize: NFC (gộp ký tự tổ hợp) sau khi đã chặn kích thước ở trên; NFC không phình như NFKC
   const nfc = input.normalize('NFC');
-  let out = '';
+  const codes = new Uint16Array(nfc.length);
   for (let i = 0; i < nfc.length; i++) {
     const c = nfc.charCodeAt(i);
-    if (c < 0x80) {
-      out += c >= 0x41 && c <= 0x5a ? String.fromCharCode(c + 32) : nfc[i];
-    } else if (c >= 0xd800 && c <= 0xdbff && i + 1 < nfc.length) {
-      out += nfc[i] + (nfc[i + 1] as string); // cặp surrogate: giữ nguyên (2 code unit ⇒ 2 code unit)
-      i++;
-    } else {
-      out += foldChar(nfc[i] as string);
-    }
+    codes[i] = c < 0x80 ? (c >= 0x41 && c <= 0x5a ? c + 32 : c) : foldUnit(c);
   }
-  return out;
+  const parts: string[] = [];
+  for (let i = 0; i < codes.length; i += CHUNK) {
+    parts.push(String.fromCharCode(...codes.subarray(i, i + CHUNK)));
+  }
+  return parts.join('');
 }

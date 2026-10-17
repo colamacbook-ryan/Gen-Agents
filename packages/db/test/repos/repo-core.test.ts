@@ -21,7 +21,7 @@ describe('workspace / users / auth_sessions', () => {
       expect(tx.workspace.systemActor('scheduler').kind).toBe('system');
       expect(tx.users.byUsername('owner')?.id).toBe(f.ownerUserId);
     });
-    const u = f.store.write(f.ownerActorId, (tx) => tx.users.recordLoginFailure(f.ownerUserId, { lockUntil: null }));
+    const u = f.store.write(f.systemActorId, (tx) => tx.users.recordLoginFailure(f.ownerUserId, { lockUntil: null }));
     expect(u.failed_login_count).toBe(1);
     const s = f.store.write(f.ownerActorId, (tx) =>
       tx.authSessions.create({ userId: f.ownerUserId, tokenHash: 'h1', expiresAt: '2026-10-18T08:00:00.000Z' }),

@@ -70,7 +70,7 @@ describe('engines', () => {
     );
     expect(() =>
       f.store.write(f.ownerActorId, (tx) => tx.engines.recordLoginResult(acc.id, { loginStatus: 'logged_in' })),
-    ).toThrow(rule('permission.system_only'));
+    ).toThrow(rule('permission.denied'));
   });
 });
 
@@ -189,7 +189,7 @@ describe('Telegram', () => {
     expect(bot.status).toBe('pending');
     expect(() =>
       f.store.write(f.ownerActorId, (tx) => tx.telegram.recordGetMe(bot.id, { ok: true, botTgId: 42 })),
-    ).toThrow(rule('permission.system_only'));
+    ).toThrow(rule('permission.denied'));
     expect(
       f.store.write(f.systemActorId, (tx) => tx.telegram.recordGetMe(bot.id, { ok: true, botTgId: 42 })).status,
     ).toBe('active');

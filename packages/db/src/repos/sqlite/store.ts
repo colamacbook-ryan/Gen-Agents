@@ -18,6 +18,7 @@ import { engineRepo } from './engines.ts';
 import { changeSetRepo, dnaReads, instructionReads, revisionReads, roleRepo } from './roles.ts';
 import { chatRepo, sessionRepo } from './sessions.ts';
 import { telegramRepo } from './telegram.ts';
+import { toolRepo } from './tools.ts';
 import { walletRepo } from './wallet.ts';
 import { jobRepo, taskRepo } from './work.ts';
 import { authSessionRepo, secretRepo, settingsRepo, userRepo, workspaceRepo } from './workspace.ts';
@@ -86,6 +87,7 @@ export function createSqliteStore(opts: SqliteStoreOptions): DataStore {
       jobs: jobRepo(ctx),
       wallet: walletRepo(ctx),
       telegram: telegramRepo(ctx),
+      tools: toolRepo(ctx),
       audit: auditRepo(ctx),
       avatar: avatarRepo(ctx),
     };

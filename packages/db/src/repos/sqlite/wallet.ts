@@ -5,12 +5,15 @@ import type { AuditRow, LeaderboardView, LedgerEntryRow, RoleRow, RoleWoundRow, 
 import type { PostLedgerInput, WalletRepo } from '../wallet.ts';
 import {
   actorOf,
+  allow,
   audited,
   type Ctx,
   getRow,
   insertRow,
   mustGetRow,
+  OWNER_ADMIN_SYSTEM,
   pageOf,
+  ref,
   selectAll,
   selectOne,
   Where,
@@ -46,11 +49,21 @@ export function walletRepo(ctx: Ctx): WalletRepo {
       selectOne<RoleWoundRow>(ctx, 'role_wounds', new Where(ctx).eq('role_id', roleId).add('ended_at IS NULL')),
     wounds: (roleId) => selectAll<RoleWoundRow>(ctx, 'role_wounds', new Where(ctx).eq('role_id', roleId)),
     openRoleWallet: (roleId) => {
+      allow(ctx, 'wallet.openRoleWallet', OWNER_ADMIN_SYSTEM);
       mustGetRow<RoleRow>(ctx, 'roles', roleId);
       const row = insertRow<WalletRow>(ctx, 'wallets', { owner_kind: 'role', role_id: roleId });
       return audited(ctx, { action: 'wallet.open', table: 'wallets', row, roleId });
     },
     post: (i: PostLedgerInput) => {
+      allow(ctx, 'wallet.post', OWNER_ADMIN_SYSTEM);
+      ref(ctx, 'roles', i.roleId);
+      ref(ctx, 'tasks', i.taskId);
+      ref(ctx, 'sessions', i.sessionId);
+      ref(ctx, 'commitments', i.commitmentId);
+      ref(ctx, 'skills', i.skillId);
+      ref(ctx, 'employee_cards', i.cardId);
+      ref(ctx, 'ledger_entries', i.reversesEntryId);
+      ref(ctx, 'actors', i.approvedBy);
       const actor = actorOf(ctx);
       if (!Number.isSafeInteger(i.amountMinor) || i.amountMinor <= 0)
         throw invalidInput('amountMinor phải là số nguyên > 0');

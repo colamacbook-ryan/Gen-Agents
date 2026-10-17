@@ -98,6 +98,10 @@ export const DB_RULES = [
   'sqlite.readonly',
   'connection.missing_function',
   // — lỗi do repo phát hiện trước khi chạm DB (không có chuỗi DB)
+  /** actor của giao dịch không đủ quyền cho thao tác (rào ở repo, nhiều lớp với cổng người ghi của DB). */
+  'permission.denied',
+  /** id tham chiếu nhận từ input không tồn tại trong workspace của giao dịch (chống IDOR chéo tenant). */
+  'repo.invalid_ref',
   'repo.not_found',
   'repo.version_conflict',
   'repo.invalid_input',
@@ -267,8 +271,11 @@ export function dbRuleOf(message: string): DbRule {
   return 'unknown';
 }
 
-/** Mã API của lỗi do repo phát hiện (không có chuỗi DB). */
-const REPO_CODES: Partial<Record<DbRule, ApiErrorCode>> = {
+/** Mã API của lỗi do repo phát hiện (không có chuỗi DB). Quyền ⇒ 'db.rule_violation' (= mã của cổng DB tương ứng). */
+const REPO_CODES: Partial<Record<DbRule, DbRuleErrorCode>> = {
+  'permission.denied': 'db.rule_violation',
+  // tham chiếu sai / khác tenant ⇒ cùng mã với "không tìm thấy" (không lộ sự tồn tại của hàng tenant khác)
+  'repo.invalid_ref': 'not_found',
   'repo.not_found': 'not_found',
   'repo.version_conflict': 'conflict',
   'repo.invalid_input': 'validation.failed',
@@ -319,4 +326,7 @@ export function notFound(what: string): DbRuleError {
 }
 export function invalidInput(what: string): DbRuleError {
   return new DbRuleError('repo.invalid_input', what);
+}
+export function permissionDenied(what: string): DbRuleError {
+  return new DbRuleError('permission.denied', what);
 }

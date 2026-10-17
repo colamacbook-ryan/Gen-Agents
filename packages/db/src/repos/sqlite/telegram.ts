@@ -1,45 +1,63 @@
 // Họ Telegram trên SQLite: bot (TG-), allowlist (AL-), outbox gửi đi = proactive_sends (PN-). Cổng người ghi + bất biến
 // "bot sống luôn có ≥ 1 chủ sở hữu active" do DB ép (mã 'telegram.owner_invariant' / 'telegram.owner_capture' /
 // 'permission.*'); repo không có lối vòng.
-import { invalidInput } from '../errors.ts';
+import { invalidInput, permissionDenied } from '../errors.ts';
 import type { TelegramRepo } from '../telegram.ts';
 import type { ProactivePolicyRow, ProactiveSendRow, TelegramAllowlistRow, TelegramBotRow } from '../types.ts';
 import {
+  allow,
   audited,
   type Ctx,
   getRow,
   insertRow,
   mustGetRow,
   nowTs,
+  OWNER_ADMIN,
   pageOf,
+  ref,
   selectAll,
   selectOne,
   softDeleteRow,
   updateRow,
   Where,
+  type Who,
 } from './ctx.ts';
 import { insertPolarisCheck } from './polaris.ts';
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const flag = (v: boolean | undefined): 0 | 1 | undefined => (v === undefined ? undefined : v ? 1 : 0);
+/** Trần tin chủ động / ngày (= CHECK proactive_policies.max_per_day BETWEEN 0 AND 20). */
+export const PROACTIVE_MAX_PER_DAY = 20;
+/** Bot + token: CHỈ owner hoặc actor system (DB telegram_bots_writer_*; Gen quyết — hẹp hơn §9.7). */
+const BOT_WRITERS: readonly Who[] = ['owner', 'system'];
 
 export function telegramRepo(ctx: Ctx): TelegramRepo {
   const live = () => new Where(ctx, { live: true });
   const bot = (id: string) => mustGetRow<TelegramBotRow>(ctx, 'telegram_bots', id);
-  const botUpdate = (id: string, patch: Record<string, unknown>, action: string | null, runtime = false) => {
+  const botUpdate = (
+    who: readonly Who[],
+    id: string,
+    patch: Record<string, unknown>,
+    action: string | null,
+    runtime = false,
+  ) => {
+    allow(ctx, action ?? 'telegram_bot.runtime', who);
     const before = bot(id);
     const row = updateRow<TelegramBotRow>(ctx, 'telegram_bots', id, patch, { bumpVersion: !runtime });
     return action === null ? row : audited(ctx, { action, table: 'telegram_bots', row, before });
   };
   const allowUpdate = (id: string, patch: Record<string, unknown>, action: string) => {
+    allow(ctx, action, ['owner', 'admin', 'system']);
     const before = mustGetRow<TelegramAllowlistRow>(ctx, 'telegram_allowlist', id);
     const row = updateRow<TelegramAllowlistRow>(ctx, 'telegram_allowlist', id, patch);
     return audited(ctx, { action, table: 'telegram_allowlist', row, before });
   };
-  const sendUpdate = (id: string, patch: Record<string, unknown>, fromStatus: ProactiveSendRow['status']) =>
-    updateRow<ProactiveSendRow>(ctx, 'proactive_sends', id, patch, {
+  const sendUpdate = (id: string, patch: Record<string, unknown>, fromStatus: ProactiveSendRow['status']) => {
+    allow(ctx, 'proactive_send.update', ['system']);
+    return updateRow<ProactiveSendRow>(ctx, 'proactive_sends', id, patch, {
       extraWhere: { sql: 'status = ?', params: [fromStatus] },
     });
+  };
   const day = (d: string) => {
     if (!DAY_RE.test(d)) throw invalidInput('dayLocal phải là YYYY-MM-DD');
     return d;
@@ -71,6 +89,17 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
       ),
     proactivePolicy: (roleId) => selectOne<ProactivePolicyRow>(ctx, 'proactive_policies', live().eq('role_id', roleId)),
     setProactivePolicy: (roleId, i) => {
+      // review bảo mật MEDIUM: Role không tự sửa hợp đồng giờ làm của mình — chỉ owner / admin (nhiều lớp với DB v2.3.5)
+      allow(ctx, 'telegram.setProactivePolicy', OWNER_ADMIN);
+      ref(ctx, 'roles', roleId);
+      if (
+        i.maxPerDay !== undefined &&
+        (!Number.isSafeInteger(i.maxPerDay) || i.maxPerDay < 0 || i.maxPerDay > PROACTIVE_MAX_PER_DAY)
+      ) {
+        throw invalidInput(`maxPerDay phải là số nguyên 0–${PROACTIVE_MAX_PER_DAY}`);
+      }
+      if (i.timezone !== undefined && (i.timezone.length === 0 || i.timezone.length > 64))
+        throw invalidInput('timezone lạ');
       const before = selectOne<ProactivePolicyRow>(ctx, 'proactive_policies', live().eq('role_id', roleId));
       const minute = (v: number | undefined, what: string) => {
         if (v !== undefined && (!Number.isSafeInteger(v) || v < 0 || v > 1439))
@@ -114,17 +143,19 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
       )?.n ?? 0,
 
     createBot: (i) => {
+      allow(ctx, 'telegram.createBot', BOT_WRITERS);
       const row = insertRow<TelegramBotRow>(ctx, 'telegram_bots', {
-        role_id: i.roleId,
+        role_id: ref(ctx, 'roles', i.roleId),
         bot_username: i.botUsername,
-        secret_id: i.secretId,
+        secret_id: ref(ctx, 'secrets', i.secretId),
         token_last4: i.tokenLast4 ?? null,
       });
       return audited(ctx, { action: 'telegram_bot.create', table: 'telegram_bots', row });
     },
-    setBotStatus: (id, status) => botUpdate(id, { status }, 'telegram_bot.status'),
+    setBotStatus: (id, status) => botUpdate(BOT_WRITERS, id, { status }, 'telegram_bot.status'),
     recordGetMe: (id, i) =>
       botUpdate(
+        ['system'],
         id,
         i.ok
           ? { status: 'active', bot_tg_id: i.botTgId, getme_ok_at: nowTs(ctx), error: null }
@@ -136,17 +167,20 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
       if (!Number.isSafeInteger(offset) || offset < 0) throw invalidInput('offset phải là số nguyên ≥ 0');
       const before = bot(id);
       if (offset < before.poll_offset) throw invalidInput('poll_offset chỉ tiến');
-      return botUpdate(id, { poll_offset: offset, last_update_at: nowTs(ctx) }, null, true);
+      return botUpdate(['system'], id, { poll_offset: offset, last_update_at: nowTs(ctx) }, null, true);
     },
     recordPollError: (id, error) =>
-      botUpdate(id, { status: 'error', error: error.slice(0, 2000) }, 'telegram_bot.poll_error', true),
+      botUpdate(['system'], id, { status: 'error', error: error.slice(0, 2000) }, 'telegram_bot.poll_error', true),
     softDeleteBot: (id) => {
+      allow(ctx, 'telegram.softDeleteBot', BOT_WRITERS);
       const before = bot(id);
       const row = softDeleteRow<TelegramBotRow>(ctx, 'telegram_bots', id);
       audited(ctx, { action: 'telegram_bot.delete', table: 'telegram_bots', row, before });
     },
-    restoreBot: (id) => botUpdate(id, { deleted_at: null }, 'telegram_bot.restore'),
+    restoreBot: (id) => botUpdate(['owner'], id, { deleted_at: null }, 'telegram_bot.restore'),
     captureOwner: (botId, i) => {
+      // capture user ID đã xác minh: owner của workspace, hoặc gateway (actor system) khi bot chưa có chủ (DB ép thêm)
+      allow(ctx, 'telegram.captureOwner', BOT_WRITERS);
       bot(botId);
       const row = insertRow<TelegramAllowlistRow>(ctx, 'telegram_allowlist', {
         bot_id: botId,
@@ -158,6 +192,7 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
       return audited(ctx, { action: 'telegram_allowlist.capture_owner', table: 'telegram_allowlist', row });
     },
     addAllowed: (botId, i) => {
+      allow(ctx, 'telegram.addAllowed', OWNER_ADMIN);
       bot(botId);
       const row = insertRow<TelegramAllowlistRow>(ctx, 'telegram_allowlist', {
         bot_id: botId,
@@ -170,6 +205,15 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
     removeAllowed: (id) => allowUpdate(id, { status: 'removed' }, 'telegram_allowlist.remove'),
 
     reserveSend: (i) => {
+      const actor = allow(ctx, 'telegram.reserveSend', ['system', 'role']);
+      if (actor.kind === 'role' && actor.role_id !== i.roleId) {
+        throw permissionDenied('telegram.reserveSend: Role chỉ giữ chỗ tin của chính mình');
+      }
+      ref(ctx, 'roles', i.roleId);
+      ref(ctx, 'proactive_policies', i.policyId);
+      ref(ctx, 'tasks', i.taskId);
+      ref(ctx, 'commitments', i.commitmentId);
+      ref(ctx, 'proactive_jobs', i.proactiveJobId);
       const id = ctx.newId();
       insertPolarisCheck(ctx, i.roleId, { kind: 'proactive', proactiveSendId: id }, i.polaris);
       return insertRow<ProactiveSendRow>(ctx, 'proactive_sends', {
@@ -188,9 +232,11 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
         proactive_job_id: i.proactiveJobId ?? null,
       });
     },
-    recordSuppressed: (i) =>
-      insertRow<ProactiveSendRow>(ctx, 'proactive_sends', {
-        role_id: i.roleId,
+    recordSuppressed: (i) => {
+      allow(ctx, 'telegram.recordSuppressed', ['system']);
+      ref(ctx, 'proactive_policies', i.policyId);
+      return insertRow<ProactiveSendRow>(ctx, 'proactive_sends', {
+        role_id: ref(ctx, 'roles', i.roleId),
         trigger_kind: i.triggerKind,
         urgency: i.urgency,
         channel: i.channel,
@@ -198,11 +244,17 @@ export function telegramRepo(ctx: Ctx): TelegramRepo {
         status: i.status,
         reason: i.reason ?? null,
         policy_id: i.policyId ?? null,
-      }),
+      });
+    },
     markSent: (id, i) =>
-      sendUpdate(id, { status: 'sent', sent_at: nowTs(ctx), message_id: i?.messageId ?? null }, 'reserved'),
+      sendUpdate(
+        id,
+        { status: 'sent', sent_at: nowTs(ctx), message_id: ref(ctx, 'chat_messages', i?.messageId) ?? null },
+        'reserved',
+      ),
     markFailed: (id, error) => sendUpdate(id, { status: 'failed', error: error.slice(0, 2000) }, 'reserved'),
     expireReservations: () => {
+      allow(ctx, 'telegram.expireReservations', ['system']);
       const now = nowTs(ctx);
       let n = 0;
       for (const r of selectAll<ProactiveSendRow>(

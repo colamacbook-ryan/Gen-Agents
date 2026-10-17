@@ -90,6 +90,9 @@ export type TelegramBotStatus = TelegramBotRow['status'];
 
 export type PolarisCheckRow = Row<'polaris_checks'>;
 export type ProactivePolicyRow = Row<'proactive_policies'>;
+export type ToolRow = Row<'tools'>;
+export type ToolGrantRow = Row<'tool_grants'>;
+export type EgressRuleRow = Row<'egress_rules'>;
 
 /**
  * Đối chiếu Polaris (PC-, DATABASE §5.10) đi kèm hành động do Role khởi xướng — tin chủ động, đề xuất change set, nhận việc,
@@ -101,10 +104,12 @@ export interface PolarisCheckInput {
   /** Luật đã áp, vd 'P1,P3' (không rỗng). */
   rulesApplied: string;
   rationale?: string | null;
-  balanceMinorAt?: number | null;
-  rankAt?: number | null;
+  /** Phiên khởi xướng — phải thuộc workspace của giao dịch. */
   sessionId?: string | null;
+  /** Dòng audit làm bằng chứng — phải thuộc workspace; repo chụp display_id. */
   auditId?: string | null;
+  // balance_minor_at / rank_at KHÔNG nhận từ người gọi: repo tự tính từ ví / bảng xếp hạng trong giao dịch
+  // (review bảo mật MEDIUM 2026-10-17 — dữ liệu bằng chứng do server tính). Truyền vào ⇒ 'repo.invalid_input'.
 }
 
 /** Phân trang keyset theo display_seq (DATABASE §8.3): không OFFSET; tối đa 500 hàng. */

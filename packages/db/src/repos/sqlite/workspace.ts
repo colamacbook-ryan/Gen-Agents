@@ -6,8 +6,9 @@ import {
   SETTINGS,
   type SettingKey,
   SYSTEM_WORKSPACE_ID,
+  settingWritableBy,
 } from '@ga/contracts';
-import { DbRuleError, invalidInput, notFound } from '../errors.ts';
+import { DbRuleError, invalidInput, notFound, permissionDenied } from '../errors.ts';
 import { dml } from '../sql.ts';
 import type {
   ActorRow,
@@ -21,18 +22,25 @@ import type {
 } from '../types.ts';
 import type { AuthSessionRepo, SecretRepo, SettingsRepo, SettingValue, UserRepo, WorkspaceRepo } from '../workspace.ts';
 import {
+  accessOf,
+  actorOf,
+  allow,
   audited,
   type Ctx,
   getRow,
   insertRow,
   mustGetRow,
   nowTs,
+  OWNER_ADMIN,
+  OWNER_ADMIN_SYSTEM,
+  ref,
   requireW,
   selectAll,
   selectOne,
   softDeleteRow,
   updateRow,
   Where,
+  type Who,
 } from './ctx.ts';
 
 export function workspaceRepo(ctx: Ctx): WorkspaceRepo {
@@ -86,6 +94,7 @@ export function workspaceRepo(ctx: Ctx): WorkspaceRepo {
     setupChecklist: () =>
       ctx.r.all<SetupChecklistView>('SELECT * FROM v_setup_checklist WHERE workspace_id = ?', [ctx.ws]),
     update: (patch) => {
+      allow(ctx, 'workspace.update', OWNER_ADMIN);
       const w = requireW(ctx);
       const before = ctx.r.get<WorkspaceRow>('SELECT * FROM workspaces WHERE id = ?', [ctx.ws]);
       if (before === undefined) throw notFound(`workspace ${ctx.ws}`);
@@ -98,9 +107,18 @@ export function workspaceRepo(ctx: Ctx): WorkspaceRepo {
       return audited(ctx, { action: 'workspace.update', table: 'workspaces', row, before });
     },
     addMember: ({ userId, accessLevel }) => {
+      allow(ctx, 'workspace.addMember', ['owner']);
+      if (accessLevel === 'owner')
+        throw permissionDenied('workspace.addMember: không thêm owner thứ hai (đổi owner không đi lối này)');
       const w = requireW(ctx);
       const user = ctx.r.get<UserRow>('SELECT * FROM users WHERE id = ?', [userId]);
       if (user === undefined) throw notFound(`user ${userId}`);
+      // MVP: user đã thuộc workspace tenant khác ⇒ không kéo sang (chống IDOR chéo tenant; lời mời nhiều workspace là GĐ2)
+      const elsewhere = ctx.r.get(
+        "SELECT 1 AS ok FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.workspace_id <> ? AND w.kind = 'tenant'",
+        [userId, ctx.ws],
+      );
+      if (elsewhere !== undefined) throw new DbRuleError('repo.invalid_ref', `user ${userId} thuộc workspace khác`);
       const [member] = dml(w).write(
         'INSERT INTO workspace_members (workspace_id, user_id, access_level, created_at) VALUES (?, ?, ?, ?) RETURNING *',
         [ctx.ws, userId, accessLevel, nowTs(ctx)],
@@ -126,10 +144,36 @@ export function workspaceRepo(ctx: Ctx): WorkspaceRepo {
       });
       return { member, actor };
     },
-    setAccessLevel: (userId, accessLevel) =>
-      memberUpdate(ctx, userId, 'access_level = ?', [accessLevel], 'workspace_member.access'),
-    removeMember: (userId) => memberUpdate(ctx, userId, 'removed_at = ?', [nowTs(ctx)], 'workspace_member.remove'),
+    setAccessLevel: (userId, accessLevel) => {
+      guardMemberChange(ctx, userId, 'workspace.setAccessLevel');
+      if (accessLevel === 'owner')
+        throw permissionDenied('workspace.setAccessLevel: không nâng lên owner (đổi owner không đi lối này)');
+      return memberUpdate(ctx, userId, 'access_level = ?', [accessLevel], 'workspace_member.access');
+    },
+    removeMember: (userId) => {
+      guardMemberChange(ctx, userId, 'workspace.removeMember');
+      return memberUpdate(ctx, userId, 'removed_at = ?', [nowTs(ctx)], 'workspace_member.remove');
+    },
   };
+}
+
+/** Chỉ owner đổi thành viên; không tự đổi mình; không đổi / gỡ owner (admin không tự nâng, không hạ owner). */
+function guardMemberChange(ctx: Ctx, userId: string, what: string): void {
+  const actor = allow(ctx, what, ['owner']);
+  if (actor.user_id === userId) throw permissionDenied(`${what}: không tự đổi quyền của chính mình`);
+  const target = ctx.r.get<MemberRow>('SELECT * FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [
+    ctx.ws,
+    userId,
+  ]);
+  if (target?.access_level === 'owner') throw permissionDenied(`${what}: không đổi / gỡ owner`);
+}
+
+/** Thao tác trên user `userId`: chính người đó (actor user cùng user_id) hoặc mức trong `who`. */
+function selfOr(ctx: Ctx, userId: string, what: string, who: readonly Who[]): void {
+  const actor = actorOf(ctx);
+  const level = accessOf(ctx);
+  if (actor.kind === 'user' && actor.user_id === userId && level !== null) return;
+  allow(ctx, what, who);
 }
 
 function memberUpdate(ctx: Ctx, userId: string, set: string, params: unknown[], action: string): MemberRow {
@@ -212,8 +256,9 @@ export function userRepo(ctx: Ctx): UserRepo {
       ]);
       return m === undefined ? null : u;
     },
-    setPassword: (id, i) =>
-      upd(
+    setPassword: (id, i) => {
+      selfOr(ctx, id, 'users.setPassword', ['system']);
+      return upd(
         id,
         {
           password_hash: i.passwordHash,
@@ -223,10 +268,14 @@ export function userRepo(ctx: Ctx): UserRepo {
           locked_until: null,
         },
         'user.password_change',
-      ),
-    recordLoginSuccess: (id) =>
-      upd(id, { last_login_at: nowTs(ctx), failed_login_count: 0, locked_until: null }, 'user.login_ok'),
+      );
+    },
+    recordLoginSuccess: (id) => {
+      allow(ctx, 'users.recordLoginSuccess', ['system']);
+      return upd(id, { last_login_at: nowTs(ctx), failed_login_count: 0, locked_until: null }, 'user.login_ok');
+    },
     recordLoginFailure: (id, i) => {
+      allow(ctx, 'users.recordLoginFailure', ['system']);
       const u = assertUserInScope(ctx, id);
       return upd(
         id,
@@ -237,8 +286,14 @@ export function userRepo(ctx: Ctx): UserRepo {
         'user.login_failed',
       );
     },
-    updateProfile: (id, p) =>
-      upd(id, { display_name: p.displayName, email: p.email, locale: p.locale, timezone: p.timezone }, 'user.update'),
+    updateProfile: (id, p) => {
+      selfOr(ctx, id, 'users.updateProfile', ['owner', 'system']);
+      return upd(
+        id,
+        { display_name: p.displayName, email: p.email, locale: p.locale, timezone: p.timezone },
+        'user.update',
+      );
+    },
   };
 }
 
@@ -258,7 +313,7 @@ export function authSessionRepo(ctx: Ctx): AuthSessionRepo {
     return row;
   };
   const set = (id: string, sql: string, params: unknown[]): AuthSessionRow => {
-    mustGet(id);
+    selfOr(ctx, mustGet(id).user_id, 'authSessions.update', ['system']);
     const [row] = dml(requireW(ctx)).write(`UPDATE auth_sessions SET ${sql} WHERE id = ? RETURNING *`, [...params, id])
       .rows as AuthSessionRow[];
     if (row === undefined) throw notFound(`auth_session ${id}`);
@@ -268,6 +323,7 @@ export function authSessionRepo(ctx: Ctx): AuthSessionRepo {
     byTokenHash: (h) => scoped(ctx.r.get<AuthSessionRow>('SELECT * FROM auth_sessions WHERE token_hash = ?', [h])),
     create: (i) => {
       assertUserInScope(ctx, i.userId);
+      selfOr(ctx, i.userId, 'authSessions.create', ['system']);
       const [row] = dml(requireW(ctx)).write(
         'INSERT INTO auth_sessions (id, user_id, token_hash, expires_at, last_seen_at, ip, user_agent, created_at) ' +
           'VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
@@ -281,6 +337,7 @@ export function authSessionRepo(ctx: Ctx): AuthSessionRepo {
     revoke: (id) => set(id, 'revoked_at = COALESCE(revoked_at, ?)', [nowTs(ctx)]),
     revokeAllForUser: (userId) => {
       assertUserInScope(ctx, userId);
+      selfOr(ctx, userId, 'authSessions.revokeAllForUser', ['owner', 'system']);
       return dml(requireW(ctx)).write(
         'UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
         [nowTs(ctx), userId],
@@ -314,6 +371,7 @@ export function settingsRepo(ctx: Ctx): SettingsRepo {
     list: () => selectAll<SettingRow>(ctx, 'settings', new Where(ctx, { live: true })),
     set: (key, value) => {
       if (!isSettingKey(key)) throw invalidInput(`khoá settings lạ: ${String(key)}`);
+      guardSetting(ctx, key, 'settings.set');
       let json: string;
       try {
         json = JSON.stringify(parseSettingValue(key, value));
@@ -328,6 +386,7 @@ export function settingsRepo(ctx: Ctx): SettingsRepo {
       return audited(ctx, { action: 'settings.set', table: 'settings', row, before, detail: { key } });
     },
     remove: (key) => {
+      guardSetting(ctx, key, 'settings.remove');
       const before = live(key);
       if (before === null) return;
       const row = softDeleteRow<SettingRow>(ctx, 'settings', before.id);
@@ -336,12 +395,29 @@ export function settingsRepo(ctx: Ctx): SettingsRepo {
   };
 }
 
+/** Người ghi khoá settings = registry contracts (SETTINGS[key].writers): owner / admin / system — Role không bao giờ. */
+function guardSetting(ctx: Ctx, key: SettingKey, what: string): void {
+  allow(ctx, what, OWNER_ADMIN_SYSTEM);
+  const level = accessOf(ctx);
+  if (level !== 'owner' && level !== 'admin' && level !== 'system') throw permissionDenied(what);
+  if (!settingWritableBy(key, level)) throw permissionDenied(`${what}: ${key} không cho ${level} ghi`);
+}
+
+/** Người ghi bí mật theo kind (= cổng DB secrets_writer_*): token neo chỉ owner; token bot owner / system; còn lại owner / admin / system. */
+function secretWriters(kind: SecretRow['kind']): readonly Who[] {
+  if (kind === 'anchor_remote_token') return ['owner'];
+  if (kind === 'telegram_bot_token') return ['owner', 'system'];
+  return OWNER_ADMIN_SYSTEM;
+}
+
 export function secretRepo(ctx: Ctx): SecretRepo {
   return {
     get: (id) => getRow<SecretRow>(ctx, 'secrets', id),
     list: (f) =>
       selectAll<SecretRow>(ctx, 'secrets', new Where(ctx, { live: true }).eq('kind', f?.kind).eq('status', f?.status)),
     create: (i) => {
+      allow(ctx, 'secrets.create', secretWriters(i.kind));
+      ref(ctx, 'secrets', i.rotatedFromId);
       const row = insertRow<SecretRow>(ctx, 'secrets', {
         kind: i.kind,
         label: i.label,
@@ -360,10 +436,12 @@ export function secretRepo(ctx: Ctx): SecretRepo {
     },
     revoke: (id) => {
       const before = mustGetRow<SecretRow>(ctx, 'secrets', id);
+      allow(ctx, 'secrets.revoke', secretWriters(before.kind));
       const row = updateRow<SecretRow>(ctx, 'secrets', id, { status: 'revoked' });
       return audited(ctx, { action: 'secret.revoke', table: 'secrets', row, before });
     },
     markUsed: (id) => {
+      allow(ctx, 'secrets.markUsed', ['system']);
       mustGetRow<SecretRow>(ctx, 'secrets', id);
       updateRow<SecretRow>(ctx, 'secrets', id, { last_used_at: nowTs(ctx) }, { bumpVersion: false });
     },

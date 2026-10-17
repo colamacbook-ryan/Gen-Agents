@@ -1,16 +1,20 @@
 // Họ phiên (sessions: một lượt headless = một hàng) + hội thoại (chat_threads / chat_messages) trên SQLite.
-import { invalidInput } from '../errors.ts';
+import { invalidInput, permissionDenied } from '../errors.ts';
 import type { ChatRepo, SessionRepo } from '../sessions.ts';
 import type { ChatMessageRow, ChatThreadRow, SessionRow } from '../types.ts';
 import {
   actorOf,
+  allow,
   audited,
   type Ctx,
   getRow,
   insertRow,
   mustGetRow,
   nowTs,
+  OWNER_ADMIN,
   pageOf,
+  ref,
+  STAFF_SYSTEM,
   selectAll,
   selectOne,
   updateRow,
@@ -40,6 +44,14 @@ export function sessionRepo(ctx: Ctx): SessionRepo {
     running: (roleId) =>
       selectAll<SessionRow>(ctx, 'sessions', new Where(ctx).add("status = 'running'").eq('role_id', roleId)),
     start: (i) => {
+      allow(ctx, 'sessions.start', ['system']);
+      ref(ctx, 'roles', i.roleId);
+      ref(ctx, 'positions', i.positionId);
+      ref(ctx, 'tasks', i.taskId);
+      ref(ctx, 'chat_threads', i.threadId);
+      ref(ctx, 'engine_accounts', i.engineAccountId);
+      ref(ctx, 'compiled_prompts', i.compiledPromptId);
+      ref(ctx, 'containers', i.containerId);
       const p = i.polaris ?? null;
       if (p !== null) nonNeg(p.tokensRendered, 'polaris.tokensRendered');
       const row = insertRow<SessionRow>(ctx, 'sessions', {
@@ -67,6 +79,7 @@ export function sessionRepo(ctx: Ctx): SessionRepo {
       return audited(ctx, { action: 'session.start', table: 'sessions', row });
     },
     setPhase: (id, phase) =>
+      allow(ctx, 'sessions.setPhase', ['system']) &&
       updateRow<SessionRow>(
         ctx,
         'sessions',
@@ -75,6 +88,7 @@ export function sessionRepo(ctx: Ctx): SessionRepo {
         { extraWhere: { sql: "status = 'running'", params: [] } },
       ),
     finish: (id, i) => {
+      allow(ctx, 'sessions.finish', ['system']);
       const before = mustGetRow<SessionRow>(ctx, 'sessions', id);
       const u = i.usage ?? {};
       const ended = nowTs(ctx);
@@ -108,6 +122,15 @@ export function sessionRepo(ctx: Ctx): SessionRepo {
   };
 }
 
+/** Đóng tin streaming: actor system hoặc chính tác giả. Trả true để nối biểu thức. */
+function authorOrSystem(ctx: Ctx, messageId: string, what: string): true {
+  const actor = allow(ctx, what, [...STAFF_SYSTEM, 'role']);
+  if (actor.kind === 'system') return true;
+  const m = mustGetRow<ChatMessageRow>(ctx, 'chat_messages', messageId);
+  if (m.author_actor_id !== actor.id) throw permissionDenied(`${what}: chỉ tác giả hoặc actor system`);
+  return true;
+}
+
 export function chatRepo(ctx: Ctx): ChatRepo {
   return {
     thread: (id) => getRow<ChatThreadRow>(ctx, 'chat_threads', id),
@@ -131,6 +154,9 @@ export function chatRepo(ctx: Ctx): ChatRepo {
     messages: (threadId, page) =>
       pageOf<ChatMessageRow>(ctx, 'chat_messages', new Where(ctx).eq('thread_id', threadId), page),
     openThread: (i) => {
+      allow(ctx, 'chat.openThread', STAFF_SYSTEM);
+      ref(ctx, 'roles', i.roleId);
+      ref(ctx, 'telegram_bots', i.telegramBotId);
       const row = insertRow<ChatThreadRow>(ctx, 'chat_threads', {
         kind: i.kind,
         agent: i.agent,
@@ -143,6 +169,7 @@ export function chatRepo(ctx: Ctx): ChatRepo {
       return audited(ctx, { action: 'chat_thread.open', table: 'chat_threads', row });
     },
     updateThread: (id, p) => {
+      allow(ctx, 'chat.updateThread', STAFF_SYSTEM);
       const before = mustGetRow<ChatThreadRow>(ctx, 'chat_threads', id);
       const row = updateRow<ChatThreadRow>(ctx, 'chat_threads', id, {
         status: p.status,
@@ -152,7 +179,22 @@ export function chatRepo(ctx: Ctx): ChatRepo {
       return audited(ctx, { action: 'chat_thread.update', table: 'chat_threads', row, before });
     },
     append: (i) => {
+      const who = allow(ctx, 'chat.append', [...STAFF_SYSTEM, 'role']);
+      ref(ctx, 'actors', i.authorActorId);
+      ref(ctx, 'sessions', i.sessionId);
+      ref(ctx, 'chat_messages', i.replyToId);
+      if (
+        who.kind !== 'system' &&
+        i.authorActorId !== undefined &&
+        i.authorActorId !== null &&
+        i.authorActorId !== who.id
+      ) {
+        throw permissionDenied('chat.append: không ghi tin thay actor khác');
+      }
       const thread = mustGetRow<ChatThreadRow>(ctx, 'chat_threads', i.threadId);
+      if (who.kind === 'role' && (i.authorKind !== 'role' || thread.role_id !== who.role_id)) {
+        throw permissionDenied('chat.append: Role chỉ ghi tin của chính mình trong thread của mình');
+      }
       const actor = actorOf(ctx);
       const row = insertRow<ChatMessageRow>(ctx, 'chat_messages', {
         thread_id: thread.id,
@@ -182,6 +224,7 @@ export function chatRepo(ctx: Ctx): ChatRepo {
       return audited(ctx, { action: 'chat_message.append', table: 'chat_messages', row, roleId: thread.role_id });
     },
     finalize: (id, i) =>
+      authorOrSystem(ctx, id, 'chat.finalize') &&
       updateRow<ChatMessageRow>(
         ctx,
         'chat_messages',
@@ -190,6 +233,7 @@ export function chatRepo(ctx: Ctx): ChatRepo {
         { extraWhere: { sql: "status = 'streaming'", params: [] } },
       ),
     redact: (id, reason) => {
+      allow(ctx, 'chat.redact', OWNER_ADMIN);
       if (reason.trim().length === 0) throw invalidInput('ẩn tin cần lý do');
       const before = mustGetRow<ChatMessageRow>(ctx, 'chat_messages', id);
       const row = updateRow<ChatMessageRow>(

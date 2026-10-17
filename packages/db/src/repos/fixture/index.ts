@@ -54,13 +54,9 @@ export interface FixtureOptions {
   roles?: number;
 }
 
-export interface Fixture {
+/** Một tenant đã dựng (owner + actor system + Core agent + Role). */
+export interface TenantHandle {
   store: DataStore;
-  clock: ManualClock;
-  writer: AppConnection;
-  reader: AppConnection;
-  auditKeys: AuditKeyring;
-  seed: SeedReference;
   workspaceId: string;
   ownerUserId: string;
   ownerActorId: string;
@@ -70,7 +66,51 @@ export interface Fixture {
   coreAccount: EngineAccountRow | null;
   systemContainerId: string | null;
   roles: RoleRow[];
+}
+
+export interface Fixture extends TenantHandle {
+  clock: ManualClock;
+  writer: AppConnection;
+  reader: AppConnection;
+  auditKeys: AuditKeyring;
+  seed: SeedReference;
   close(): void;
+}
+
+/**
+ * Thêm một tenant nữa vào CÙNG DB của fixture (owner mới, Core agent sẵn sàng, N Role) — cho test chéo tenant (IDOR).
+ * shortCode 4 ký tự, slug / username không trùng tenant khác.
+ */
+export function addTenant(
+  fx: Fixture,
+  opts: { slug: string; shortCode: string; username: string; roles?: number; coreAgentReady?: boolean },
+): TenantHandle {
+  const owner = fx.store.createUser({
+    username: opts.username,
+    displayName: `Chủ ${opts.slug}`,
+    passwordHash: 'argon2id$fixture',
+    mustChangePassword: false,
+  });
+  const tenant = fx.store.createTenant(
+    { slug: opts.slug, name: opts.slug, shortCode: opts.shortCode, ownerUserId: owner.id },
+    fx.seed,
+  );
+  const t: TenantHandle = {
+    store: fx.store,
+    workspaceId: tenant.workspace.id,
+    ownerUserId: owner.id,
+    ownerActorId: tenant.ownerActorId,
+    systemActorId: tenant.systemActorId,
+    coreEngine: fx.coreEngine,
+    coreAccount: null,
+    systemContainerId: null,
+    roles: [],
+  };
+  if (opts.coreAgentReady !== false) makeCoreAgentReady(t);
+  for (let i = 0; i < (opts.roles ?? 0); i++) {
+    t.roles.push(fx.store.write(t.ownerActorId, (tx) => tx.roles.create({ name: `Role ${i + 1}`, color: 'jade' })));
+  }
+  return t;
 }
 
 interface Template {
@@ -223,7 +263,7 @@ function buildFixture(opts: FixtureOptions): Fixture {
 }
 
 /** Onboarding bước 2–4 (G2): Core agent sẵn sàng. Owner thao tác phần cấu hình; actor system ghi kết quả runtime. */
-export function makeCoreAgentReady(fx: Fixture): void {
+export function makeCoreAgentReady(fx: TenantHandle): void {
   const { store, coreEngine } = fx;
   const owner = fx.ownerActorId;
   const setup = store.write(
@@ -250,7 +290,7 @@ export function makeCoreAgentReady(fx: Fixture): void {
         engineSlug: engine.slug,
         label: 'Core agent',
         authMethod: 'subscription',
-        authVolume: 'ga-auth-fixture-0001',
+        authVolume: `ga-auth-${tx.workspace.get().short_code.toLowerCase()}-0001`,
         consentId: consent?.id ?? null,
       });
       tx.engines.createBinding({ consumerKind: 'system', engineAccountId: account.id, priority: 1 });

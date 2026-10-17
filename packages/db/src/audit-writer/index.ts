@@ -1,8 +1,11 @@
 // Audit — chuỗi HMAC theo workspace (DATABASE §9.6). App nối chuỗi trong giao dịch ghi (writer duy nhất ⇒ thứ tự tất định):
 //   K_audit  = HKDF-SHA256(master_key, salt = "genagents-audit", info = "audit-chain:v1:" ‖ workspace_id), 32 byte;
-//   row_hash = HMAC-SHA256(K_audit, (prev_hash ?? '') ‖ JCS(cột nghiệp vụ)), hex.
-// Cột nghiệp vụ = MỌI cột của audit_log trừ prev_hash (đã nằm ở tiền tố) và row_hash — rộng hơn tập AUDIT_COLS của bộ test
-// Python (chỉ minh hoạ) để sửa bất kỳ cột nào (before / after / role_id / channel…) cũng làm lệch hash.
+//   row_hash = HMAC-SHA256(K_audit, (prev_hash ?? '') ‖ JCS(MỌI cột trừ row_hash)), hex.
+// JCS gồm MỌI cột của audit_log trừ row_hash — kể cả prev_hash và cột NULL (khoá vẫn có mặt, giá trị null), khoá sắp
+// theo JCS (Gen 2026-10-17, DB v2.3.5: "HMAC audit phủ MỌI cột trừ row_hash"; bỏ tập AUDIT_COLS rút gọn cũ của bộ test
+// Python). Test `audit-writer` đối chiếu danh sách cột với PRAGMA table_info(audit_log): thêm cột mà không thêm vào đây ⇒ đỏ.
+// Tiền tố prev_hash giữ nguyên công thức DATABASE §9.6 (thừa nhưng vô hại). Lane DB ghi danh sách cột chính thức vào
+// CHANGELOG v2.3.5 — lệch thì sửa AUDIT_HASHED_COLUMNS / auditHashMessage cho khớp.
 // DB tự kiểm liên kết (trigger audit_log_chain: prev_hash = row_hash dòng display_seq − 1); khoá HMAC chỉ app có ⇒ người
 // sửa file DB không có .env không tính lại được chuỗi. verifyAuditChain = phần "dựng lại chuỗi bằng khoá" của job
 // integrity_check (L-OPS gọi): báo dòng ĐẦU TIÊN lệch; thiếu khoá ⇒ 'no_key' (không báo nhầm là bị sửa — BUILD-PLAN §B.9).
@@ -85,16 +88,20 @@ export const AUDIT_HASHED_COLUMNS = [
   'tokens_total',
   'cost_micro_usd',
   'hash_key_id',
+  'prev_hash',
 ] as const;
 export type AuditHashedColumn = (typeof AUDIT_HASHED_COLUMNS)[number];
 export type AuditHashInput = { [K in AuditHashedColumn]: string | number | null };
 
-export function auditRowHash(key: Buffer, prevHash: string | null, row: AuditHashInput): string {
+/** Thông điệp được ký: (prev_hash ?? '') ‖ JCS({mọi cột trừ row_hash}) — cột thiếu / undefined ⇒ null. */
+export function auditHashMessage(row: AuditHashInput): string {
   const body: Record<string, string | number | null> = {};
   for (const c of AUDIT_HASHED_COLUMNS) body[c] = row[c] ?? null;
-  return createHmac('sha256', key)
-    .update(`${prevHash ?? ''}${canonicalJson(body)}`, 'utf8')
-    .digest('hex');
+  return `${row.prev_hash ?? ''}${canonicalJson(body)}`;
+}
+
+export function auditRowHash(key: Buffer, row: AuditHashInput): string {
+  return createHmac('sha256', key).update(auditHashMessage(row), 'utf8').digest('hex');
 }
 
 /** Dòng audit cần ghi (repo dựng từ actor giao dịch + WriteOptions + mục audit). */
@@ -171,11 +178,12 @@ export function appendAuditRow(
     tokens_total: d.tokensTotal,
     cost_micro_usd: d.costMicroUsd,
     hash_key_id: keyId,
+    prev_hash: prev,
   };
   const row: AuditHashInput = stampInsert(w, base);
-  const rowHash = auditRowHash(key, prev, row);
-  const cols = [...AUDIT_HASHED_COLUMNS, 'prev_hash', 'row_hash'];
-  const values = [...AUDIT_HASHED_COLUMNS.map((c) => row[c]), prev, rowHash];
+  const rowHash = auditRowHash(key, row);
+  const cols = [...AUDIT_HASHED_COLUMNS, 'row_hash'];
+  const values = [...AUDIT_HASHED_COLUMNS.map((c) => row[c]), rowHash];
   const [out] = dml(w).write(
     `INSERT INTO audit_log (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) RETURNING *`,
     values,
@@ -251,7 +259,7 @@ export function verifyAuditChain(
       report.noKey++;
       issue(row.display_seq, 'no_key');
     } else {
-      const expect = auditRowHash(key, row.prev_hash, row as unknown as AuditHashInput);
+      const expect = auditRowHash(key, row as unknown as AuditHashInput);
       if (expect !== row.row_hash) issue(row.display_seq, 'hash_mismatch');
     }
     report.checked++;
@@ -272,7 +280,8 @@ export function verifyAuditChain(
 function sealedBoundary(rows: readonly AuditRow[]): { deletedThroughSeq: number; boundaryHash: string } | null {
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i];
-    if (row?.action !== 'audit.sealed' || row.detail_json === null) continue;
+    // chỉ tin mốc niêm phong do actor system ghi (repo chặn người khác ghi 'audit.*')
+    if (row?.action !== 'audit.sealed' || row.actor_kind !== 'system' || row.detail_json === null) continue;
     const d = JSON.parse(row.detail_json) as { deleted_through_seq?: unknown; boundary_hash?: unknown };
     if (typeof d.deleted_through_seq === 'number' && typeof d.boundary_hash === 'string') {
       return { deletedThroughSeq: d.deleted_through_seq, boundaryHash: d.boundary_hash };

@@ -27,6 +27,8 @@ const NON_TRIGGER: ReadonlySet<DbRule> = new Set([
   'sqlite.not_null',
   'sqlite.readonly',
   'connection.missing_function',
+  'permission.denied',
+  'repo.invalid_ref',
   'repo.not_found',
   'repo.version_conflict',
   'repo.invalid_input',

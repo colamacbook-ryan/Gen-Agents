@@ -1,12 +1,13 @@
 // Họ việc (tasks) + hàng đợi / outbox (jobs) trên SQLite (DATABASE §5.9, §5.18).
 import { toDbTimestamp } from '@ga/contracts';
 import { displaySeqFor } from '../../ids/index.ts';
-import { DbRuleError, invalidInput } from '../errors.ts';
+import { DbRuleError, invalidInput, permissionDenied } from '../errors.ts';
 import { dml } from '../sql.ts';
 import type { JobRow, TaskRow } from '../types.ts';
 import type { EnqueueJobInput, JobRepo, TaskRepo } from '../work.ts';
 import {
   actorOf,
+  allow,
   audited,
   type Ctx,
   getByDisplayId,
@@ -14,8 +15,12 @@ import {
   insertRow,
   mustGetRow,
   nowTs,
+  OWNER_ADMIN,
+  OWNER_ADMIN_SYSTEM,
   pageOf,
+  ref,
   requireW,
+  STAFF_SYSTEM,
   softDeleteRow,
   updateRow,
   Where,
@@ -38,12 +43,24 @@ export function taskRepo(ctx: Ctx): TaskRepo {
         f?.page,
       ),
     create: (i) => {
+      const actor = allow(ctx, 'tasks.create', STAFF_SYSTEM);
+      // người yêu cầu = actor giao dịch; chỉ actor system (scheduler / Telegram) ghi thay người khác
+      if (i.requestedBy !== undefined && i.requestedBy !== actor.id && actor.kind !== 'system') {
+        throw permissionDenied('tasks.create: requestedBy chỉ actor system được đặt');
+      }
+      const requester = ref(ctx, 'actors', i.requestedBy) ?? actor.id;
+      ref(ctx, 'roles', i.assigneeRoleId);
+      ref(ctx, 'positions', i.positionId);
+      ref(ctx, 'chat_threads', i.threadId);
+      ref(ctx, 'commitments', i.commitmentId);
+      ref(ctx, 'tasks', i.parentTaskId);
+      ref(ctx, 'chat_messages', i.sourceMessageId);
       if (i.title.trim().length === 0) throw invalidInput('việc cần tiêu đề');
       const row = insertRow<TaskRow>(ctx, 'tasks', {
         title: i.title.trim(),
         description: i.description ?? null,
         source: i.source,
-        requested_by: i.requestedBy ?? actorOf(ctx).id,
+        requested_by: requester,
         assignee_role_id: i.assigneeRoleId ?? null,
         position_id: i.positionId ?? null,
         priority: i.priority,
@@ -57,6 +74,8 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       return audited(ctx, { action: 'task.create', table: 'tasks', row, roleId: row.assignee_role_id });
     },
     update: (id, p, expectedVersion) => {
+      allow(ctx, 'tasks.update', STAFF_SYSTEM);
+      ref(ctx, 'roles', p.assigneeRoleId);
       const before = mustGetRow<TaskRow>(ctx, 'tasks', id);
       const row = updateRow<TaskRow>(
         ctx,
@@ -74,7 +93,11 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       return audited(ctx, { action: 'task.update', table: 'tasks', row, before });
     },
     transition: (id, to, o) => {
+      const actor = allow(ctx, 'tasks.transition', [...STAFF_SYSTEM, 'role']);
       const before = mustGetRow<TaskRow>(ctx, 'tasks', id);
+      if (actor.kind === 'role' && before.assignee_role_id !== actor.role_id) {
+        throw permissionDenied('tasks.transition: Role chỉ chuyển trạng thái việc được giao cho chính mình');
+      }
       if (TERMINAL.has(before.status) && before.status !== to) {
         throw new DbRuleError('repo.version_conflict', `việc ${before.display_id} đã kết thúc (${before.status})`);
       }
@@ -98,6 +121,7 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       return audited(ctx, { action: 'task.transition', table: 'tasks', row, before });
     },
     verify: (id, verdict) => {
+      allow(ctx, 'tasks.verify', OWNER_ADMIN);
       const before = mustGetRow<TaskRow>(ctx, 'tasks', id);
       const ok = verdict === 'verified';
       const row = updateRow<TaskRow>(ctx, 'tasks', id, {
@@ -108,6 +132,8 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       return audited(ctx, { action: 'task.verify', table: 'tasks', row, before });
     },
     recordFailureDisclosure: (id, i) => {
+      allow(ctx, 'tasks.recordFailureDisclosure', OWNER_ADMIN_SYSTEM);
+      ref(ctx, 'audit_log', i.auditId);
       const before = mustGetRow<TaskRow>(ctx, 'tasks', id);
       const row = updateRow<TaskRow>(ctx, 'tasks', id, {
         failure_disclosure: i.disclosure,
@@ -117,6 +143,7 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       return audited(ctx, { action: 'task.failure_disclosure', table: 'tasks', row, before });
     },
     addUsage: (id, i) => {
+      allow(ctx, 'tasks.addUsage', ['system']);
       if (
         !Number.isSafeInteger(i.tokens) ||
         i.tokens < 0 ||
@@ -135,6 +162,7 @@ export function taskRepo(ctx: Ctx): TaskRepo {
       );
     },
     softDelete: (id) => {
+      allow(ctx, 'tasks.softDelete', OWNER_ADMIN);
       const before = mustGetRow<TaskRow>(ctx, 'tasks', id);
       const row = softDeleteRow<TaskRow>(ctx, 'tasks', id);
       audited(ctx, { action: 'task.delete', table: 'tasks', row, before });
@@ -180,8 +208,9 @@ export function jobRepo(ctx: Ctx): JobRepo {
   return {
     get: (id) => getRow<JobRow>(ctx, 'jobs', id),
     list: (f) => pageOf<JobRow>(ctx, 'jobs', new Where(ctx).eq('kind', f?.kind).in('status', f?.status), f?.page),
-    enqueue: (i) => enqueueJob(ctx, i),
+    enqueue: (i) => allow(ctx, 'jobs.enqueue', OWNER_ADMIN_SYSTEM) && enqueueJob(ctx, i),
     claim: (i) => {
+      allow(ctx, 'jobs.claim', ['system']);
       const w = requireW(ctx);
       if (!Number.isSafeInteger(i.leaseMs) || i.leaseMs <= 0) throw invalidInput('leaseMs > 0');
       const limit = Math.min(Math.max(Math.trunc(i.limit ?? 1), 1), 100);
@@ -197,6 +226,7 @@ export function jobRepo(ctx: Ctx): JobRepo {
       ).rows as JobRow[];
     },
     heartbeat: (id, owner, leaseMs) => {
+      allow(ctx, 'jobs.heartbeat', ['system']);
       held(id, owner);
       return updateRow<JobRow>(
         ctx,
@@ -207,6 +237,7 @@ export function jobRepo(ctx: Ctx): JobRepo {
       );
     },
     succeed: (id, owner, result) => {
+      allow(ctx, 'jobs.succeed', ['system']);
       held(id, owner);
       return updateRow<JobRow>(
         ctx,
@@ -223,6 +254,7 @@ export function jobRepo(ctx: Ctx): JobRepo {
       );
     },
     fail: (id, owner, i) => {
+      allow(ctx, 'jobs.fail', ['system']);
       const job = held(id, owner);
       const dead = job.attempts >= job.max_attempts;
       return updateRow<JobRow>(
@@ -241,6 +273,7 @@ export function jobRepo(ctx: Ctx): JobRepo {
       );
     },
     cancel: (id) => {
+      allow(ctx, 'jobs.cancel', OWNER_ADMIN_SYSTEM);
       const job = mustGetRow<JobRow>(ctx, 'jobs', id);
       if (job.status === 'succeeded' || job.status === 'dead' || job.status === 'cancelled') {
         throw new DbRuleError('repo.version_conflict', `job ${job.display_id} đã kết thúc (${job.status})`);
@@ -254,6 +287,7 @@ export function jobRepo(ctx: Ctx): JobRepo {
       return audited(ctx, { action: 'job.cancel', table: 'jobs', row, before: job });
     },
     reapExpiredLeases: () => {
+      allow(ctx, 'jobs.reapExpiredLeases', ['system']);
       const w = requireW(ctx);
       const now = nowTs(ctx);
       return dml(w).write(

@@ -2,7 +2,7 @@
 // capability registry, container, consent, tác tử hệ thống, Core agent (view). Cổng người ghi do DB ép (system-only, owner /
 // admin, consent, Core agent) — repo chỉ dựng câu lệnh đúng và để DB là chốt cuối.
 import type { CapabilityInput, EngineRepo } from '../engines.ts';
-import { invalidInput, notFound } from '../errors.ts';
+import { invalidInput, notFound, permissionDenied } from '../errors.ts';
 import type {
   CapabilityRow,
   ConsentRow,
@@ -18,12 +18,17 @@ import type {
   SystemAgentRow,
 } from '../types.ts';
 import {
+  allow,
   audited,
   type Ctx,
   getRow,
   insertRow,
   mustGetRow,
   nowTs,
+  OWNER_ADMIN,
+  OWNER_ADMIN_SYSTEM,
+  ref,
+  refEngine,
   selectAll,
   selectOne,
   softDeleteRow,
@@ -92,6 +97,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
     systemAgents: () => selectAll<SystemAgentRow>(ctx, 'system_agents', live()),
 
     setInstallState: (slug, i) => {
+      allow(ctx, 'engines.setInstallState', ['system']);
       const before = selectOne<EngineInstallRow>(ctx, 'engine_installs', live().eq('engine_slug', slug), 'id');
       const values = {
         install_state: i.installState,
@@ -108,6 +114,10 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_install.state', table: 'engine_installs', row, before });
     },
     createAccount: (i) => {
+      allow(ctx, 'engines.createAccount', OWNER_ADMIN_SYSTEM);
+      refEngine(ctx, i.engineSlug);
+      ref(ctx, 'secrets', i.secretId);
+      ref(ctx, 'consents', i.consentId);
       const row = insertRow<EngineAccountRow>(ctx, 'engine_accounts', {
         engine_slug: i.engineSlug,
         label: i.label,
@@ -120,6 +130,8 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_account.create', table: 'engine_accounts', row });
     },
     updateAccount: (id, p, expectedVersion) => {
+      allow(ctx, 'engines.updateAccount', OWNER_ADMIN_SYSTEM);
+      ref(ctx, 'consents', p.consentId);
       const before = mustGetRow<EngineAccountRow>(ctx, 'engine_accounts', id);
       const row = updateRow<EngineAccountRow>(
         ctx,
@@ -131,6 +143,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_account.update', table: 'engine_accounts', row, before });
     },
     beginLogin: (id) => {
+      allow(ctx, 'engines.beginLogin', OWNER_ADMIN);
       const before = mustGetRow<EngineAccountRow>(ctx, 'engine_accounts', id);
       // login_started_at do trigger engine_accounts_login_started_* đặt theo app_now()
       const row = updateRow<EngineAccountRow>(
@@ -143,6 +156,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_account.login_start', table: 'engine_accounts', row, before });
     },
     recordLoginResult: (id, i) => {
+      allow(ctx, 'engines.recordLoginResult', ['system']);
       const before = mustGetRow<EngineAccountRow>(ctx, 'engine_accounts', id);
       const row = updateRow<EngineAccountRow>(
         ctx,
@@ -159,6 +173,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_account.login_result', table: 'engine_accounts', row, before });
     },
     recordQuota: (id, i) => {
+      allow(ctx, 'engines.recordQuota', ['system']);
       if (i.remainingPct !== undefined && i.remainingPct !== null && !(i.remainingPct >= 0 && i.remainingPct <= 100)) {
         throw invalidInput('remainingPct 0–100');
       }
@@ -177,6 +192,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       );
     },
     recordOutage: (id, since) => {
+      allow(ctx, 'engines.recordOutage', ['system']);
       const before = mustGetRow<EngineAccountRow>(ctx, 'engine_accounts', id);
       const row = updateRow<EngineAccountRow>(
         ctx,
@@ -188,6 +204,9 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_account.outage', table: 'engine_accounts', row, before });
     },
     createBinding: (i) => {
+      allow(ctx, 'engines.createBinding', OWNER_ADMIN_SYSTEM);
+      ref(ctx, 'roles', i.roleId);
+      ref(ctx, 'engine_accounts', i.engineAccountId);
       if (!Number.isSafeInteger(i.priority) || i.priority < 1) throw invalidInput('priority ≥ 1');
       const row = insertRow<EngineBindingRow>(ctx, 'engine_bindings', {
         consumer_kind: i.consumerKind,
@@ -200,6 +219,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_binding.create', table: 'engine_bindings', row });
     },
     updateBinding: (id, p, expectedVersion) => {
+      allow(ctx, 'engines.updateBinding', OWNER_ADMIN_SYSTEM);
       const before = mustGetRow<EngineBindingRow>(ctx, 'engine_bindings', id);
       const row = updateRow<EngineBindingRow>(
         ctx,
@@ -211,6 +231,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'engine_binding.update', table: 'engine_bindings', row, before });
     },
     recordSelection: (id, state) => {
+      allow(ctx, 'engines.recordSelection', ['system']);
       mustGetRow<EngineBindingRow>(ctx, 'engine_bindings', id);
       return updateRow<EngineBindingRow>(
         ctx,
@@ -221,11 +242,14 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       );
     },
     removeBinding: (id) => {
+      allow(ctx, 'engines.removeBinding', OWNER_ADMIN_SYSTEM);
       const before = mustGetRow<EngineBindingRow>(ctx, 'engine_bindings', id);
       const row = softDeleteRow<EngineBindingRow>(ctx, 'engine_bindings', id);
       audited(ctx, { action: 'engine_binding.remove', table: 'engine_bindings', row, before });
     },
     startProbe: (i) => {
+      allow(ctx, 'engines.startProbe', ['system']);
+      ref(ctx, 'containers', i.containerId);
       const acc = mustGetRow<EngineAccountRow>(ctx, 'engine_accounts', i.engineAccountId);
       return insertRow<ProbeRunRow>(ctx, 'probe_runs', {
         engine_account_id: acc.id,
@@ -238,6 +262,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       });
     },
     finishProbe: (id, i) => {
+      allow(ctx, 'engines.finishProbe', ['system']);
       const cur = mustGetRow<ProbeRunRow>(ctx, 'probe_runs', id);
       const finished = nowTs(ctx);
       const row = updateRow<ProbeRunRow>(
@@ -261,6 +286,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       });
     },
     upsertCapabilities: (i) => {
+      allow(ctx, 'engines.upsertCapabilities', ['system']);
       const run = mustGetRow<ProbeRunRow>(ctx, 'probe_runs', i.probeRunId);
       if (run.engine_account_id !== i.engineAccountId) throw invalidInput('probe run không thuộc tài khoản này');
       const now = nowTs(ctx);
@@ -308,6 +334,8 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return { inserted, updated, missing };
     },
     ensureContainer: (i) => {
+      allow(ctx, 'engines.ensureContainer', OWNER_ADMIN_SYSTEM);
+      ref(ctx, 'roles', i.roleId);
       const cur = selectOne<ContainerRow>(
         ctx,
         'containers',
@@ -329,6 +357,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'container.create', table: 'containers', row });
     },
     updateContainer: (id, p) => {
+      allow(ctx, 'engines.updateContainer', OWNER_ADMIN_SYSTEM);
       const before = mustGetRow<ContainerRow>(ctx, 'containers', id);
       const row = updateRow<ContainerRow>(
         ctx,
@@ -353,6 +382,10 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return row;
     },
     grantConsent: (i) => {
+      const actor = allow(ctx, 'engines.grantConsent', OWNER_ADMIN);
+      // đồng ý điều khoản là của CHÍNH người bấm — không ghi thay người khác
+      if (i.userId !== actor.user_id)
+        throw permissionDenied('engines.grantConsent: userId phải là người đang thao tác');
       const row = insertRow<ConsentRow>(ctx, 'consents', {
         user_id: i.userId,
         consent_kind: i.consentKind,
@@ -365,6 +398,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'consent.grant', table: 'consents', row });
     },
     revokeConsent: (id) => {
+      allow(ctx, 'engines.revokeConsent', OWNER_ADMIN);
       const before = mustGetRow<ConsentRow>(ctx, 'consents', id);
       const row = updateRow<ConsentRow>(
         ctx,
@@ -376,6 +410,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'consent.revoke', table: 'consents', row, before });
     },
     updateSystemAgent: (key, p) => {
+      allow(ctx, 'engines.updateSystemAgent', OWNER_ADMIN);
       const before = systemAgent(key);
       const row = updateRow<SystemAgentRow>(ctx, 'system_agents', before.id, {
         model_key: p.modelKey,
@@ -385,6 +420,7 @@ export function engineRepo(ctx: Ctx): EngineRepo {
       return audited(ctx, { action: 'system_agent.update', table: 'system_agents', row, before });
     },
     recordSystemAgentSelection: (key, state) => {
+      allow(ctx, 'engines.recordSystemAgentSelection', ['system']);
       const before = systemAgent(key);
       return updateRow<SystemAgentRow>(
         ctx,

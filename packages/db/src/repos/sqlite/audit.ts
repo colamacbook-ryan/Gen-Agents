@@ -1,8 +1,9 @@
 // Họ audit trên SQLite: đọc (lưới A8) + append (chuỗi HMAC qua audit-writer). Append-only do DB ép.
 import { displaySeqFor } from '../../ids/index.ts';
 import type { AuditRepo } from '../audit.ts';
+import { permissionDenied } from '../errors.ts';
 import type { AuditRow } from '../types.ts';
-import { audit, type Ctx, getByDisplayId, getRow, pageOf, Where } from './ctx.ts';
+import { allow, audit, type Ctx, getByDisplayId, getRow, pageOf, ref, STAFF_SYSTEM, Where } from './ctx.ts';
 
 export function auditRepo(ctx: Ctx): AuditRepo {
   return {
@@ -26,6 +27,16 @@ export function auditRepo(ctx: Ctx): AuditRepo {
       );
       return h === undefined ? null : { displaySeq: h.display_seq, rowHash: h.row_hash, createdAt: h.created_at };
     },
-    append: (e) => audit(ctx, e),
+    append: (e) => {
+      const actor = allow(ctx, 'audit.append', [...STAFF_SYSTEM, 'role']);
+      // hành động 'audit.*' (niêm phong retention, xoay khoá, neo) do hệ thống ghi — bộ kiểm chuỗi tin các dòng này
+      if (e.action.startsWith('audit.') && actor.kind !== 'system') {
+        throw permissionDenied(`audit.append: ${e.action} chỉ actor system`);
+      }
+      ref(ctx, 'roles', e.roleId);
+      ref(ctx, 'sessions', e.sessionId);
+      ref(ctx, 'tasks', e.taskId);
+      return audit(ctx, e);
+    },
   };
 }

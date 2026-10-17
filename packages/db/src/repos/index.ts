@@ -8,6 +8,7 @@ export type * from './sessions.ts';
 export { type Dml, dml, type WriteResult } from './sql.ts';
 export type * from './store.ts';
 export type * from './telegram.ts';
+export type * from './tools.ts';
 export * from './types.ts';
 export type * from './wallet.ts';
 export type * from './work.ts';

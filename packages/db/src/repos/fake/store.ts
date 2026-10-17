@@ -35,6 +35,7 @@ import type { ChangeItemInput, ChangeSetRepo, DnaReads, InstructionReads, Revisi
 import type { ChatRepo, SessionRepo } from '../sessions.ts';
 import type { CreatedTenant, CreateTenantInput, CreateUserInput, DataStore, ReadTx, WriteTx } from '../store.ts';
 import type { TelegramRepo } from '../telegram.ts';
+import type { ToolRepo } from '../tools.ts';
 import {
   type ActorRow,
   PAGE_DEFAULT,
@@ -1634,6 +1635,75 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
     };
 
     // ---------------------------------------------------------------- Telegram
+    const tools: ToolRepo = {
+      list: (f) => cast(live('tools', (r) => !f?.status || r.status === f.status)),
+      get: (id) => cast(getOrNull('tools', id)),
+      bySlug: (slug) => cast(live('tools', (r) => r.slug === slug)[0] ?? null),
+      grants: (f) =>
+        cast(
+          live(
+            'tool_grants',
+            (r) =>
+              (!f?.roleId || r.role_id === f.roleId) &&
+              (!f?.positionId || r.position_id === f.positionId) &&
+              (!f?.toolId || r.tool_id === f.toolId),
+          ),
+        ),
+      effectiveMode: (roleId, toolId) => {
+        const tool = getOrNull('tools', toolId);
+        if (!tool || tool.status !== 'active' || tool.allowed_agents === 'system') return 'deny';
+        const g = live('tool_grants', (r) => r.tool_id === toolId && r.role_id === roleId).at(-1);
+        return (g?.mode ?? tool.default_mode) as 'allow' | 'ask' | 'deny';
+      },
+      egressRules: (f) =>
+        cast(
+          live(
+            'egress_rules',
+            (r) => (!f?.appliesTo || r.applies_to === f.appliesTo) && (!f?.roleId || r.role_id === f.roleId),
+          ),
+        ),
+      setToolStatus: (id, status) => cast(updateE('tools', id, { status })),
+      grant: (i) =>
+        cast(
+          insertE('tool_grants', {
+            tool_id: i.toolId,
+            role_id: i.roleId ?? null,
+            position_id: i.positionId ?? null,
+            mode: i.mode,
+            expires_at: i.expiresAt ?? null,
+            note: i.note ?? null,
+          }),
+        ),
+      revokeGrant: (id) => {
+        softDelete('tool_grants', id);
+      },
+      addEgressRule: (i) =>
+        cast(
+          insertE('egress_rules', {
+            domain_pattern: i.domainPattern,
+            port: i.port ?? null,
+            applies_to: i.appliesTo,
+            role_id: i.roleId ?? null,
+            position_id: i.positionId ?? null,
+            tool_id: i.toolId ?? null,
+            action: i.action,
+            note: i.note ?? null,
+          }),
+        ),
+      updateEgressRule: (id, p) =>
+        cast(
+          updateE('egress_rules', id, {
+            domain_pattern: p.domainPattern,
+            port: p.port,
+            action: p.action,
+            note: p.note,
+          }),
+        ),
+      removeEgressRule: (id) => {
+        softDelete('egress_rules', id);
+      },
+    };
+
     const telegram: TelegramRepo = {
       bot: (id) => cast(getOrNull('telegram_bots', id)),
       botForRole: (roleId) => cast(live('telegram_bots', (r) => r.role_id === roleId)[0] ?? null),
@@ -1918,6 +1988,7 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
       jobs,
       wallet,
       telegram,
+      tools,
       audit,
       avatar,
     };
