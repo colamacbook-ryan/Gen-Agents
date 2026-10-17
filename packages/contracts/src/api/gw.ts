@@ -33,6 +33,7 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok, okNoStore } from './define.ts';
+import { Redacted } from './masking.ts';
 import {
   AccountRow,
   Budget,

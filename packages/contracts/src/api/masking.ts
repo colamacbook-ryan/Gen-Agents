@@ -49,6 +49,21 @@ export const V_MASKED_FIELDS = {
     flags: ['.redacted'],
     note: 'Như WRK-34; `chain` / `recalls` chỉ mang ID nên giữ nguyên.',
   },
+  'OPS-02': {
+    fields: ['.settings[].value', '.settings[].default|0.value'],
+    flags: ['.settings[].redacted'],
+    note: 'Viewer chỉ thấy khoá, writers, writable, overridden, locked: `value = null` ở MỌI khoá và `default.value = null` (writers không phải "mọi người", giá trị có thể là neo ngoài máy / khoá nhạy cảm).',
+  },
+  'GW-05': {
+    fields: ['[].accountHint'],
+    flags: ['[].redacted'],
+    note: '`accountHint` là danh tính tài khoản (PII): viewer nhận `null`; nhãn, trạng thái đăng nhập, quota vẫn hiện.',
+  },
+  'GW-06': {
+    fields: ['.accountHint', '.consents'],
+    flags: ['.redacted'],
+    note: 'Như GW-05; danh sách đồng ý (`CN`, mức đọc A vì mang `accountHint`) bị che CẢ DANH SÁCH: viewer nhận `consents = []`; `needsConsent` vẫn hiện.',
+  },
   'OPS-21': {
     fields: ['.before', '.after'],
     flags: ['.redacted'],

@@ -157,6 +157,14 @@ export function IdOf(prefix: EntityPrefix) {
   return schema;
 }
 
+/** Prefix mà schema `IdOf(XX)` / `DisplayId(XX)` mang (cho test quét quyền đọc); `undefined` nếu không phải. */
+export function idPrefixOf(schema: z.ZodType): EntityPrefix | undefined {
+  for (const [prefix, s] of idOfCache) if (s === schema) return prefix;
+  for (const [prefix, s] of displayIdCache) if (s === schema) return prefix;
+  for (const [prefix, s] of idOfCache) if (s.shape.displayId === schema) return prefix;
+  return undefined;
+}
+
 /** `Id` với prefix bất kỳ đã đăng ký (đích chung của thông báo, audit, `target: Id?`). */
 export const AnyId = z.strictObject({
   id: Ulid,
