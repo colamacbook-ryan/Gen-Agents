@@ -5,4 +5,8 @@ interface ImportMetaEnv {
   readonly VITE_GA_VERSION?: string;
   /** bật trang bộ component (/__ui-kit) ở bản build (mặc định chỉ bật ở dev) */
   readonly VITE_GA_UIKIT?: string;
+  /** bật kiểm request / response theo schema hợp đồng ở bản build (mặc định chỉ bật ở dev / test) */
+  readonly VITE_GA_VALIDATE?: string;
+  /** bật backend giả (src/api/fake) ở bản build — chỉ dùng để demo, KHÔNG bao giờ ở bản phát hành */
+  readonly VITE_GA_FAKE?: string;
 }

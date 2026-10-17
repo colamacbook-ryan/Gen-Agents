@@ -1,5 +1,6 @@
-import { API_ERROR_CODES, type ApiErrorCode, i18nKeyFor } from '@ga/contracts';
+import { API_ERROR_CODES, type ApiErrorCode, CSRF_HEADER, i18nKeyFor } from '@ga/contracts';
 import { z } from 'zod';
+import type { CsrfStore } from '../api/csrf.ts';
 import {
   type AuthClient,
   AuthError,
@@ -15,12 +16,6 @@ export const AUTH_PATHS = {
   password: '/api/auth/password',
   logout: '/api/auth/logout',
 } as const;
-
-/**
- * Tên header CSRF gắn phiên. Khớp `CSRF_HEADER` của @ga/security (L-SEC, packages/security/src/session.ts) — web không được import
- * @ga/security (BUILD-PLAN §D.2), nên chép giá trị tại đây; đề xuất cho lane INT: đưa hằng này vào @ga/contracts.
- */
-export const CSRF_HEADER = 'x-ga-csrf';
 
 const loginBody = z.object({ mustChangePassword: z.boolean(), csrfToken: z.string().min(1) });
 const sessionBody = z.object({
@@ -42,17 +37,26 @@ export interface HttpAuthClientOptions {
   fetchImpl?: typeof fetch;
   /** tiền tố URL (mặc định: cùng origin) */
   baseUrl?: string;
+  /** nơi giữ token CSRF để client API dùng chung; mặc định chỉ giữ riêng trong máy khách này */
+  csrf?: CsrfStore;
 }
 
 /** Máy khách đăng nhập HTTP thật. CSRF token giữ trong bộ nhớ (không localStorage); cookie phiên do trình duyệt giữ (HttpOnly). */
 export function createHttpAuthClient(opts: HttpAuthClientOptions = {}): AuthClient {
   const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init));
   const base = opts.baseUrl ?? '';
-  let csrf: string | null = null;
+  let own: string | null = null;
+  const csrfStore: CsrfStore = opts.csrf ?? {
+    get: () => own,
+    set: (t) => {
+      own = t;
+    },
+  };
 
   async function send(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Response> {
     const headers: Record<string, string> = { accept: 'application/json' };
     if (body !== undefined) headers['content-type'] = 'application/json';
+    const csrf = csrfStore.get();
     if (method === 'POST' && csrf) headers[CSRF_HEADER] = csrf;
     try {
       return await doFetch(`${base}${path}`, {
@@ -120,19 +124,19 @@ export function createHttpAuthClient(opts: HttpAuthClientOptions = {}): AuthClie
       const res = await send('POST', AUTH_PATHS.login, { username: input.username, password: input.password });
       if (!res.ok) throw await toError(res);
       const body = await ok(res, loginBody);
-      csrf = body.csrfToken;
+      csrfStore.set(body.csrfToken);
       return { mustChangePassword: body.mustChangePassword };
     },
 
     async session(): Promise<SessionInfo | null> {
       const res = await send('GET', AUTH_PATHS.session);
       if (res.status === 401) {
-        csrf = null;
+        csrfStore.set(null);
         return null;
       }
       if (!res.ok) throw await toError(res);
       const body = await ok(res, sessionBody);
-      csrf = body.csrfToken;
+      csrfStore.set(body.csrfToken);
       return body;
     },
 
@@ -142,14 +146,14 @@ export function createHttpAuthClient(opts: HttpAuthClientOptions = {}): AuthClie
         newPassword: input.newPassword,
       });
       if (!res.ok) throw await toError(res);
-      csrf = (await ok(res, passwordBody)).csrfToken;
+      csrfStore.set((await ok(res, passwordBody)).csrfToken);
     },
 
     async logout(): Promise<void> {
       const res = await send('POST', AUTH_PATHS.logout);
       // 401 = phiên đã hết sẵn: mục tiêu (đăng xuất) đã đạt
       if (res.status !== 204 && res.status !== 401 && !res.ok) throw await toError(res);
-      csrf = null;
+      csrfStore.set(null);
     },
   };
 }

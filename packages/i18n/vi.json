@@ -338,10 +338,12 @@
         "too_repetitive": "Mật khẩu mới quá lặp. Dùng nhiều ký tự khác nhau hơn.",
         "contains_username": "Mật khẩu mới không được chứa tên đăng nhập.",
         "same_as_current": "Mật khẩu mới phải khác mật khẩu hiện tại."
-      }
+      },
+      "forbidden": "Việc này cần quyền cao hơn. Hỏi Owner nếu bạn cần làm."
     },
     "recovery": {
-      "blocked": "Hệ thống đang ở chế độ khắc phục. Xử lý Core agent trước khi tiếp tục."
+      "blocked": "Hệ thống đang ở chế độ khắc phục. Xử lý Core agent trước khi tiếp tục.",
+      "not_incident": "Chỉ đổi loại Core agent khi đang có sự cố."
     },
     "validation": {
       "failed": "Dữ liệu chưa hợp lệ. Kiểm tra lại các ô đã nhập."
@@ -366,6 +368,78 @@
       "readonly": "Hệ thống đang ở chế độ chỉ đọc.",
       "connection_contract": "Kết nối dữ liệu chưa đạt yêu cầu. Xem log.",
       "rule_violation": "Thao tác này vi phạm một luật của hệ thống."
+    },
+    "gate": {
+      "core_agent_not_ready": "Core agent chưa sẵn sàng nên chưa làm được việc này. Xử lý Core agent trước.",
+      "onboarding_incomplete": "Còn mục thiết lập chưa xong. Hoàn tất các mục báo lỗi rồi thử lại.",
+      "sign_blocked": "Chưa ký được: cổng Ký đang chặn.",
+      "card_blocked": "Chưa cấp được thẻ: cổng Cấp thẻ đang chặn."
+    },
+    "consent": {
+      "required": "Cần đồng ý điều khoản trước khi tiếp tục.",
+      "notice_mismatch": "Văn bản điều khoản đã đổi. Đọc lại bản mới rồi đồng ý lại."
+    },
+    "engine": {
+      "not_installed": "Công cụ dòng lệnh của engine chưa sẵn sàng.",
+      "login_busy": "Đang có một phiên đăng nhập mở cho tài khoản này. Đóng phiên đó trước."
+    },
+    "capability": {
+      "unavailable": "Model hoặc mức effort này không có cho tài khoản đã chọn."
+    },
+    "turn": {
+      "rejected": "Lượt chạy bị từ chối."
+    },
+    "telegram": {
+      "token_invalid": "Token bot không dùng được. Kiểm tra lại token.",
+      "capture_expired": "Cửa sổ bắt ID Telegram đã hết hạn. Bắt đầu lại.",
+      "code_invalid": "Mã 6 chữ số chưa đúng.",
+      "code_expired": "Mã 6 chữ số đã hết hạn. Gửi mã mới."
+    },
+    "upload": {
+      "too_large": "Tệp quá lớn.",
+      "type_rejected": "Loại tệp này không được nhận.",
+      "not_clean": "Tệp chưa được kiểm tra an toàn xong."
+    },
+    "query": {
+      "invalid": "Ô truy vấn chưa hợp lệ. Sửa phần được đánh dấu rồi thử lại."
+    },
+    "confirm": {
+      "mismatch": "Tên nhập chưa khớp. Gõ đúng nguyên văn tên để xác nhận."
+    },
+    "idempotency": {
+      "conflict": "Yêu cầu này đã gửi trước đó với nội dung khác. Tải lại trang rồi thử lại."
+    },
+    "reflection": {
+      "limit": "Đã hết số lần tự xét lỗi cho phép."
+    },
+    "detail": {
+      "query": {
+        "invalid": {
+          "syntax": "Cú pháp ô truy vấn chưa đúng.",
+          "unknown_field": "Tên cột không có trong bảng này.",
+          "op_not_allowed": "Toán tử này không dùng được với cột đó.",
+          "bad_value": "Giá trị không hợp lệ với cột đó.",
+          "too_complex": "Truy vấn quá phức tạp. Rút gọn bớt điều kiện.",
+          "timeout": "Truy vấn chạy quá lâu. Thu hẹp điều kiện."
+        }
+      },
+      "gate": {
+        "sign_blocked": {
+          "unconfirmed_inferred": "Còn mục suy đoán chưa được xác nhận.",
+          "budget_exceeded": "Vượt ngân sách token cho phép."
+        }
+      },
+      "engine": {
+        "not_installed": {
+          "not_installed": "CLI chưa được cài.",
+          "installing": "CLI đang được cài.",
+          "failed": "Cài CLI thất bại."
+        }
+      }
+    },
+    "hint": {
+      "retry_after_s": "Thử lại sau {retryAfterS} giây.",
+      "attempts_left": "Còn {attemptsLeft} lần thử."
     }
   },
   "locale": {

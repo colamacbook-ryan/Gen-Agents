@@ -1,6 +1,7 @@
+import { CSRF_HEADER } from '@ga/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { classifyAuthError } from '../src/auth/classify.ts';
-import { AUTH_PATHS, CSRF_HEADER, createHttpAuthClient } from '../src/auth/http-client.ts';
+import { AUTH_PATHS, createHttpAuthClient } from '../src/auth/http-client.ts';
 import { type AuthError, isAuthError } from '../src/auth/types.ts';
 import { authError } from './support/fake-auth-client.ts';
 import { createFakeAuthServer } from './support/fake-auth-server.ts';
