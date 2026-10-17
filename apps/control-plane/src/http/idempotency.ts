@@ -1,20 +1,21 @@
 // Idempotency-Key (BACKEND-TRIAL §3.0; HANDLER-OBLIGATIONS §9) cho route `idempotent` (SYS-19, SYS-74, WRK-23…26).
-//   - Không gian khoá = (workspaceId, actorId) + routeId + key: actor khác / route khác dùng cùng chuỗi khoá không đụng nhau.
-//   - Dấu vân tay = route + path params + query + actor + sha256(body chuẩn hoá). Cùng khoá + cùng dấu ⇒ trả lại ĐÚNG kết quả
-//     cũ (status + body); cùng khoá + khác dấu ⇒ 409 `idempotency.conflict` — KHÔNG BAO GIỜ phát lại kết quả cũ.
-//   - Đang chạy với cùng khoá ⇒ 409 `idempotency.conflict` (reason in_flight) — không chạy song song hai lần.
-//   - Chỉ lưu kết quả 2xx; lỗi ⇒ xoá dấu đang chạy (client thử lại được).
-//   - Khoá chứa `:` ⇒ 400: tiền tố dành riêng của DB (vd `activate:<role>` ở ledger_entries) — L-API đang đổi `IdempotencyKey`
-//     của contracts để từ chối `:`; chặn ở đây trước (fail-closed).
-//   - KHÔNG BAO GIỜ EVICT mục còn hiệu lực (review bảo mật MEDIUM 2026-10-17: evict ⇒ kẻ tấn công đẩy khoá của nạn nhân ra
-//     rồi phát lại ⇒ hành động chạy lần 2; evict `pending` ⇒ hai request song song cùng chạy):
-//       · chỉ xoá mục `done` ĐÃ HẾT HẠN (TTL); mục `pending` chỉ rời khi complete / abort;
-//       · trần theo namespace (workspace, actor): đầy và không còn mục hết hạn ⇒ 429 (actor tự chịu, không đụng actor khác);
-//       · trần toàn cục (bảo vệ bộ nhớ): đầy ⇒ từ chối khoá MỚI (429 — hợp đồng chưa có mã 503), không evict.
-// [MVP — CẦN GEN DUYỆT] Bảng DB chung cho idempotency CHƯA có (chỉ `ledger_entries` / `proactive_sends` có cột
-// `idempotency_key` UNIQUE) ⇒ bản trong bộ nhớ: MẤT KHI KHỞI ĐỘNG LẠI (phát lại sau restart sẽ chạy lại). Route ledger
-// (WRK-23…26) PHẢI ghi khoá xuống `ledger_entries.idempotency_key` — UNIQUE của DB là chốt cuối. SYS-19, SYS-74: DB chưa
-// có cột ⇒ chờ Gen quyết bảng `idempotency_keys` (DB v2.3.6).
+//   - Khoá = (workspaceId, actorId, routeId, key). Dấu vân tay = route + path params + query + actor + sha256(body chuẩn hoá).
+//     Cùng khoá + cùng dấu ⇒ trả lại ĐÚNG kết quả cũ; cùng khoá + khác dấu ⇒ 409 `idempotency.conflict` — KHÔNG BAO GIỜ phát
+//     lại kết quả cũ. Đang chạy với cùng khoá ⇒ 409 (reason in_flight). Chỉ lưu kết quả 2xx; lỗi ⇒ nhả khoá.
+//   - Khoá chứa `:` ⇒ 400 (tiền tố dành riêng của DB, vd `activate:<role>`; L-API đang cho `IdempotencyKey` từ chối `:`).
+//
+// Gen quyết 2026-10-17 (sau 2 review bảo mật MEDIUM): dài hạn = bảng DB `idempotency_keys` (DB v2.3.6: UNIQUE (workspace_id,
+// actor_id, route_id, key) + fingerprint + status + expires_at + kết quả có trần, job TTL dọn, sống qua khởi động lại) — thay
+// bằng một bản `IdempotencyStore` khác trong deps của createApp. Tới lúc đó, bản TRONG BỘ NHỚ dưới đây:
+//   - KHÔNG BAO GIỜ evict mục còn hiệu lực (evict ⇒ đẩy khoá nạn nhân ra rồi phát lại = chạy lần 2);
+//   - trần theo (workspace) và (workspace, actor); đầy ⇒ 429 CHỈ cho workspace / actor đó — KHÔNG có trần toàn cục từ chối
+//     (một tenant flood không chặn tenant khác); bộ nhớ bị chặn bởi Σ trần workspace × số workspace thật;
+//   - TTL đồng nhất ⇒ hai hàng đợi FIFO theo hạn (done: `doneTtlMs` mặc định 10 phút; pending: `pendingTimeoutMs` mặc định
+//     120 s) ⇒ dọn từ đầu hàng tới mục chưa hạn: O(1) khấu hao, không quét toàn bộ;
+//   - `pending` không bao giờ bị evict, nhưng có hạn cứng: handler treo quá `pendingTimeoutMs` ⇒ coi như thất bại, nhả khoá
+//     (handler treo đó complete muộn ⇒ bỏ qua nhờ `ticket`).
+//   - MẤT KHI KHỞI ĐỘNG LẠI ⇒ route ledger (WRK-23…26) PHẢI ghi khoá xuống `ledger_entries.idempotency_key` (UNIQUE là
+//     chốt cuối). SYS-19, SYS-74: DB chưa có cột ⇒ chờ `idempotency_keys`.
 import { createHash } from 'node:crypto';
 import type { Clock } from '@ga/contracts';
 
@@ -23,130 +24,177 @@ export interface StoredResult {
   body: unknown;
 }
 
-/** Khoá đã chia không gian: `namespace` = (workspace, actor); `scope` = namespace + route + khoá client. */
 export interface IdempotencyKeyRef {
-  readonly namespace: string;
+  readonly workspaceId: string;
+  readonly actorId: string;
+  /** Khoá đầy đủ: workspace + actor + route + khoá client. */
   readonly scope: string;
 }
 
 export type BeginResult =
-  | { kind: 'new' }
+  | { kind: 'new'; ticket: number }
   | { kind: 'replay'; result: StoredResult }
   | { kind: 'conflict'; reason: 'fingerprint' | 'in_flight' }
-  | { kind: 'full'; reason: 'namespace' | 'global' };
+  | { kind: 'full'; reason: 'actor' | 'workspace' };
 
+/** Giao diện kho — bản DB (`idempotency_keys`, v2.3.6) thay bản bộ nhớ chỉ bằng deps của createApp. */
 export interface IdempotencyStore {
   begin(key: IdempotencyKeyRef, fingerprint: string): BeginResult;
-  complete(key: IdempotencyKeyRef, fingerprint: string, result: StoredResult): void;
-  abort(key: IdempotencyKeyRef, fingerprint: string): void;
+  complete(key: IdempotencyKeyRef, ticket: number, result: StoredResult): void;
+  abort(key: IdempotencyKeyRef, ticket: number): void;
 }
 
-type Entry =
-  | { state: 'pending'; fingerprint: string; atMs: number }
-  | { state: 'done'; fingerprint: string; atMs: number; result: StoredResult };
+interface Entry {
+  ticket: number;
+  fingerprint: string;
+  workspaceId: string;
+  actorId: string;
+  state: 'pending' | 'done';
+  /** Hạn: pending ⇒ hết thời gian chờ handler; done ⇒ hết thời gian giữ kết quả. */
+  expiresAt: number;
+  result: StoredResult | null;
+}
+
+interface QueueItem {
+  scope: string;
+  ticket: number;
+  state: 'pending' | 'done';
+  expiresAt: number;
+}
+
+/** Hàng đợi FIFO có con trỏ đầu (shift O(1) khấu hao). */
+class Fifo {
+  private items: QueueItem[] = [];
+  private head = 0;
+  push(x: QueueItem): void {
+    this.items.push(x);
+  }
+  peek(): QueueItem | undefined {
+    return this.items[this.head];
+  }
+  shift(): void {
+    this.head++;
+    if (this.head > 1024 && this.head * 2 > this.items.length) {
+      this.items = this.items.slice(this.head);
+      this.head = 0;
+    }
+  }
+}
 
 export interface InMemoryIdempotencyOptions {
   clock: Clock;
-  /** Thời gian giữ kết quả (mặc định 24 h). */
-  ttlMs?: number;
+  /** Giữ kết quả `done` (mặc định 10 phút). */
+  doneTtlMs?: number;
+  /** Hạn cứng của `pending` (handler treo) — quá hạn ⇒ nhả khoá (mặc định 120 s). */
+  pendingTimeoutMs?: number;
   /** Trần mục mỗi (workspace, actor) (mặc định 1 000). */
-  maxPerNamespace?: number;
-  /** Trần mục toàn tiến trình — bảo vệ bộ nhớ (mặc định 100 000). */
-  maxEntries?: number;
+  maxPerActor?: number;
+  /** Trần mục mỗi workspace (mặc định 10 000). */
+  maxPerWorkspace?: number;
 }
+
+export const IDEMPOTENCY_DEFAULTS = {
+  doneTtlMs: 10 * 60_000,
+  pendingTimeoutMs: 120_000,
+  maxPerActor: 1_000,
+  maxPerWorkspace: 10_000,
+} as const;
 
 export class InMemoryIdempotencyStore implements IdempotencyStore {
   private readonly clock: Clock;
-  private readonly ttlMs: number;
-  private readonly maxPerNamespace: number;
-  private readonly maxEntries: number;
-  private readonly spaces = new Map<string, Map<string, Entry>>();
-  private total = 0;
+  private readonly doneTtlMs: number;
+  private readonly pendingTimeoutMs: number;
+  private readonly maxPerActor: number;
+  private readonly maxPerWorkspace: number;
+  private readonly entries = new Map<string, Entry>();
+  private readonly perWorkspace = new Map<string, number>();
+  private readonly perActor = new Map<string, number>();
+  private readonly pendingQ = new Fifo();
+  private readonly doneQ = new Fifo();
+  private seq = 0;
 
   constructor(opts: InMemoryIdempotencyOptions) {
     this.clock = opts.clock;
-    this.ttlMs = opts.ttlMs ?? 24 * 3600 * 1000;
-    this.maxPerNamespace = opts.maxPerNamespace ?? 1000;
-    this.maxEntries = opts.maxEntries ?? 100_000;
+    this.doneTtlMs = opts.doneTtlMs ?? IDEMPOTENCY_DEFAULTS.doneTtlMs;
+    this.pendingTimeoutMs = opts.pendingTimeoutMs ?? IDEMPOTENCY_DEFAULTS.pendingTimeoutMs;
+    this.maxPerActor = opts.maxPerActor ?? IDEMPOTENCY_DEFAULTS.maxPerActor;
+    this.maxPerWorkspace = opts.maxPerWorkspace ?? IDEMPOTENCY_DEFAULTS.maxPerWorkspace;
   }
 
   /** Số mục đang giữ (test / giám sát). */
   size(): number {
-    return this.total;
+    return this.entries.size;
   }
 
-  private expired(e: Entry, nowMs: number): boolean {
-    return e.state === 'done' && nowMs - e.atMs > this.ttlMs;
+  private bump(map: Map<string, number>, k: string, d: number): void {
+    const n = (map.get(k) ?? 0) + d;
+    if (n <= 0) map.delete(k);
+    else map.set(k, n);
   }
 
-  /** Xoá mục `done` đã hết hạn của MỘT namespace (không bao giờ xoá `pending`, không bao giờ xoá mục còn hạn). */
-  private purgeExpired(space: Map<string, Entry>, nowMs: number): void {
-    for (const [k, e] of space) {
-      if (this.expired(e, nowMs)) {
-        space.delete(k);
-        this.total--;
+  private remove(scope: string, e: Entry): void {
+    this.entries.delete(scope);
+    this.bump(this.perWorkspace, e.workspaceId, -1);
+    this.bump(this.perActor, `${e.workspaceId}\u0000${e.actorId}`, -1);
+  }
+
+  /** Dọn mục hết hạn từ ĐẦU hai hàng đợi (hạn tăng dần) — dừng ở mục đầu tiên còn hạn. Mục cũ đã đổi trạng thái ⇒ bỏ qua. */
+  private purge(nowMs: number): void {
+    for (const q of [this.pendingQ, this.doneQ]) {
+      for (let it = q.peek(); it !== undefined && it.expiresAt <= nowMs; it = q.peek()) {
+        q.shift();
+        const e = this.entries.get(it.scope);
+        if (e !== undefined && e.ticket === it.ticket && e.state === it.state && e.expiresAt <= nowMs) {
+          this.remove(it.scope, e);
+        }
       }
-    }
-  }
-
-  private purgeAllExpired(nowMs: number): void {
-    for (const [ns, space] of this.spaces) {
-      this.purgeExpired(space, nowMs);
-      if (space.size === 0) this.spaces.delete(ns);
     }
   }
 
   begin(key: IdempotencyKeyRef, fingerprint: string): BeginResult {
     const nowMs = this.clock.now().getTime();
-    let space = this.spaces.get(key.namespace);
-    const e = space?.get(key.scope);
+    this.purge(nowMs);
+    const e = this.entries.get(key.scope);
     if (e !== undefined) {
-      if (!this.expired(e, nowMs)) {
-        if (e.fingerprint !== fingerprint) return { kind: 'conflict', reason: 'fingerprint' };
-        if (e.state === 'pending') return { kind: 'conflict', reason: 'in_flight' };
-        return { kind: 'replay', result: structuredClone(e.result) };
-      }
-      space?.delete(key.scope);
-      this.total--;
+      if (e.fingerprint !== fingerprint) return { kind: 'conflict', reason: 'fingerprint' };
+      if (e.state === 'pending') return { kind: 'conflict', reason: 'in_flight' };
+      return { kind: 'replay', result: structuredClone(e.result as StoredResult) };
     }
-    if (space !== undefined && space.size >= this.maxPerNamespace) {
-      this.purgeExpired(space, nowMs);
-      if (space.size >= this.maxPerNamespace) return { kind: 'full', reason: 'namespace' };
-    }
-    if (this.total >= this.maxEntries) {
-      this.purgeAllExpired(nowMs);
-      if (this.total >= this.maxEntries) return { kind: 'full', reason: 'global' };
-      space = this.spaces.get(key.namespace);
-    }
-    if (space === undefined) {
-      space = new Map();
-      this.spaces.set(key.namespace, space);
-    }
-    space.set(key.scope, { state: 'pending', fingerprint, atMs: nowMs });
-    this.total++;
-    return { kind: 'new' };
-  }
-
-  complete(key: IdempotencyKeyRef, fingerprint: string, result: StoredResult): void {
-    const space = this.spaces.get(key.namespace);
-    const e = space?.get(key.scope);
-    if (space === undefined || e === undefined || e.fingerprint !== fingerprint) return;
-    space.set(key.scope, {
-      state: 'done',
+    const actorKey = `${key.workspaceId}\u0000${key.actorId}`;
+    if ((this.perActor.get(actorKey) ?? 0) >= this.maxPerActor) return { kind: 'full', reason: 'actor' };
+    if ((this.perWorkspace.get(key.workspaceId) ?? 0) >= this.maxPerWorkspace)
+      return { kind: 'full', reason: 'workspace' };
+    const ticket = ++this.seq;
+    const expiresAt = nowMs + this.pendingTimeoutMs;
+    this.entries.set(key.scope, {
+      ticket,
       fingerprint,
-      atMs: this.clock.now().getTime(),
-      result: structuredClone(result),
+      workspaceId: key.workspaceId,
+      actorId: key.actorId,
+      state: 'pending',
+      expiresAt,
+      result: null,
     });
+    this.bump(this.perWorkspace, key.workspaceId, 1);
+    this.bump(this.perActor, actorKey, 1);
+    this.pendingQ.push({ scope: key.scope, ticket, state: 'pending', expiresAt });
+    return { kind: 'new', ticket };
   }
 
-  abort(key: IdempotencyKeyRef, fingerprint: string): void {
-    const space = this.spaces.get(key.namespace);
-    const e = space?.get(key.scope);
-    if (space !== undefined && e !== undefined && e.state === 'pending' && e.fingerprint === fingerprint) {
-      space.delete(key.scope);
-      this.total--;
-      if (space.size === 0) this.spaces.delete(key.namespace);
-    }
+  complete(key: IdempotencyKeyRef, ticket: number, result: StoredResult): void {
+    const e = this.entries.get(key.scope);
+    // khoá đã nhả (handler treo quá hạn) hoặc thuộc lượt khác ⇒ bỏ qua
+    if (e === undefined || e.ticket !== ticket || e.state !== 'pending') return;
+    const expiresAt = this.clock.now().getTime() + this.doneTtlMs;
+    e.state = 'done';
+    e.expiresAt = expiresAt;
+    e.result = structuredClone(result);
+    this.doneQ.push({ scope: key.scope, ticket, state: 'done', expiresAt });
+  }
+
+  abort(key: IdempotencyKeyRef, ticket: number): void {
+    const e = this.entries.get(key.scope);
+    if (e !== undefined && e.ticket === ticket && e.state === 'pending') this.remove(key.scope, e);
   }
 }
 
@@ -167,8 +215,11 @@ export function idempotencyKeyRef(p: {
   routeId: string;
   key: string;
 }): IdempotencyKeyRef {
-  const namespace = `${p.workspaceId}\u0000${p.actorId}`;
-  return { namespace, scope: `${namespace}\u0000${p.routeId}\u0000${p.key}` };
+  return {
+    workspaceId: p.workspaceId,
+    actorId: p.actorId,
+    scope: [p.workspaceId, p.actorId, p.routeId, p.key].join('\u0000'),
+  };
 }
 
 export function idempotencyFingerprint(p: {

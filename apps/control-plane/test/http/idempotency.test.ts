@@ -1,11 +1,17 @@
-// Idempotency store (review bảo mật MEDIUM 2026-10-17): KHÔNG evict mục còn hiệu lực — flood khoá của actor khác không đẩy
-// được khoá của nạn nhân; `pending` không bao giờ bị xoá; trần theo namespace (ws, actor) + trần toàn cục ⇒ từ chối khoá mới.
+// Idempotency store (2 review bảo mật MEDIUM 2026-10-17 + Gen quyết): KHÔNG evict mục còn hiệu lực; trần theo workspace và
+// (workspace, actor) — một tenant flood không chặn tenant khác; pending có hạn cứng; dọn hết hạn từ đầu hàng đợi (O(1)).
 import { describe, expect, it } from 'vitest';
 import { defineHandler } from '../../src/http/define-handler.ts';
-import { type IdempotencyKeyRef, InMemoryIdempotencyStore, idempotencyKeyRef } from '../../src/http/idempotency.ts';
+import {
+  IDEMPOTENCY_DEFAULTS,
+  type IdempotencyKeyRef,
+  InMemoryIdempotencyStore,
+  idempotencyKeyRef,
+} from '../../src/http/idempotency.ts';
 import { makeTestApp, tk } from './harness.ts';
 
-const WS = '01JAAAAAAAAAAAAAAAAAAAAAAA';
+const WS_A = '01JAAAAAAAAAAAAAAAAAAAAAAA';
+const WS_B = '01JBBBBBBBBBBBBBBBBBBBBBBB';
 const clock = () => {
   let t = Date.parse('2026-10-17T08:00:00.000Z');
   return {
@@ -15,77 +21,135 @@ const clock = () => {
     },
   };
 };
-const ref = (actor: string, key: string): IdempotencyKeyRef =>
-  idempotencyKeyRef({ workspaceId: WS, actorId: actor, routeId: 'WRK-24', key });
+const ref = (ws: string, actor: string, key: string): IdempotencyKeyRef =>
+  idempotencyKeyRef({ workspaceId: ws, actorId: actor, routeId: 'WRK-24', key });
 const RESULT = { status: 200, body: { ok: 1 } };
 
-describe('InMemoryIdempotencyStore — không evict', () => {
-  it('actor B flood 10 000 khoá (trần mặc định) ⇒ khoá của actor A vẫn phát lại đúng; B bị từ chối, không ai bị evict', () => {
+function done(s: InMemoryIdempotencyStore, k: IdempotencyKeyRef, fp = 'fp'): void {
+  const r = s.begin(k, fp);
+  if (r.kind !== 'new') throw new Error(`begin ${r.kind}`);
+  s.complete(k, r.ticket, RESULT);
+}
+
+describe('InMemoryIdempotencyStore', () => {
+  it('mặc định: done giữ 10 phút, pending hạn cứng 120 s, trần 1 000 / actor, 10 000 / workspace', () => {
+    expect(IDEMPOTENCY_DEFAULTS).toEqual({
+      doneTtlMs: 600_000,
+      pendingTimeoutMs: 120_000,
+      maxPerActor: 1_000,
+      maxPerWorkspace: 10_000,
+    });
+  });
+
+  it('tenant B flood 10 000 khoá (nhiều actor) tới trần ⇒ tenant A vẫn begin bình thường, khoá cũ của A phát lại đúng', () => {
+    const s = new InMemoryIdempotencyStore({ clock: clock(), maxPerWorkspace: 5_000 });
+    done(s, ref(WS_A, 'a1', 'victim'), 'fp-a');
+    const kinds = new Map<string, number>();
+    for (let i = 0; i < 10_000; i++) {
+      const k = ref(WS_B, `b${i % 20}`, `flood-${i}`);
+      const r = s.begin(k, 'fp');
+      const label = r.kind === 'full' ? `full:${r.reason}` : r.kind;
+      kinds.set(label, (kinds.get(label) ?? 0) + 1);
+      if (r.kind === 'new') s.complete(k, r.ticket, RESULT);
+    }
+    expect(kinds.get('new')).toBe(5_000);
+    expect(kinds.get('full:workspace')).toBe(5_000);
+    expect(s.begin(ref(WS_A, 'a1', 'victim'), 'fp-a')).toEqual({ kind: 'replay', result: RESULT });
+    expect(s.begin(ref(WS_A, 'a2', 'fresh'), 'fp').kind).toBe('new');
+  });
+
+  it('actor khác CÙNG tenant flood tới trần actor ⇒ khoá của nạn nhân vẫn còn (không evict), nạn nhân vẫn begin được', () => {
     const s = new InMemoryIdempotencyStore({ clock: clock() });
-    expect(s.begin(ref('A', 'victim'), 'fp-a').kind).toBe('new');
-    s.complete(ref('A', 'victim'), 'fp-a', RESULT);
+    done(s, ref(WS_A, 'victim', 'k'), 'fp-v');
     let full = 0;
     for (let i = 0; i < 10_000; i++) {
-      const k = ref('B', `flood-${i}`);
+      const k = ref(WS_A, 'attacker', `flood-${i}`);
       const r = s.begin(k, 'fp');
-      if (r.kind === 'new') s.complete(k, 'fp', RESULT);
+      if (r.kind === 'new') s.complete(k, r.ticket, RESULT);
       else if (r.kind === 'full') full++;
     }
     expect(full).toBe(9_000);
-    expect(s.begin(ref('A', 'victim'), 'fp-a')).toEqual({ kind: 'replay', result: RESULT });
+    expect(s.begin(ref(WS_A, 'victim', 'k'), 'fp-v')).toEqual({ kind: 'replay', result: RESULT });
+    expect(s.begin(ref(WS_A, 'victim', 'k2'), 'fp').kind).toBe('new');
   });
 
-  it('trần TOÀN CỤC đầy ⇒ từ chối khoá mới, KHÔNG evict khoá cũ nhất của actor khác', () => {
-    const s = new InMemoryIdempotencyStore({ clock: clock(), maxEntries: 500, maxPerNamespace: 20_000 });
-    s.begin(ref('A', 'victim'), 'fp-a');
-    s.complete(ref('A', 'victim'), 'fp-a', RESULT);
-    const kinds = new Map<string, number>();
-    for (let i = 0; i < 10_000; i++) {
-      const k = ref('B', `flood-${i}`);
-      const r = s.begin(k, 'fp');
-      kinds.set(r.kind, (kinds.get(r.kind) ?? 0) + 1);
-      if (r.kind === 'new') s.complete(k, 'fp', RESULT);
-    }
-    expect(kinds.get('new')).toBe(499);
-    expect(s.size()).toBe(500);
-    expect(s.begin(ref('A', 'victim'), 'fp-a')).toEqual({ kind: 'replay', result: RESULT });
-    // A (khoá mới) cũng bị từ chối khi kho đầy — không đẩy ai ra
-    expect(s.begin(ref('A', 'new-one'), 'fp')).toEqual({ kind: 'full', reason: 'global' });
-  });
-
-  it('`pending` không bao giờ bị xoá — kể cả sau TTL và khi kho đầy', () => {
+  it('pending không bị flood đẩy ra; handler treo quá hạn ⇒ nhả khoá; complete muộn của lượt cũ bị bỏ qua', () => {
     const c = clock();
-    const s = new InMemoryIdempotencyStore({ clock: c, ttlMs: 1000, maxEntries: 3, maxPerNamespace: 3 });
-    expect(s.begin(ref('A', 'p'), 'fp').kind).toBe('new');
-    c.advance(10_000);
-    for (let i = 0; i < 10; i++) s.begin(ref('B', `x${i}`), 'fp');
-    expect(s.begin(ref('A', 'p'), 'fp')).toEqual({ kind: 'conflict', reason: 'in_flight' });
-    expect(s.begin(ref('A', 'p'), 'other')).toEqual({ kind: 'conflict', reason: 'fingerprint' });
+    const s = new InMemoryIdempotencyStore({ clock: c, maxPerActor: 3, pendingTimeoutMs: 5_000 });
+    const k = ref(WS_A, 'a', 'hang');
+    const first = s.begin(k, 'fp');
+    if (first.kind !== 'new') throw new Error('new');
+    for (let i = 0; i < 50; i++) s.begin(ref(WS_A, 'a', `x${i}`), 'fp');
+    expect(s.begin(k, 'fp')).toEqual({ kind: 'conflict', reason: 'in_flight' });
+    c.advance(4_999);
+    expect(s.begin(k, 'fp')).toEqual({ kind: 'conflict', reason: 'in_flight' });
+    c.advance(2);
+    const second = s.begin(k, 'fp');
+    expect(second.kind).toBe('new');
+    s.complete(k, first.ticket, { status: 200, body: { stale: true } });
+    expect(s.begin(k, 'fp')).toEqual({ kind: 'conflict', reason: 'in_flight' });
+    if (second.kind === 'new') s.complete(k, second.ticket, RESULT);
+    expect(s.begin(k, 'fp')).toEqual({ kind: 'replay', result: RESULT });
   });
 
-  it('mục `done` HẾT HẠN được dọn ⇒ namespace đầy mở lại sau TTL; khoá hết hạn chạy như mới', () => {
+  it('done hết hạn (TTL) ⇒ dọn, trần được giải phóng, khoá chạy như mới', () => {
     const c = clock();
-    const s = new InMemoryIdempotencyStore({ clock: c, ttlMs: 1000, maxPerNamespace: 2 });
-    for (const k of ['a', 'b']) {
-      s.begin(ref('A', k), 'fp');
-      s.complete(ref('A', k), 'fp', RESULT);
-    }
-    expect(s.begin(ref('A', 'c'), 'fp')).toEqual({ kind: 'full', reason: 'namespace' });
-    expect(s.begin(ref('B', 'c'), 'fp').kind).toBe('new');
-    c.advance(1001);
-    expect(s.begin(ref('A', 'c'), 'fp').kind).toBe('new');
-    expect(s.begin(ref('A', 'a'), 'fp').kind).toBe('new');
+    const s = new InMemoryIdempotencyStore({ clock: c, doneTtlMs: 1_000, maxPerActor: 2 });
+    done(s, ref(WS_A, 'a', 'k1'));
+    done(s, ref(WS_A, 'a', 'k2'));
+    expect(s.begin(ref(WS_A, 'a', 'k3'), 'fp')).toEqual({ kind: 'full', reason: 'actor' });
+    c.advance(1_000);
+    expect(s.begin(ref(WS_A, 'a', 'k3'), 'fp').kind).toBe('new');
+    expect(s.size()).toBe(1);
+    expect(s.begin(ref(WS_A, 'a', 'k1'), 'fp').kind).toBe('new');
   });
 
   it('cùng khoá + khác dấu vân tay ⇒ conflict, không phát lại', () => {
     const s = new InMemoryIdempotencyStore({ clock: clock() });
-    s.begin(ref('A', 'k'), 'fp1');
-    s.complete(ref('A', 'k'), 'fp1', RESULT);
-    expect(s.begin(ref('A', 'k'), 'fp2')).toEqual({ kind: 'conflict', reason: 'fingerprint' });
+    done(s, ref(WS_A, 'a', 'k'), 'fp1');
+    expect(s.begin(ref(WS_A, 'a', 'k'), 'fp2')).toEqual({ kind: 'conflict', reason: 'fingerprint' });
+  });
+
+  it('chi phí mỗi begin KHÔNG tăng theo số mục đang giữ (1k vs 100k: tỉ lệ trung vị 3 lần < 8)', () => {
+    const run = (n: number): number => {
+      const c = clock();
+      const s = new InMemoryIdempotencyStore({ clock: c, maxPerWorkspace: 1_000 });
+      for (let i = 0; i < n; i++) done(s, ref(`W${Math.floor(i / 1000)}`, `a${Math.floor(i / 1000)}`, `k${i}`));
+      // kẻ flood: actor đã đầy (bị từ chối) + workspace mới chèn liên tục — trước đây mỗi lần bị từ chối quét O(n)
+      for (let i = 0; i < 1_000; i++) done(s, ref('FLOOD', 'f', `pre${i}`));
+      const t0 = performance.now();
+      for (let i = 0; i < 4_000; i++) {
+        s.begin(ref('FLOOD', 'f', `rej${i}`), 'fp');
+        const k = ref(`NEW${i % 50}`, 'n', `ins${i}`);
+        const r = s.begin(k, 'fp');
+        if (r.kind === 'new') s.complete(k, r.ticket, RESULT);
+      }
+      return performance.now() - t0;
+    };
+    const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[1] as number;
+    const small = median([run(1_000), run(1_000), run(1_000)]);
+    const big = median([run(100_000), run(100_000), run(100_000)]);
+    expect(big / Math.max(small, 1)).toBeLessThan(8);
+    expect(big).toBeLessThan(2_000);
   });
 });
 
 describe('idempotency qua HTTP', () => {
+  const ledger = defineHandler('WRK-24', ({ params }, ctx) => {
+    ctx.ref('RL', params.roleRef);
+    return {
+      entry: { id: '01JDEM0DEM0DEM0DEM0DEM0DEM', displayId: 'LG-0001' },
+      balanceAfterMinor: 1,
+      revived: false,
+      rankAfter: null,
+    };
+  });
+  const roleIn = (t: ReturnType<typeof makeTestApp>, tenant: 'A' | 'B') => {
+    const seed = tk.CROSS_TENANT_SEEDERS.RL;
+    if (!seed) throw new Error('RL');
+    return seed({ world: t.world, tenant: t.world.tenants[tenant], seeded: new Map() }).displayId;
+  };
+
   it('2 request ĐỒNG THỜI cùng khoá ⇒ chỉ 1 handler chạy, request kia 409; xong ⇒ phát lại', async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => {
@@ -105,11 +169,8 @@ describe('idempotency qua HTTP', () => {
     });
     const t = makeTestApp({ handlers: [h] });
     try {
-      const seed = tk.CROSS_TENANT_SEEDERS.RL;
-      if (!seed) throw new Error('RL');
-      const roleRef = seed({ world: t.world, tenant: t.world.tenants.A, seeded: new Map() }).displayId;
       const input = {
-        params: { roleRef },
+        params: { roleRef: roleIn(t, 'A') },
         body: { amountMinor: 1, reason: 'x' },
         headers: { 'idempotency-key': 'key-concurrent-1' },
       };
@@ -127,42 +188,42 @@ describe('idempotency qua HTTP', () => {
     }
   });
 
-  it('namespace của actor đầy ⇒ 429 cho actor đó; actor khác không ảnh hưởng', async () => {
+  it('actor đầy ⇒ 429 cho actor đó; tenant B đầy ⇒ 429 cho B, tenant A KHÔNG bị ảnh hưởng', async () => {
     const t = makeTestApp({
-      handlers: [
-        defineHandler('WRK-24', ({ params }, ctx) => {
-          ctx.ref('RL', params.roleRef);
-          return {
-            entry: { id: '01JDEM0DEM0DEM0DEM0DEM0DEM', displayId: 'LG-0001' },
-            balanceAfterMinor: 1,
-            revived: false,
-            rankAfter: null,
-          };
-        }),
-      ],
-      idempotency: new InMemoryIdempotencyStore({ clock: { now: () => new Date() }, maxPerNamespace: 3 }),
+      handlers: [ledger],
+      idempotency: new InMemoryIdempotencyStore({
+        clock: { now: () => new Date() },
+        maxPerActor: 3,
+        maxPerWorkspace: 4,
+      }),
     });
     try {
-      const seed = tk.CROSS_TENANT_SEEDERS.RL;
-      if (!seed) throw new Error('RL');
-      const roleRef = seed({ world: t.world, tenant: t.world.tenants.A, seeded: new Map() }).displayId;
-      const call = (who: 'A.owner' | 'A.admin', key: string) =>
+      const refA = roleIn(t, 'A');
+      const refB = roleIn(t, 'B');
+      const call = (who: 'A.owner' | 'B.owner' | 'B.admin', roleRef: string, key: string) =>
         t.as(who).call('WRK-24', {
           params: { roleRef },
           body: { amountMinor: 1, reason: 'x' },
           headers: { 'idempotency-key': key },
         });
-      for (const k of ['key-ns-00001', 'key-ns-00002', 'key-ns-00003'])
-        expect((await call('A.owner', k)).status).toBe(200);
-      const over = await call('A.owner', 'key-ns-00004');
-      expect([over.status, over.code, over.detail?.reason]).toEqual([
+      for (const k of ['key-ns-00001', 'key-ns-00002', 'key-ns-00003']) {
+        expect((await call('B.owner', refB, k)).status).toBe(200);
+      }
+      const actorFull = await call('B.owner', refB, 'key-ns-00004');
+      expect([actorFull.status, actorFull.code, actorFull.detail?.reason]).toEqual([
         429,
         'auth.rate_limited',
-        'idempotency_namespace_full',
+        'idempotency_actor_full',
       ]);
-      expect(over.headers.get('retry-after')).toBe('60');
-      expect((await call('A.owner', 'key-ns-00001')).headers.get('idempotency-replayed')).toBe('true');
-      expect((await call('A.admin', 'key-ns-00004')).status).toBe(200);
+      expect(actorFull.headers.get('retry-after')).toBe('60');
+      expect((await call('B.admin', refB, 'key-ns-00004')).status).toBe(200);
+      const wsFull = await call('B.admin', refB, 'key-ns-00005');
+      expect([wsFull.status, wsFull.detail?.reason]).toEqual([429, 'idempotency_workspace_full']);
+      // tenant A: không 429, không 503
+      for (const k of ['key-ns-00001', 'key-ns-00002', 'key-ns-00003']) {
+        expect((await call('A.owner', refA, k)).status).toBe(200);
+      }
+      expect((await call('B.owner', refB, 'key-ns-00001')).headers.get('idempotency-replayed')).toBe('true');
     } finally {
       t.close();
     }

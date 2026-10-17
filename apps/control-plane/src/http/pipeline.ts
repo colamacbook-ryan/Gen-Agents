@@ -204,7 +204,7 @@ export async function runRoute(
   const requestId = c.get('requestId');
   c.set('routeId', route.id);
   const req = c.req.raw;
-  let idem: { key: IdempotencyKeyRef; fingerprint: string } | null = null;
+  let idem: { key: IdempotencyKeyRef; ticket: number } | null = null;
   try {
     // 1–4. phiên → cổng đổi mật khẩu → CSRF → actor + quyền tối thiểu
     let actor: Actor | null = null;
@@ -332,11 +332,11 @@ export async function runRoute(
       if (b.kind === 'replay') return jsonResponse(b.result, { 'idempotency-replayed': 'true' });
       if (b.kind === 'conflict') throw new ApiError('idempotency.conflict', { reason: b.reason });
       if (b.kind === 'full') {
-        // không evict khoá còn hiệu lực ⇒ từ chối khoá MỚI (hợp đồng chưa có mã 503 ⇒ 429)
-        const reason = b.reason === 'namespace' ? 'idempotency_namespace_full' : 'idempotency_capacity';
+        // không evict khoá còn hiệu lực ⇒ từ chối khoá MỚI của CHÍNH actor / workspace đã đầy (429)
+        const reason = b.reason === 'actor' ? 'idempotency_actor_full' : 'idempotency_workspace_full';
         throw new ApiError('auth.rate_limited', { reason, retryAfterS: 60 }, { headers: { 'retry-after': '60' } });
       }
-      idem = { key: ref, fingerprint };
+      idem = { key: ref, ticket: b.ticket };
     }
 
     // 12. handler
@@ -350,13 +350,13 @@ export async function runRoute(
     const built = buildResponse(route, out, { requestId, logger: deps.logger });
     if (built instanceof Response) return built;
     if (idem !== null) {
-      deps.idempotency.complete(idem.key, idem.fingerprint, built);
+      deps.idempotency.complete(idem.key, idem.ticket, built);
       idem = null;
     }
     return jsonResponse(built);
   } catch (err) {
     return errorResponse(mapError(err, { requestId, routeId: route.id, logger: deps.logger }));
   } finally {
-    if (idem !== null) deps.idempotency.abort(idem.key, idem.fingerprint);
+    if (idem !== null) deps.idempotency.abort(idem.key, idem.ticket);
   }
 }
