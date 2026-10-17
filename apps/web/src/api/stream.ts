@@ -35,6 +35,8 @@ export interface EventStreamOptions {
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   /** im lặng quá ngần này thì coi là chết (mặc định 3 × SSE_KEEPALIVE_SECONDS) */
   idleTimeoutMs?: number;
+  /** mở liên tục ngần này thì coi là ổn định và đặt lại backoff (mặc định 10 s) */
+  stableMs?: number;
 }
 
 export interface EventStream {
@@ -130,10 +132,13 @@ export function openEventStream(opts: EventStreamOptions): EventStream {
   const ceiling = opts.maxDelayMs ?? 30_000;
   const jitter = opts.jitter ?? 0.2;
   const idleMs = opts.idleTimeoutMs ?? SSE_KEEPALIVE_SECONDS * 3 * 1000;
+  const stableMs = opts.stableMs ?? 10_000;
   const listeners = new Set<(e: StreamEvent) => void>();
   const outer = new AbortController();
 
   let attempt = 0;
+  let openedAt = 0;
+  let gotEvent = false;
   let state: StreamState = 'connecting';
   let lastEventId: string | null = null;
   const setState = (s: StreamState) => {
@@ -166,6 +171,7 @@ export function openEventStream(opts: EventStreamOptions): EventStream {
     }
     const payloadId = (value as { id?: unknown }).id;
     const id = frame.id ?? (typeof payloadId === 'string' ? payloadId : null);
+    gotEvent = true;
     if (id !== null) lastEventId = id;
     const event = value as StreamEvent;
     opts.onEvent?.(event);
@@ -198,7 +204,7 @@ export function openEventStream(opts: EventStreamOptions): EventStream {
       }
       if (!res.body) throw new Error('phản hồi SSE không có thân');
       setState('open');
-      attempt = 0;
+      openedAt = Date.now();
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       const parser = createSseParser(dispatch);
@@ -227,12 +233,16 @@ export function openEventStream(opts: EventStreamOptions): EventStream {
 
   async function run() {
     while (!outer.signal.aborted) {
+      openedAt = 0;
+      gotEvent = false;
       try {
         if ((await connectOnce()) === 'stop') break;
       } catch (e) {
         if (outer.signal.aborted) break;
         fail(e);
       }
+      // backoff chỉ về đầu khi kết nối ĐÃ ổn định (nhận được sự kiện, hoặc mở đủ lâu); máy chủ mở rồi đóng ngay không được nối lại liên tục
+      if (gotEvent || (openedAt > 0 && Date.now() - openedAt >= stableMs)) attempt = 0;
       if (outer.signal.aborted) break;
       setState('reconnecting');
       const raw = Math.min(ceiling, base * 2 ** attempt);

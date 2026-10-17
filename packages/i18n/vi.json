@@ -559,5 +559,14 @@
       "patience": "Kiên nhẫn",
       "high": "cao"
     }
+  },
+  "grid": {
+    "col": {
+      "id": "Mã",
+      "created": "Tạo lúc",
+      "updated": "Sửa lúc",
+      "name": "Tên",
+      "status": "Trạng thái"
+    }
   }
 }

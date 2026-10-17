@@ -36,6 +36,9 @@ export interface CreateRouterOptions {
 const uikitLoader =
   import.meta.env.DEV || import.meta.env.VITE_GA_UIKIT === '1' ? () => import('./dev/uikit.tsx') : null;
 
+// trang dò của backend giả: cùng kỹ thuật cổng build như uikit — ở bản phát hành `probeLoader` là null và chunk bị loại khỏi gói
+const probeLoader = import.meta.env.VITE_GA_FAKE === '1' ? () => import('./api/fake/probe.tsx') : null;
+
 const session = (c: RouterContext) => c.queryClient.ensureQueryData(sessionQuery(c.auth));
 
 function RouteError({ error }: { error: unknown }) {
@@ -146,11 +149,21 @@ export function createAppRouter(ctx: RouterContext, opts: CreateRouterOptions = 
         ]
       : [];
 
+  const probeRoute = probeLoader
+    ? [
+        createRoute({
+          getParentRoute: () => authed,
+          path: '/__api-probe',
+          component: lazyRouteComponent(probeLoader, 'ApiProbe'),
+        }),
+      ]
+    : [];
+
   const routeTree = root.addChildren([
     index,
     login,
     changePassword,
-    authed.addChildren([...leaves, ...groupIndexes, ...uikitRoute, notFound]),
+    authed.addChildren([...leaves, ...groupIndexes, ...uikitRoute, ...probeRoute, notFound]),
   ]);
 
   return createRouter({

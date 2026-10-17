@@ -84,3 +84,10 @@ export interface AnyInput {
   query?: Record<string, unknown>;
   body?: unknown;
 }
+
+/** Phần request đã qua schema (ĐẦU RA, sau transform) — kiểu mà handler của backend giả nhận. */
+export interface RequestOut<Id extends RouteId> {
+  params: [Part<Id, 'params'>] extends [never] ? Record<string, never> : z.output<Part<Id, 'params'>>;
+  query: [Part<Id, 'query'>] extends [never] ? Record<string, never> : z.output<Part<Id, 'query'>>;
+  body: [Part<Id, 'body'>] extends [never] ? undefined : z.output<Part<Id, 'body'>>;
+}

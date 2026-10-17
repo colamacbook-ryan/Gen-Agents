@@ -39,6 +39,21 @@ export default defineConfig({
     // gói chính ~570 kB (React + router + query + i18next + zod/contracts); màn nghiệp vụ M4 tách chunk theo tuyến
     chunkSizeWarningLimit: 800,
     rolldownOptions: {
+      output: {
+        // zod phải được cấu hình jitless (src/bootstrap/zod.ts) TRƯỚC khi @ga/contracts dựng schema, nếu không zod dò `new Function` và CSP
+        // báo vi phạm script-src. Khi tách chunk (màn lazy, trang dò), rolldown gom zod + contracts vào chunk dùng chung được nạp TRƯỚC chunk
+        // chính chứa bootstrap ⇒ thứ tự đảo. Ép bootstrap vào CÙNG chunk với zod: ESM giữ thứ tự (zod → bootstrap) và mọi chunk dùng contracts
+        // phụ thuộc chunk này nên chạy sau. test/browser/fake-api.test.ts (bản build có chunk lazy dùng contracts) giữ điều đó.
+        codeSplitting: {
+          groups: [
+            {
+              name: 'zod-jitless',
+              test: /node_modules[\\/](?:\.pnpm[\\/])?zod|src[\\/]bootstrap[\\/]zod\.ts/,
+              priority: 100,
+            },
+          ],
+        },
+      },
       // "use client" trong thư viện React là chỉ thị cho RSC, vô nghĩa ở SPA: bỏ cảnh báo ồn, giữ mọi cảnh báo khác
       onLog(level, log, handler) {
         if (log.code === 'MODULE_LEVEL_DIRECTIVE') return;

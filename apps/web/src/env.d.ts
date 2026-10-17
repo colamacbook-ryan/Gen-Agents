@@ -9,4 +9,6 @@ interface ImportMetaEnv {
   readonly VITE_GA_VALIDATE?: string;
   /** bật backend giả (src/api/fake) ở bản build — chỉ dùng để demo, KHÔNG bao giờ ở bản phát hành */
   readonly VITE_GA_FAKE?: string;
+  /** 'contract' = đăng nhập qua /api/v1/auth/* (EXT-01…04) thay vì /api/auth/* của L-SEC; luôn dùng khi có backend giả */
+  readonly VITE_GA_AUTH?: string;
 }

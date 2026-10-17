@@ -95,5 +95,9 @@ export async function fakeAuthApi(context: BrowserContext, opts: FakeAuthOptions
       body: res.status === 204 ? undefined : await res.text(),
     });
   });
+  // luồng sự kiện của vỏ (SYS-85): trả một luồng rỗng hợp lệ; máy khách nối lại có backoff, không có lỗi
+  await context.route('**/api/v1/stream', (route) =>
+    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: ': ok\n\n' }),
+  );
   return server;
 }

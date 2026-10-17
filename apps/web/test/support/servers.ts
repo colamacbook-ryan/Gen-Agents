@@ -31,14 +31,19 @@ export async function startDevServer(): Promise<Started> {
   return { url, origin: originOf(url), close: () => server.close() };
 }
 
-/** Build sản phẩm vào thư mục tạm, bật bộ component (VITE_GA_UIKIT=1) để test dùng; bản phát hành thật KHÔNG có chunk này. */
-export async function buildForTest(): Promise<{ outDir: string; cleanup(): void }> {
+/**
+ * Build sản phẩm vào thư mục tạm. Mặc định bật bộ component (VITE_GA_UIKIT=1) để test dùng; bản phát hành thật KHÔNG có chunk này.
+ * `defines` ghi đè hoàn toàn bộ cờ (vd `{ 'import.meta.env.VITE_GA_FAKE': '"1"' }` cho backend giả, `{}` cho bản phát hành).
+ */
+export async function buildForTest(
+  defines: Record<string, string> = { 'import.meta.env.VITE_GA_UIKIT': JSON.stringify('1') },
+): Promise<{ outDir: string; cleanup(): void }> {
   const outDir = mkdtempSync(join(tmpdir(), 'ga-web-'));
   await build({
     configFile: CONFIG,
     root: WEB,
     logLevel: 'warn',
-    define: { 'import.meta.env.VITE_GA_UIKIT': JSON.stringify('1') },
+    define: defines,
     build: { outDir, emptyOutDir: true },
   });
   return { outDir, cleanup: () => rmSync(outDir, { recursive: true, force: true }) };

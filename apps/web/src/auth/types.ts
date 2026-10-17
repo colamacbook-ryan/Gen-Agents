@@ -4,7 +4,7 @@
 //   POST /api/auth/password  {currentPassword, newPassword}   → 200 {csrfToken} + Set-Cookie (phiên mới)
 //   POST /api/auth/logout                                     → 204 + Set-Cookie xoá
 // Lỗi: { error: { code, i18nKey, requestId }, retryAfterSeconds?, reason? }. Giao diện KHÔNG đọc chữ từ API: chỉ dùng `i18nKey`.
-import type { ApiErrorCode } from '@ga/contracts';
+import type { ErrorCode } from '@ga/contracts';
 
 export interface SessionInfo {
   username: string;
@@ -42,7 +42,7 @@ export type ClientErrorCode = 'network' | 'bad_response';
 
 export interface AuthErrorInit {
   status: number;
-  code: ApiErrorCode | ClientErrorCode;
+  code: ErrorCode | ClientErrorCode;
   /** khoá i18n để dịch (từ API hoặc suy ra) */
   i18nKey: string;
   retryAfterSeconds?: number;
@@ -53,7 +53,7 @@ export interface AuthErrorInit {
 
 export class AuthError extends Error {
   readonly status: number;
-  readonly code: ApiErrorCode | ClientErrorCode;
+  readonly code: ErrorCode | ClientErrorCode;
   readonly i18nKey: string;
   readonly retryAfterSeconds?: number;
   readonly reason?: string;

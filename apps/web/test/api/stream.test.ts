@@ -118,9 +118,34 @@ describe('luồng SSE', () => {
     // mở được ⇒ lần rớt tiếp theo bắt đầu lại từ base
     const b3 = bodies[3] as ReturnType<typeof sseBody>;
     await until(() => stream.state === 'open', 'mở lại');
+    b3.push(frame(gridChanged('ev-42', 'roles'), '42')); // nhận được sự kiện ⇒ coi là ổn định
+    await until(() => stream.lastEventId === '42', 'sự kiện 42');
     b3.end();
     await until(() => delays.length >= 4, 'backoff lần 4');
     expect(delays[3]).toBe(100);
+    stream.close();
+  });
+
+  it('máy chủ mở rồi đóng ngay (không sự kiện) KHÔNG đặt lại backoff — không nối lại dồn dập', async () => {
+    const delays: number[] = [];
+    const rec = recordingFetch(() => {
+      const s = sseBody();
+      s.end();
+      return s.response();
+    });
+    const stream = openEventStream({
+      fetchImpl: rec.fetch,
+      validate: true,
+      jitter: 0,
+      baseDelayMs: 100,
+      maxDelayMs: 400,
+      sleep: (ms) => {
+        delays.push(ms);
+        return delays.length >= 4 ? new Promise(() => {}) : new Promise((r) => setTimeout(r, 0));
+      },
+    });
+    await until(() => delays.length >= 4, 'backoff');
+    expect(delays).toEqual([100, 200, 400, 400]);
     stream.close();
   });
 

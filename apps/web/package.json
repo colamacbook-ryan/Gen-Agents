@@ -7,6 +7,7 @@
   "description": "Admin GUI (React SPA): khung app, đăng nhập, điều hướng. Màn hình nghiệp vụ nằm ở src/routes/<nhóm>/ (M4).",
   "scripts": {
     "dev": "vite",
+    "dev:fake": "VITE_GA_FAKE=1 vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node ../../scripts/vitest-run.mjs"

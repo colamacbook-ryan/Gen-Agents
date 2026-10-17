@@ -41,6 +41,9 @@ export interface ApiClient {
   readonly events: ClientEvents;
   readonly csrf: CsrfStore;
   readonly validate: boolean;
+  /** để SSE / fake dùng chung đường ra với các lệnh gọi thường */
+  readonly fetchImpl: typeof fetch;
+  readonly baseUrl: string;
   /** dựng URL (không gọi) — dùng cho SSE và test */
   urlOf(id: string, input?: AnyInput): string;
 }
@@ -261,6 +264,8 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     events,
     csrf: opts.csrf,
     validate,
+    fetchImpl: doFetch,
+    baseUrl: base,
     urlOf,
     // async: id lạ / thiếu tham số là lời gọi bị từ chối (rejected), không phải ngoại lệ đồng bộ
     async call(id, ...args) {

@@ -20,6 +20,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { Gamepad2, Send } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { LiveStreamProvider } from '../api/live.tsx';
 import { useAuth } from '../auth/context.tsx';
 import { SESSION_KEY, sessionQuery } from '../auth/session.ts';
 import { NAV_GROUPS, pathOf, resolveLocation } from '../nav.ts';
@@ -30,7 +31,9 @@ export function AppFrame() {
   return (
     <ShortcutProvider>
       <OverlayProvider>
-        <FrameInner />
+        <LiveStreamProvider>
+          <FrameInner />
+        </LiveStreamProvider>
       </OverlayProvider>
     </ShortcutProvider>
   );
@@ -121,6 +124,7 @@ function FrameInner() {
 
   const onLogout = async () => {
     await auth.logout();
+    queryClient.removeQueries({ queryKey: ['api'] });
     queryClient.setQueryData(SESSION_KEY, null);
     await navigate({ to: '/login' });
   };
