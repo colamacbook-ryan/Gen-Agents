@@ -1,0 +1,490 @@
+{
+  "brand": {
+    "name": "Gen-Agents",
+    "tagline": "Phòng nhân sự của một công ty AI."
+  },
+  "common": {
+    "back": "Quay lại",
+    "cancel": "Huỷ",
+    "close": "Đóng",
+    "dismiss": "Bỏ thông báo",
+    "loading": "Đang tải…",
+    "retry": "Thử lại",
+    "save": "Lưu"
+  },
+  "a11y": {
+    "skipToContent": "Bỏ qua điều hướng, tới nội dung",
+    "mainNav": "Điều hướng chính",
+    "breadcrumb": "Đường dẫn trang",
+    "pageTabs": "Các tab của trang"
+  },
+  "nav": {
+    "group": {
+      "overview": "Tổng quan",
+      "people": "Nhân sự",
+      "knowledge": "Tri thức",
+      "ops": "Vận hành",
+      "infra": "Hạ tầng",
+      "system": "Hệ thống"
+    },
+    "page": {
+      "overview": "Tổng quan",
+      "people": "Nhân sự",
+      "knowledge": "Tri thức",
+      "ops": "Vận hành",
+      "infra": "Engine và tài khoản",
+      "system": "Hệ thống"
+    },
+    "description": {
+      "overview": "Buồng lái vận hành hằng ngày.",
+      "people": "Role, giấy khai sinh, đào tạo, thẻ nhân viên và nhân vật.",
+      "knowledge": "Instructions, skills, kho tri thức và Brain.",
+      "ops": "Việc, ví, tin chủ động và bảng xếp hạng.",
+      "infra": "Tài khoản engine, capability, AI Hệ thống và container.",
+      "system": "Audit, cập nhật và cài đặt."
+    },
+    "tab": {
+      "roles": "Danh sách Role",
+      "birth": "Khai sinh",
+      "training": "Đào tạo",
+      "cards": "Thẻ nhân viên",
+      "characters": "Kho nhân vật",
+      "instructions": "Instructions",
+      "skills": "Skills",
+      "base": "Kho tri thức",
+      "brain": "Brain",
+      "tasks": "Việc & cam kết",
+      "wallet": "Ví & ledger",
+      "proactive": "Chủ động",
+      "leaderboard": "Bảng xếp hạng ₲",
+      "telegram": "Telegram",
+      "accounts": "Tài khoản",
+      "capabilities": "Capability registry",
+      "system_ai": "AI Hệ thống",
+      "ranking": "Thứ hạng model",
+      "containers": "Container",
+      "audit": "Audit & logs",
+      "update": "Cập nhật",
+      "settings": "Cài đặt"
+    },
+    "workspace": {
+      "telegram": "Telegram",
+      "webgame": "Workspace webgame",
+      "webgameSoon": "GĐ2 · sắp có"
+    },
+    "newBadge": "mới",
+    "ownerRole": "Owner"
+  },
+  "placeholder": {
+    "title": "Màn hình này đang được dựng.",
+    "body": "Điều hướng và khung trang đã hoạt động; nội dung của màn này sẽ được thêm sau."
+  },
+  "notFound": {
+    "title": "Không tìm thấy trang này.",
+    "body": "Đường dẫn có thể đã đổi. Quay về Tổng quan để đi tiếp.",
+    "action": "Về Tổng quan"
+  },
+  "header": {
+    "search": "Tìm Role, ID, lệnh…",
+    "notifications": "Thông báo, {count} chưa đọc",
+    "connectionLost": "Mất kết nối — đang thử lại"
+  },
+  "sidebar": {
+    "switchWorkspace": "Đổi workspace, hiện tại {name}",
+    "pinned": "Role đang ghim",
+    "pinnedEmpty": "Chưa ghim Role nào",
+    "workspace": "Workspace",
+    "updateAvailable": "có bản mới",
+    "logout": "Đăng xuất",
+    "collapse": "Thu gọn thanh bên",
+    "expand": "Mở rộng thanh bên"
+  },
+  "status": {
+    "draft": "Nháp",
+    "born": "Đã khai sinh",
+    "training": "Đang đào tạo",
+    "trained": "Đã đào tạo",
+    "carded": "Có thẻ",
+    "suspended": "Tạm ngưng",
+    "archived": "Lưu trữ",
+    "running": "Đang chạy",
+    "sleeping": "Ngủ",
+    "error": "Lỗi",
+    "stopped": "Dừng",
+    "awaiting_permission": "Chờ quyền",
+    "wounded": "Nghỉ dưỡng thương"
+  },
+  "stepper": {
+    "pending": "Chờ",
+    "running": "Đang chạy",
+    "done": "Xong",
+    "error": "Lỗi",
+    "branch": "Rẽ nhánh"
+  },
+  "banner": {
+    "http": {
+      "title": "Kết nối chưa được mã hoá.",
+      "body": "Bạn đang truy cập qua HTTP: mật khẩu và phiên đăng nhập có thể bị nghe lén trên mạng. Bật TLS ở edge (tên miền + HTTPS) trước khi dùng ngoài máy này."
+    }
+  },
+  "dropzone": {
+    "dropInto": "Thả tệp vào: {target}",
+    "pick": "Chọn tệp",
+    "hint": "hoặc kéo tệp vào vùng này ({target})",
+    "tooLarge": "Tệp lớn hơn {limit}"
+  },
+  "toast": {
+    "region": "Thông báo nhanh",
+    "close": "Đóng thông báo"
+  },
+  "confirm": {
+    "step": "Bước {current}/{total}",
+    "consequencesLead": "Điều sẽ xảy ra nếu bạn tiếp tục:",
+    "continue": "Tiếp tục",
+    "typeLead": "Để xác nhận, gõ lại:",
+    "typeLabel": "Gõ “{phrase}” để xác nhận",
+    "failed": "Không thực hiện được. Thử lại, hoặc xem log nếu lỗi lặp lại."
+  },
+  "palette": {
+    "title": "Bảng lệnh",
+    "placeholder": "Tìm Role, ID, lệnh…",
+    "results": "Kết quả",
+    "empty": "Không có kết quả khớp.",
+    "dangerHint": "Hành động nguy hiểm — sẽ hỏi xác nhận trước khi chạy",
+    "hintMove": "chọn",
+    "hintRun": "chạy",
+    "hintClose": "đóng",
+    "group": {
+      "nav": "Điều hướng",
+      "actions": "Hành động"
+    }
+  },
+  "notifications": {
+    "title": "Thông báo",
+    "today": "Hôm nay",
+    "earlier": "Trước đó",
+    "emptyTitle": "Chưa có thông báo nào.",
+    "emptyBody": "Sự kiện quan trọng (Role vào nghỉ dưỡng thương, quota thấp, bản cập nhật…) sẽ hiện ở đây.",
+    "unread": "Chưa đọc",
+    "unreadCount": "{count} chưa đọc",
+    "markAllRead": "Đánh dấu đã đọc hết"
+  },
+  "shortcuts": {
+    "title": "Phím tắt",
+    "search": "Tìm phím tắt",
+    "empty": "Không có phím tắt nào khớp.",
+    "group": {
+      "nav": "Điều hướng",
+      "grid": "Bảng và hàng",
+      "actions": "Hành động"
+    },
+    "palette": "Mở bảng lệnh",
+    "go": {
+      "overview": "Tới Tổng quan",
+      "roles": "Tới Danh sách Role",
+      "birth": "Tới Khai sinh",
+      "training": "Tới Đào tạo",
+      "cards": "Tới Thẻ nhân viên",
+      "brain": "Tới Brain",
+      "engines": "Tới Engine và tài khoản",
+      "audit": "Tới Audit & logs",
+      "update": "Tới Cập nhật",
+      "settings": "Tới Cài đặt",
+      "leaderboard": "Tới Bảng xếp hạng ₲",
+      "proactive": "Tới Chủ động"
+    },
+    "tabPrev": "Tab trước",
+    "tabNext": "Tab sau",
+    "focusQuery": "Tới ô truy vấn của bảng",
+    "rowDown": "Xuống một hàng",
+    "rowUp": "Lên một hàng",
+    "openRow": "Mở hàng đang chọn",
+    "toggleInspector": "Bật hoặc tắt khung chi tiết",
+    "pinMode": "Chế độ chỉ (Ghim)",
+    "pinPicker": "Mở bộ chọn ghim trong ô soạn tin",
+    "newRole": "Khai sinh Role mới",
+    "save": "Lưu (tạo revision)",
+    "confirm": "Gửi tin, xác nhận, lưu ô",
+    "close": "Đóng khung hoặc lớp phủ",
+    "logDrawer": "Bật hoặc tắt log",
+    "help": "Bảng phím tắt"
+  },
+  "log": {
+    "drawerTitle": "Log",
+    "drawerOpen": "Mở log",
+    "drawerClose": "Đóng log",
+    "pause": "Tạm dừng",
+    "resume": "Tiếp tục",
+    "search": "Tìm trong log",
+    "levelFilter": "Lọc theo mức",
+    "levelAll": "Mọi mức",
+    "levelWarn": "Từ cảnh báo",
+    "levelError": "Chỉ lỗi",
+    "pending": "+{count} dòng mới",
+    "empty": "Chưa có dòng log nào.",
+    "level": {
+      "debug": "DEBUG",
+      "info": "INFO",
+      "warn": "WARN",
+      "error": "ERR"
+    }
+  },
+  "version": {
+    "diffTitle": "So sánh phiên bản",
+    "diffMode": "Kiểu hiển thị",
+    "modeRead": "Dạng đọc",
+    "modeYaml": "YAML",
+    "coarse": "Văn bản quá lớn để so từng từ — hiển thị theo khối.",
+    "added": "Thêm:",
+    "removed": "Bỏ:",
+    "pick": "Chọn {version} để so sánh",
+    "core": "LÕI",
+    "current": "đang hiệu lực",
+    "pickTwo": "Chọn hai phiên bản để so sánh.",
+    "restore": "Khôi phục {version}",
+    "restoreNote": "Khôi phục tạo phiên bản mới, không ghi đè lịch sử."
+  },
+  "provenance": {
+    "owner": "Owner nhập",
+    "ai": "AI suy ra",
+    "system": "Hệ thống",
+    "confirm": "Xác nhận",
+    "edit": "Sửa",
+    "legend": "Nguồn của giá trị",
+    "sample": "giá trị"
+  },
+  "changeset": {
+    "title": "{count} đề xuất chờ duyệt",
+    "totalHint": "Tổng thay đổi Token prompt nếu áp dụng hết",
+    "apply": "Áp dụng",
+    "reject": "Bỏ",
+    "after": "Token prompt nếu áp dụng hết: {after} / {ceiling}",
+    "overCeiling": "Áp dụng cả {count} đề xuất sẽ đưa Token prompt lên {after} / {ceiling}, vượt trần.",
+    "applyAll": "Áp dụng mọi đề xuất chờ duyệt",
+    "applyAllOver": "Vẫn áp dụng mọi đề xuất"
+  },
+  "card": {
+    "title": "Thẻ nhân viên",
+    "back": "Mặt sau",
+    "flip": "Lật thẻ",
+    "issued": "Cấp",
+    "label": "Thẻ nhân viên của {name}",
+    "status": {
+      "pending": "Chờ cấp",
+      "active": "Hiệu lực",
+      "suspended": "Tạm ngưng",
+      "revoked": "Thu hồi",
+      "superseded": "Đã thay",
+      "supersededBy": "Đã thay bằng {id}"
+    }
+  },
+  "birth": {
+    "traitLevel": "Mức {level} trên {max}",
+    "signedBy": "Ký bởi {name}",
+    "sealLabel": "Con dấu: đã ký",
+    "seal": "Đã ký",
+    "unsigned": "Chưa ký — số hồ sơ sẽ có sau khi ký."
+  },
+  "quiet": {
+    "startLabel": "Bắt đầu im lặng",
+    "endLabel": "Kết thúc im lặng",
+    "weekends": "Cả cuối tuần",
+    "now": "Bây giờ {time}",
+    "none": "Không có giờ im lặng.",
+    "summary": "Im lặng từ {start} đến {end} ({hours} giờ)."
+  },
+  "auth": {
+    "login": {
+      "title": "Đăng nhập",
+      "username": "Tên đăng nhập",
+      "password": "Mật khẩu",
+      "submit": "Đăng nhập",
+      "submitting": "Đang đăng nhập…",
+      "language": "Ngôn ngữ",
+      "lockedCountdown": "Thử lại sau {time}.",
+      "version": "Phiên bản {version}"
+    },
+    "changePassword": {
+      "title": "Đặt mật khẩu mới",
+      "intro": "Đây là lần đăng nhập đầu tiên. Mật khẩu ban đầu chỉ dùng một lần — hãy đặt mật khẩu riêng của bạn.",
+      "current": "Mật khẩu hiện tại",
+      "new": "Mật khẩu mới",
+      "newHint": "Dùng một cụm từ dài, dễ nhớ với bạn.",
+      "confirm": "Nhập lại mật khẩu mới",
+      "mismatch": "Hai mật khẩu chưa khớp.",
+      "submit": "Đổi mật khẩu",
+      "submitting": "Đang đổi…",
+      "logout": "Đăng xuất",
+      "done": "Đã đổi mật khẩu."
+    },
+    "session": {
+      "checking": "Đang kiểm tra phiên đăng nhập…"
+    }
+  },
+  "errors": {
+    "unknown": "Đã có lỗi. Thử lại, hoặc xem log nếu lỗi lặp lại.",
+    "network": "Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.",
+    "bad_response": "Máy chủ trả về dữ liệu không đọc được.",
+    "auth": {
+      "required": "Phiên đăng nhập đã hết. Đăng nhập lại để tiếp tục.",
+      "csrf": "Yêu cầu bị từ chối vì phiên không khớp. Tải lại trang rồi thử lại.",
+      "rate_limited": "Thử quá nhiều lần. Chờ một chút rồi thử lại.",
+      "must_change_password": "Cần đổi mật khẩu trước khi tiếp tục.",
+      "invalid_credentials": "Tên đăng nhập hoặc mật khẩu không đúng.",
+      "locked": "Tài khoản tạm khoá do nhập sai nhiều lần.",
+      "weak_password": "Mật khẩu mới chưa đủ mạnh.",
+      "password": {
+        "too_short": "Mật khẩu mới quá ngắn. Dùng một cụm từ dài hơn.",
+        "too_long": "Mật khẩu mới quá dài.",
+        "too_repetitive": "Mật khẩu mới quá lặp. Dùng nhiều ký tự khác nhau hơn.",
+        "contains_username": "Mật khẩu mới không được chứa tên đăng nhập.",
+        "same_as_current": "Mật khẩu mới phải khác mật khẩu hiện tại."
+      }
+    },
+    "recovery": {
+      "blocked": "Hệ thống đang ở chế độ khắc phục. Xử lý Core agent trước khi tiếp tục."
+    },
+    "validation": {
+      "failed": "Dữ liệu chưa hợp lệ. Kiểm tra lại các ô đã nhập."
+    },
+    "not_found": "Không tìm thấy.",
+    "conflict": "Dữ liệu vừa được thay đổi ở nơi khác. Tải lại rồi thử lại.",
+    "internal": "Máy chủ gặp lỗi. Xem log để biết thêm.",
+    "db": {
+      "replace_forbidden": "Mục này đã tồn tại và không được ghi đè.",
+      "immutable_identity": "Danh tính này đã khoá, không sửa được.",
+      "append_only": "Bản ghi này chỉ được thêm, không sửa hay xoá.",
+      "ledger_rule": "Bút toán không hợp lệ với luật của ví.",
+      "tenant_mismatch": "Dữ liệu thuộc workspace khác.",
+      "wounded": "Role đang nghỉ dưỡng thương nên chưa nhận việc mới. Cấp ₲ để hồi phục.",
+      "settings_invalid": "Giá trị cài đặt không hợp lệ.",
+      "core_agent_rule": "Core agent chưa sẵn sàng hoặc loại của nó đang bị khoá. Xử lý Core agent trước.",
+      "character_library": "Nhân vật này không dùng được trong Kho nhân vật.",
+      "fk_violation": "Mục này đang được dùng ở nơi khác hoặc tham chiếu tới mục không còn.",
+      "conflict": "Đã có mục trùng với mục này.",
+      "check_failed": "Giá trị nằm ngoài phạm vi cho phép.",
+      "required": "Thiếu thông tin bắt buộc.",
+      "readonly": "Hệ thống đang ở chế độ chỉ đọc.",
+      "connection_contract": "Kết nối dữ liệu chưa đạt yêu cầu. Xem log.",
+      "rule_violation": "Thao tác này vi phạm một luật của hệ thống."
+    }
+  },
+  "locale": {
+    "short": {
+      "vi": "VI",
+      "en": "EN"
+    },
+    "name": {
+      "vi": "Tiếng Việt",
+      "en": "English"
+    }
+  },
+  "devkit": {
+    "title": "Bộ component",
+    "intro": "Trang xem các component dùng chung với dữ liệu mẫu — chỉ có ở bản dev và bản test.",
+    "section": {
+      "buttons": "Nút",
+      "chips": "Chip trạng thái",
+      "avatars": "Avatar",
+      "kpi": "KPI",
+      "stepper": "Stepper",
+      "banners": "Banner cảnh báo",
+      "empty": "Trạng thái trống",
+      "skeleton": "Skeleton",
+      "dropzone": "Kéo thả tệp",
+      "overlays": "Lớp phủ và thông báo",
+      "log": "Log",
+      "versions": "Phiên bản",
+      "provenance": "Nguồn giá trị",
+      "changeset": "Đề xuất chờ duyệt",
+      "cards": "Thẻ và giấy",
+      "quiet": "Giờ im lặng"
+    },
+    "button": {
+      "primary": "Nút chính",
+      "secondary": "Nút phụ",
+      "ghost": "Nút nhẹ",
+      "danger": "Nút nguy hiểm",
+      "busy": "Đang xử lý",
+      "disabled": "Bị khoá",
+      "iconOnly": "Nút chỉ có icon"
+    },
+    "banner": {
+      "warnTitle": "Cảnh báo",
+      "warnBody": "Một việc cần bạn chú ý.",
+      "infoBody": "Thông tin chung cho bạn.",
+      "dangerBody": "Vùng này đang gặp lỗi.",
+      "ackLabel": "Tôi hiểu và tự chịu trách nhiệm cho tài khoản này"
+    },
+    "kpi": {
+      "roles": "Role đang chạy",
+      "tokens": "Token prompt",
+      "wallet": "Ví kho bạc",
+      "sparkLabel": "xu hướng 7 ngày: tăng nhẹ",
+      "rolesNote": "+1 so với hôm qua"
+    },
+    "stepper": {
+      "download": "Tải bản mới",
+      "migrate": "Chạy migration",
+      "restart": "Khởi động lại",
+      "verify": "Kiểm sức khoẻ",
+      "rollback": "Chạy lại bản cũ",
+      "label": "Các bước cập nhật"
+    },
+    "empty": {
+      "title": "Chưa có gì ở đây.",
+      "body": "Thêm mục đầu tiên để bắt đầu.",
+      "cta": "Thêm mục đầu tiên"
+    },
+    "dropzone": {
+      "target": "Kho tri thức của Mai"
+    },
+    "overlay": {
+      "toastOk": "Đã lưu cấu hình",
+      "toastWarn": "Mai quay về CLI ưu tiên 1",
+      "toastDanger": "Không gọi được dịch vụ",
+      "toastDetail": "EN-0004 → EN-0003 · cửa sổ 5 giờ đã reset",
+      "toastAction": "Xem EV-8842",
+      "confirm": "Thu hồi thẻ…",
+      "confirmTitle": "Thu hồi thẻ nhân viên của Mai?",
+      "confirmLabel": "Thu hồi thẻ",
+      "consequence1": "Mai ngừng nhận việc mới ngay lập tức.",
+      "consequence2": "Vốn 1.000 ₲ vẫn giữ trong ví của Mai.",
+      "consequence3": "Thẻ CD-0004 chuyển sang trạng thái thu hồi, không khôi phục được.",
+      "palette": "Mở bảng lệnh",
+      "notifications": "Mở thông báo",
+      "shortcuts": "Mở bảng phím tắt",
+      "modal": "Mở modal",
+      "modalTitle": "Một modal đơn giản",
+      "modalBody": "Nội dung modal. Esc hoặc nút đóng để thoát.",
+      "confirmed": "Đã xác nhận (bản demo, không làm gì)"
+    },
+    "log": {
+      "label": "Log mẫu"
+    },
+    "versions": {
+      "label": "Lịch sử phiên bản của Mai"
+    },
+    "provenance": {
+      "owner": "Mai",
+      "ai": "ấm áp, ngắn gọn",
+      "system": "DN-0026"
+    },
+    "card": {
+      "position": "Chăm sóc khách hàng",
+      "term": "Giờ làm",
+      "termValue": "08:00–17:00",
+      "state": "Trạng thái thẻ"
+    },
+    "birth": {
+      "title": "Giấy khai sinh",
+      "identity": "Danh tính",
+      "name": "Tên gọi",
+      "tone": "Giọng điệu",
+      "dna": "Mã DNA",
+      "traits": "Tính cách",
+      "patience": "Kiên nhẫn",
+      "high": "cao"
+    }
+  }
+}
