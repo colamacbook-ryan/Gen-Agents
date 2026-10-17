@@ -179,6 +179,17 @@ describe.skipIf(!enabled)('DataGrid — tương tác trong Chromium thật', { t
     await page.click('button.ga-fb-btn >> text=Huỷ');
     await ta.waitFor({ state: 'detached' });
     expect((await h(page)).updates).toHaveLength(1);
+    // ⌘/Ctrl+S trong editor cũng lưu ô (không mở hộp thoại Lưu của trình duyệt)
+    await page.click('button.ga-fb-btn >> text=Mở editor');
+    await ta.waitFor();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' Không dùng emoji.');
+    await page.keyboard.press('Control+s');
+    await ta.waitFor({ state: 'detached' });
+    expect((await h(page)).updates.at(-1)).toMatchObject({ id: 'IN-0005', column: 'content', reason: null });
+    expect((await rowOf(page, 'IN-0005'))?.content).toBe(
+      'Xưng "em", gọi "anh".\nCâu ngắn, thẳng, ấm. Không rào đón, không xin lỗi thừa. Không dùng emoji.',
+    );
     expect(errors).toEqual([]);
   });
 
