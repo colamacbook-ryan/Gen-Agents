@@ -491,7 +491,8 @@ export const GW_21 = gw({
   id: 'GW-21',
   method: 'GET',
   path: '/roles/{roleRef}/compiled-prompt',
-  auth: 'V',
+  // Prompt đã biên dịch = DNA + trí nhớ + tri thức nguyên văn ⇒ A (review PR #7, round 6): viewer không cần đọc; fail-closed.
+  auth: 'A',
   o4: 'blocked',
   request: {
     params: z.strictObject({ roleRef: Ref('RL') }),

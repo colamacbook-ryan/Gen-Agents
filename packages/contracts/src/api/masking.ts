@@ -49,6 +49,21 @@ export const V_MASKED_FIELDS = {
     flags: ['.redacted'],
     note: 'Như WRK-34; `chain` / `recalls` chỉ mang ID nên giữ nguyên.',
   },
+  'SYS-42': {
+    fields: ['.items[].before', '.items[].after'],
+    flags: ['.items[].redacted'],
+    note: 'Mục diff thuộc lớp nhạy cảm (DNA nhạy cảm, trí nhớ / tri thức `confidential`, nội dung `house_rules` nếu DB coi là confidential): `before = after = null`; `path`, `isCore` vẫn hiện để viewer biết CÓ thay đổi.',
+  },
+  'SYS-26': {
+    fields: ['.reason', '.items[].before', '.items[].after'],
+    flags: ['.redacted', '.items[].redacted'],
+    note: 'Như SYS-42 cho từng mục của change set (`target`, `op`, `field` vẫn hiện); `reason` (lời giải thích của AI) che ở mức change set (`redacted`).',
+  },
+  'SYS-25': {
+    fields: ['.items[].reason'],
+    flags: ['.items[].redacted'],
+    note: '`reason` của change set (AI có thể trích DNA / trí nhớ): viewer nhận `""`; tiêu đề, trạng thái, token vẫn hiện.',
+  },
   'OPS-02': {
     fields: ['.settings[].value', '.settings[].default|0.value'],
     flags: ['.settings[].redacted'],

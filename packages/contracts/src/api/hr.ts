@@ -392,7 +392,11 @@ export const SYS_42 = hr({
   },
   response: ok(
     z.strictObject({
-      items: list(z.strictObject({ path: str(256, 1), before: Json, after: Json, isCore: z.boolean() }), 500),
+      // Viewer: `before` / `after` của mục thuộc lớp nhạy cảm bị che (V_MASKED_FIELDS, HANDLER-OBLIGATIONS #5).
+      items: list(
+        z.strictObject({ path: str(256, 1), before: Json, after: Json, isCore: z.boolean(), redacted: Redacted }),
+        500,
+      ),
     }),
   ),
   cli: ['role diff'],
@@ -1048,7 +1052,8 @@ export const SYS_72 = hr({
   id: 'SYS-72',
   method: 'GET',
   path: '/trial-runs/{trialRunRef}',
-  auth: 'V',
+  // Ca thử (prompt / kỳ vọng / kết quả của AI) có thể trích DNA, trí nhớ ⇒ A (review PR #7, round 6; quét hệ thống tìm ra).
+  auth: 'A',
   o4: 'blocked',
   request: { params: z.strictObject({ trialRunRef: Ref('TR') }) },
   // DB `trial_runs.status` dùng `pending`; hợp đồng dùng `queued` (đặc tả §3.3) — L-HR ánh xạ.
