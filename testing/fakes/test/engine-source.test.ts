@@ -33,7 +33,7 @@ const setScenario = (s: FakeEngineSource, body: unknown) =>
 function asStatus(o: InstallOutcome): EngineInstallStatus {
   return EngineInstallStatus.parse(
     o.state === 'installed'
-      ? { state: 'installed', version: o.version, installedAt: '2026-10-16T00:00:00Z' }
+      ? { state: 'installed', version: o.version, installedAt: '2026-10-16T00:00:00.000Z' }
       : { state: 'failed', reason: o.reason, detail: o.detail },
   );
 }
