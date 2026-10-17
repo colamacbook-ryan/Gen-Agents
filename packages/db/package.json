@@ -9,7 +9,10 @@
     ".": "./src/index.ts",
     "./connection": "./src/connection.ts",
     "./runner": "./src/runner/index.ts",
-    "./schema": "./src/generated/schema.ts"
+    "./schema": "./src/generated/schema.ts",
+    "./repos": "./src/repos/index.ts",
+    "./fake": "./src/repos/fake/index.ts",
+    "./ids": "./src/ids/index.ts"
   },
   "scripts": {
     "test": "node ../../scripts/vitest-run.mjs"
