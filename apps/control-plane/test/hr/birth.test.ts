@@ -91,6 +91,41 @@ describe('SYS-39 xác nhận field AI suy ra', () => {
   });
 });
 
+describe('SYS-39 — người duyệt ≠ người đề xuất', () => {
+  it('admin tự đề xuất field "AI suy ra" rồi tự xác nhận qua SYS-39 ⇒ 403 self_approval; không đổi gì', async () => {
+    const role = mkRole(t);
+    const adminActor = t.world.tenants.A.users.admin.actorId;
+    const f = t.world.store.write(adminActor, (tx) => {
+      const def = tx.dna.defs().find((d) => d.key === 'style.tone');
+      if (def === undefined) throw new Error('def');
+      tx.changeSets.propose({
+        scope: 'role',
+        roleId: role.id,
+        title: 'admin tự đề xuất',
+        items: [
+          {
+            target: 'dna',
+            op: 'create',
+            defId: def.id,
+            valueJson: '"x"',
+            tokenCount: 1,
+            tokenizer: 'test',
+            source: 'ai_inferred',
+          },
+        ],
+      });
+      return tx.dna.fields(role.id, { status: 'proposed' })[0];
+    });
+    const res = await as('A.admin').call('SYS-39', { params: { roleRef: role.id }, body: { all: true } });
+    expect(res.status).toBe(403);
+    expect(res.detail).toMatchObject({ reason: 'self_approval' });
+    expect(ownerWrite(t, (tx) => tx.dna.field(f?.id as string))?.status).toBe('proposed');
+    // owner (người khác) duyệt được
+    const ok = await as('A.owner').call('SYS-39', { params: { roleRef: role.id }, body: { all: true } });
+    expect(ok.json).toEqual({ confirmed: 1, inferredPending: 0 });
+  });
+});
+
 describe('SYS-40 ký giấy khai sinh', () => {
   it('đủ điều kiện ⇒ cấp số hồ sơ GA-xxxx-nnnn, Role "ra đời"; ký lại ⇒ 409; số hồ sơ tăng dần', async () => {
     const r1 = mkRole(t);
