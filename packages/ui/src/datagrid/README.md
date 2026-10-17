@@ -55,7 +55,7 @@ Hàng ngoài màn / chưa tải ⇒ hỏi `source.locate`; nhóm thu gọn / c�
 
 - Stylesheet là constructable (`adoptedStyleSheets`), style động qua CSSOM — không thẻ `<style>`, không `style="…"` trong HTML.
 - Màu / font là biến `--ga-*` tên trung tính (mặc định = token tối STD-07 §8): `--ga-bg-surface`, `--ga-bg-raised`,
-  `--ga-bg-sunken`, `--ga-bg-frozen`, `--ga-border-subtle`, `--ga-border-strong`, `--ga-text-primary|secondary|muted`,
+  `--ga-bg-sunken`, `--ga-bg-grid-id`, `--ga-bg-hover`, `--ga-border-subtle`, `--ga-border-strong`, `--ga-text-primary|secondary|muted`,
   `--ga-accent`, `--ga-accent-soft`, `--ga-on-accent`, `--ga-ok`, `--ga-danger`, `--ga-idle`, `--ga-font-sans|mono`.
 - `@ga/contracts` dùng zod 4: ứng dụng chủ phải gọi `z.config({ jitless: true })` TRƯỚC khi nạp `@ga/contracts` / `@ga/ui`
   (zod dò `new Function` ⇒ vi phạm `script-src` dù bị bắt) — xem `test/browser/zod-jitless.ts`.

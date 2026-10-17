@@ -39,7 +39,7 @@ const latency = Number(params.get('latency') ?? 0);
 
 const page = new CSSStyleSheet();
 page.replaceSync(
-  'html,body{margin:0;background:#111012;color:#eceae6;font-family:system-ui,sans-serif}h1{font-size:13px;margin:8px 16px}a{color:#e8a33d}' +
+  'html{color-scheme:dark}html,body{margin:0;background:#111012;color:#eceae6;font-family:system-ui,sans-serif}h1{font-size:13px;margin:8px 16px}a{color:#e8a33d}' +
     '#root{box-sizing:border-box;padding:16px;height:640px;width:1280px;display:flex;flex-direction:column}' +
     '#after{margin:16px}',
 );
