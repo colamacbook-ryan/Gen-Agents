@@ -33,9 +33,21 @@ const seedRole: CrossTenantSeeder = ({ world, tenant }) => {
   return { id: row.id, displayId: row.display_id };
 };
 
+/** Thread chat của AI Hệ thống (trợ lý — không cần Role) — SYS-18 / 20 / 22. */
+const seedThread: CrossTenantSeeder = ({ world, tenant }) => {
+  const n = ++seq;
+  const row = world.store.write(
+    tenant.users.owner.actorId,
+    (tx) => tx.chat.openThread({ kind: 'assistant', agent: 'assistant', title: `Seed ${tenant.key} ${n}` }),
+    { channel: 'web' },
+  );
+  return { id: row.id, displayId: row.display_id };
+};
+
 /** prefix → seeder. Thêm ở đây (một dòng / prefix) khi route có Ref của prefix mới được mount. */
 export const CROSS_TENANT_SEEDERS: Readonly<Partial<Record<EntityPrefix, CrossTenantSeeder>>> = Object.freeze({
   RL: seedRole,
+  TH: seedThread,
 });
 
 /** Prefix dùng để chứng minh cho Ref `'*'` (OPS-35 recordRef: mọi prefix) — prefix đầu có seeder. */

@@ -14,10 +14,9 @@ const route = (id: string) => {
   return r;
 };
 
-// Handler tối thiểu cho một route `o4 = core` (GW-15) và một route `blocked` (SYS-16) — chỉ để kiểm guard với provider thật.
+// Handler tối thiểu cho một route `o4 = core` (GW-15) — chỉ để kiểm guard với provider thật; SYS-16 (blocked) là handler thật.
 const probeHandlers = [
   defineHandler('GW-15', () => ({ probe: { id: '01J00000000000000000000000', displayId: 'PB-0001' } }) as never),
-  defineHandler('SYS-16', () => ({ items: [], nextCursor: null })),
 ];
 
 beforeAll(() => {
