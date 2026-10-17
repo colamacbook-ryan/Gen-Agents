@@ -133,7 +133,7 @@ const MUTANTS = [
     edits: [
       [
         '  private purge(nowMs: number): void {\n',
-        '  private purge(nowMs: number): void {\n    for (const [k, e] of [...this.entries]) if (e.expiresAt <= nowMs) this.remove(k, e);\n',
+        '  private purge(nowMs: number): void {\n    for (const [k, e] of this.entries) if (e.expiresAt <= nowMs) this.remove(k, e);\n',
       ],
     ],
   },
