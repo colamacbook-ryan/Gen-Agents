@@ -8,7 +8,18 @@ import {
   schemaViolations,
   secretFieldsOf,
 } from '../../src/api/introspect.ts';
-import { Json, ROUTES, routeById, SecretInput, SseEvent, secretKindOf, str } from '../../src/index.ts';
+import {
+  Json,
+  LogLineEvent,
+  NewSseEvent,
+  ROUTES,
+  routeById,
+  SecretInput,
+  SSE_EVENT_TYPES,
+  SseEvent,
+  secretKindOf,
+  str,
+} from '../../src/index.ts';
 
 // Contract test bảo mật (BACKEND-TRIAL §3.1 test 2; rà soát bảo mật 2026-10-17):
 //   - secret chỉ nằm trong BODY, không route GET nào nhận secret, mọi field secret có kiểu SecretInput;
@@ -277,13 +288,30 @@ describe('trần độ dài, strict, không any / unknown', () => {
     expect(Json.safeParse({ ok: [1, 'x', null, true, { a: 1 }] }).success).toBe(true);
   });
 
-  it('sự kiện SSE không mang token / vé / secret (mọi khoá của 26 loại)', () => {
-    const NAME = /token|ticket|password|secret|apikey|credential(?!\.blocked)/i;
-    const nodes: SchemaNode[] = [];
-    for (const o of SseEvent.options) nodes.push(...collectNodes(o));
-    for (const n of nodes) {
-      if (n.key === null) continue;
-      expect(NAME.test(n.key), `SSE khoá ${n.key}`).toBe(false);
+  it('sự kiện SSE không mang token / vé / secret: quét ĐỦ 26 loại (13 có sẵn + 12 mới + log.line), mọi khoá', () => {
+    const NAME = /token|ticket|password|secret|apikey|credential/i;
+    // Ngoại lệ DUY NHẤT (khoá, không phải giá trị): `tokenDelta` của changeset.state là hiệu SỐ token của prompt (số nguyên), không phải token xác thực.
+    const EXCEPTIONS: Record<string, string> = { tokenDelta: 'changeset.state: chênh lệch số token prompt, kiểu int' };
+    const events = [...SseEvent.options, ...NewSseEvent.options, LogLineEvent] as unknown as z.ZodType[];
+    expect(events.length, 'số loại sự kiện quét').toBe(26);
+    const typesSeen = new Set<string>();
+    const exceptionsUsed = new Set<string>();
+    for (const e of events) {
+      const nodes = collectNodes(e);
+      const type = nodes.find((n) => n.path === '$.type');
+      const literal = type?.schema as unknown as { _zod: { def: { values: string[] } } } | undefined;
+      typesSeen.add(String(literal?._zod.def.values[0]));
+      for (const n of nodes) {
+        if (n.key === null || !NAME.test(n.key)) continue;
+        expect(Object.keys(EXCEPTIONS), `SSE khoá ${n.key} nhạy cảm, không có ngoại lệ`).toContain(n.key);
+        expect(
+          nodes.some((x) => x.path === n.path && x.type === 'number'),
+          `${n.key}: ngoại lệ chỉ cho kiểu số`,
+        ).toBe(true);
+        exceptionsUsed.add(n.key);
+      }
     }
+    expect([...typesSeen].sort()).toEqual([...SSE_EVENT_TYPES].sort());
+    expect([...exceptionsUsed], 'ngoại lệ thừa').toEqual(Object.keys(EXCEPTIONS));
   });
 });

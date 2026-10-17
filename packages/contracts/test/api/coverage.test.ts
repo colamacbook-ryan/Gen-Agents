@@ -52,7 +52,7 @@ describe('độ phủ FRONTEND-SPEC §3.11', () => {
     expect(() => expandIds('SYS-09..01')).toThrow();
     expect(FS_COVERAGE.G2.length).toBe(20);
     expect(FS_COVERAGE.A6.length).toBe(13);
-    expect(FS_COVERAGE.O4.length).toBe(25);
+    expect(FS_COVERAGE.O4.length).toBe(24); // 25 trong đặc tả − SYS-78 (M5: resume không mở khi recovery)
     expect(FS_COVERAGE.A3.length).toBe(17);
     expect(FS_COVERAGE.A10.length).toBe(16);
   });
@@ -121,7 +121,16 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
   const query = (r: typeof rows) => (r.request.query as unknown as { shape: Record<string, z.ZodType> }).shape;
 
   it('OPS-33: q, view, sort, cols, group, cursor, limit ≤ 500 — keyset, không OFFSET', () => {
-    expect(Object.keys(query(rows)).sort()).toEqual(['cols', 'cursor', 'group', 'limit', 'q', 'sort', 'view']);
+    expect(Object.keys(query(rows)).sort()).toEqual([
+      'cols',
+      'cursor',
+      'group',
+      'limit',
+      'offset',
+      'q',
+      'sort',
+      'view',
+    ]);
     const q = rows?.request.query as z.ZodType;
     const parsed = q.parse({
       q: 'role:Mai status:active tokens>200',
@@ -139,7 +148,8 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
     expect(parsed.limit).toBe(500);
     expect(GRID_PAGE_MAX).toBe(500);
     expect(q.safeParse({ limit: '501' }).success).toBe(false);
-    expect(q.safeParse({ offset: '10' }).success).toBe(false);
+    // `offset` (round 4) là CHẾ ĐỘ TRUY CẬP NGẪU NHIÊN có trần; chi tiết ở nhóm test OPS-33 random access bên dưới.
+    expect(q.safeParse({ offset: '10' }).success).toBe(true);
     expect(q.safeParse({ page: '2' }).success).toBe(false);
     expect(q.safeParse({ sort: 'a,b,c,d' }).success).toBe(false);
     expect(q.safeParse({ sort: '-Bad Column' }).success).toBe(false);
@@ -163,6 +173,7 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
       'groups',
       'items',
       'nextCursor',
+      'start',
       'total',
     ]);
     const ok = {
@@ -173,9 +184,11 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
           state: 'proposed',
           supersededBy: null,
           cells: { status: 'active', tokens: 120 },
+          redacted: false,
         },
       ],
       nextCursor: null,
+      start: 0,
       total: 1,
       footer: { sum_tokens: 120, count: 1 },
       clauses: [
@@ -190,7 +203,10 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
       expect(GridRowsPage.safeParse({ ...ok, items: [{ ...ok.items[0], state }] }).success, state).toBe(true);
     }
     expect(GridRowsPage.safeParse({ ...ok, items: [{ ...ok.items[0], state: 'deleted' }] }).success).toBe(false);
-    expect(GridRowsPage.safeParse({ ...ok, total: null, groups: null }).success).toBe(true);
+    expect(GridRowsPage.safeParse({ ...ok, groups: null }).success).toBe(true);
+    // `total` và `start` là số chính xác (lưới ảo hoá cần để dựng thanh cuộn) — không còn null.
+    expect(GridRowsPage.safeParse({ ...ok, total: null }).success).toBe(false);
+    expect(GridRowsPage.safeParse({ ...ok, start: undefined }).success).toBe(false);
     expect(GridRowsPage.safeParse({ ...ok, items: Array(501).fill(ok.items[0]) }).success).toBe(false);
     expect(GridRowsPage.safeParse({ ...ok, extra: 1 }).success).toBe(false);
   });

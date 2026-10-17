@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { collectNodes } from '../../src/api/introspect.ts';
 import {
+  accessLevelToAuth,
   anchorEntityPrefix,
   classifyRef,
   ENTITY_TYPES,
@@ -22,7 +24,7 @@ import {
 // Review bảo mật PR #7 (H5): route đọc TỔNG QUÁT (OPS-33/34/35/36, SYS-23, lưới) phải tôn trọng mức đọc của TỪNG loại bản ghi.
 
 const PREFIXES = Object.keys(ENTITY_TYPES) as EntityPrefix[];
-const GENERIC_READERS = ['OPS-33', 'OPS-34', 'OPS-35', 'OPS-36', 'SYS-23'] as const;
+const GENERIC_READERS = ['OPS-33', 'OPS-34', 'OPS-35', 'OPS-36', 'OPS-37', 'SYS-23'] as const;
 
 describe('RECORD_ACCESS: quét MỌI prefix của ENTITY_TYPES (không mặc định)', () => {
   it('có đúng mọi prefix, mỗi prefix một mức hợp lệ — thiếu prefix là đỏ', () => {
@@ -183,5 +185,40 @@ describe('route đọc tổng quát không lộ bản ghi deny', () => {
       MemberView.safeParse({ id: '01JABCDEFGHJKMNPQRSTVWXYZ0', displayId: 'US-0001', name: 'A', email: 'a@b.c' })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('accessLevelToAuth (L1, fail-closed)', () => {
+  const SQL = readFileSync(new URL('../../../../db/spec/schema_v2_2.sql', import.meta.url), 'utf8');
+  const dbLevels = (() => {
+    const start = SQL.indexOf('CREATE TABLE workspace_members (');
+    const m = /access_level TEXT[^\n]*CHECK \(access_level IN \(([^)]*)\)\)/.exec(
+      SQL.slice(start, SQL.indexOf('\n);', start)),
+    );
+    return [...(m?.[1] ?? '').matchAll(/'([^']+)'/g)].map((x) => x[1] as string);
+  })();
+
+  it('quét MỌI giá trị của CHECK ở DB: owner → O, admin → A, viewer → V, operator → null', () => {
+    expect([...dbLevels].sort()).toEqual(['admin', 'operator', 'owner', 'viewer']);
+    const got = Object.fromEntries(dbLevels.map((l) => [l, accessLevelToAuth(l)]));
+    expect(got).toEqual({ owner: 'O', admin: 'A', operator: null, viewer: 'V' });
+  });
+
+  it('giá trị lạ, rỗng, sai hoa thường, không phải chuỗi ⇒ null (không làm tròn)', () => {
+    for (const v of [
+      '',
+      'Owner',
+      'OWNER',
+      'root',
+      'superadmin',
+      ' admin',
+      'viewer\n',
+      null,
+      undefined,
+      0,
+      {},
+      ['owner'],
+    ])
+      expect(accessLevelToAuth(v), String(v)).toBeNull();
   });
 });

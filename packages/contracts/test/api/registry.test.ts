@@ -34,22 +34,22 @@ const ids = (...parts: string[]) =>
   });
 
 describe('registry — số lượng và định danh', () => {
-  it('201 route = 196 M2 + 5 EXT; đúng số route mỗi lane', () => {
-    expect(ROUTES.length).toBe(201);
-    expect(M2_ROUTES.length).toBe(196);
+  it('202 route = 197 M2 (196 theo đặc tả + OPS-37 locate của round 4) + 5 EXT; đúng số route mỗi lane', () => {
+    expect(ROUTES.length).toBe(202);
+    expect(M2_ROUTES.length).toBe(197);
     const count = (lane: string) => ROUTES.filter((r) => r.lane === lane).length;
     expect(count('L-SYS')).toBe(35);
     expect(count('L-HR')).toBe(50);
     expect(count('L-GW')).toBe(32);
     expect(count('L-WORK')).toBe(43);
-    expect(count('L-OPS')).toBe(36);
+    expect(count('L-OPS')).toBe(37);
     expect(count('L-SEC')).toBe(4);
     expect(count('L-RT')).toBe(1);
     expect(LANES.length).toBe(7);
   });
 
-  it('đủ mọi ID của đặc tả: SYS-01…85, GW-01…32, WRK-01…43, OPS-01…36, EXT-01…05', () => {
-    const want = [...ids('SYS-01..85', 'GW-01..32', 'WRK-01..43', 'OPS-01..36', 'EXT-01..05')];
+  it('đủ mọi ID của đặc tả: SYS-01…85, GW-01…32, WRK-01…43, OPS-01…37, EXT-01…05', () => {
+    const want = [...ids('SYS-01..85', 'GW-01..32', 'WRK-01..43', 'OPS-01..37', 'EXT-01..05')];
     expect([...ROUTES.map((r) => r.id)].sort()).toEqual([...want].sort());
   });
 
@@ -124,7 +124,7 @@ describe('registry — tham số đường dẫn, method, body', () => {
       ROUTES.filter((r) => r.noCli)
         .map((r) => r.id)
         .sort(),
-    ).toEqual(['SYS-62', 'WRK-04']);
+    ).toEqual(['OPS-37', 'SYS-62', 'WRK-04']);
     expect(routeById('SYS-62')?.pendingDb).toBe(true);
     expect(ROUTES.filter((r) => r.pendingDb).map((r) => r.id)).toEqual(['SYS-62']);
   });
@@ -150,7 +150,9 @@ describe('registry — quyền', () => {
       'SYS-11',
       'SYS-36',
       'SYS-79',
-      // GW-07, GW-08: nâng từ A lên O (rà soát bảo mật 2026-10-17); GW-11…14 theo đặc tả.
+      // GW-07, GW-08: nâng từ A lên O (rà soát bảo mật 2026-10-17); GW-11…14 theo đặc tả; GW-03/04, OPS-14: mọi update / pin = owner.
+      'GW-03',
+      'GW-04',
       'GW-07',
       'GW-08',
       'GW-11',
@@ -166,6 +168,7 @@ describe('registry — quyền', () => {
       'WRK-12',
       'OPS-10',
       'OPS-11',
+      'OPS-14',
       'OPS-15',
       'OPS-30',
       'OPS-31',
@@ -258,7 +261,7 @@ describe('registry — quyền', () => {
 
 describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
   const OPEN = [
-    ...ids('SYS-08..13', 'SYS-14', 'SYS-15', 'SYS-77', 'SYS-78', 'SYS-81..85', 'SYS-06'),
+    ...ids('SYS-08..13', 'SYS-14', 'SYS-15', 'SYS-77', 'SYS-81..85', 'SYS-06'),
     ...ids('GW-01', 'GW-02', 'GW-18', 'GW-25'),
     ...ids('WRK-09', 'WRK-14'),
     ...ids('OPS-01', 'OPS-12..16', 'OPS-19', 'OPS-20..25'),
@@ -289,6 +292,15 @@ describe('registry — chế độ khắc phục O4 (RecoveryGuard)', () => {
         .sort(),
     ).toEqual([...SETUP].sort());
     for (const r of ROUTES) if (r.setupOnly) expect(r.recovery, r.id).toBe(false);
+  });
+
+  it('suspend mở khi recovery (công tắc dừng), resume thì không (khởi động lại container có credential)', () => {
+    const suspend = routeById('SYS-77');
+    const resume = routeById('SYS-78');
+    expect(suspend?.recovery).toBe(true);
+    expect(resume?.recovery).toBe(false);
+    expect(resume && recoveryDecision(resume, { isCoreAgentAccount: true })).toBe('blocked');
+    expect(resume && recoveryDecision(resume, { isCoreAgentAccount: false })).toBe('blocked');
   });
 
   it('recoveryDecision: ✗ luôn chặn; ✓ cho qua; ✓* chỉ với tài khoản Core agent', () => {

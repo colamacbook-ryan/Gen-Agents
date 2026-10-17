@@ -77,13 +77,26 @@ export interface RequestSpec {
   headers?: z.ZodType;
   /** `multipart` = body là các phần form (tệp + trường văn bản của `body`). Mặc định `json`. */
   bodyKind?: 'json' | 'multipart';
+  /**
+   * Kiểm CHÉO các phần của request sau khi từng phần đã qua schema (vd `cols` của query phải thuộc whitelist của lưới trong
+   * `params`). Trả về danh sách vi phạm (rỗng = hợp lệ); mỗi vi phạm là một `400 query.invalid` / `validation`. Hàm thuần,
+   * không I/O. `requestSchemaOf` gắn nó vào schema tổng nên test và edge dùng chung một nguồn.
+   */
+  refine?: (req: RequestParts) => readonly string[];
+}
+
+/** Các phần request đã qua schema (đầu ra, sau transform). */
+export interface RequestParts {
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly query: Readonly<Record<string, unknown>>;
+  readonly body: unknown;
 }
 
 export type ResponseSpec =
   | { kind: 'json'; status: 200 | 201 | 202; schema: z.ZodType; noStore: boolean }
   | { kind: 'empty'; status: 204 }
   | { kind: 'sse'; events: z.ZodType }
-  | { kind: 'csv' }
+  | { kind: 'csv'; formulaEscape: true; maxRows: number; streamed: true }
   | { kind: 'binary'; contentType: 'application/octet-stream' }
   | { kind: 'ws'; client: z.ZodType; server: z.ZodType };
 
@@ -120,7 +133,38 @@ export const okNoStore = <S extends z.ZodType>(schema: S): JsonResponse<S, 200> 
 });
 export const noContent = (): { kind: 'empty'; status: 204 } => ({ kind: 'empty', status: 204 });
 export const sse = <E extends z.ZodType>(events: E): { kind: 'sse'; events: E } => ({ kind: 'sse', events });
-export const csv = (): { kind: 'csv' } => ({ kind: 'csv' });
+/**
+ * Xuất `text/csv` + header `X-Content-SHA256`. BẮT BUỘC khai `formulaEscape: true` (mọi ô văn bản đi qua `csvCell`, chống CSV /
+ * formula injection — review bảo mật PR #7, L3) và `maxRows` (trần số hàng; vượt ⇒ cắt kèm dòng báo, không buffer vô hạn). Luôn
+ * `streamed`: handler ghi theo luồng (đọc dòng từ connection chỉ đọc → ghi ngay), KHÔNG gom cả tệp vào bộ nhớ.
+ */
+export const csv = (opts: {
+  formulaEscape: true;
+  maxRows: number;
+}): { kind: 'csv'; formulaEscape: true; maxRows: number; streamed: true } => {
+  if (!Number.isInteger(opts.maxRows) || opts.maxRows < 1) throw new Error('csv: maxRows phải là số nguyên dương');
+  return { kind: 'csv', formulaEscape: opts.formulaEscape, maxRows: opts.maxRows, streamed: true };
+};
+
+const CSV_FORMULA_START = /^(?:[\t\r]|[ ]*[=+\-@])/;
+
+/**
+ * Một ô CSV. Ô VĂN BẢN: bắt đầu bằng `=` `+` `-` `@` (sau khoảng trắng đầu) hoặc tab / CR ⇒ thêm tiền tố `'` (Excel / Sheets không
+ * chạy công thức), rồi bọc ngoặc kép đầy đủ (`"` → `""`, nên dấu phẩy / xuống dòng trong ô an toàn). Ô SỐ giữ nguyên (`-500` là
+ * số, không phải công thức); `null` / `undefined` / số không hữu hạn ⇒ ô rỗng.
+ */
+export function csvCell(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  const text = CSV_FORMULA_START.test(value) ? `'${value}` : value;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+/** Một dòng CSV (kết thúc CRLF). */
+export function csvRow(cells: readonly (string | number | boolean | null | undefined)[]): string {
+  return `${cells.map(csvCell).join(',')}\r\n`;
+}
 export const binary = (): { kind: 'binary'; contentType: 'application/octet-stream' } => ({
   kind: 'binary',
   contentType: 'application/octet-stream',
@@ -131,6 +175,8 @@ export const ws = <C extends z.ZodType, S extends z.ZodType>(
 ): { kind: 'ws'; client: C; server: S } => ({ kind: 'ws', client, server });
 
 /** Đầu vào khai báo một route ở tệp lane. */
+export type RouteScope = 'workspace' | 'self';
+
 export interface RouteInput<Q extends RequestSpec, S extends ResponseSpec> {
   /** `SYS-01`, `GW-12`, `EXT-05`… — duy nhất toàn registry. */
   id: string;
@@ -172,6 +218,11 @@ export interface RouteInput<Q extends RequestSpec, S extends ResponseSpec> {
   cliOnly?: string;
   /** Chưa có nguồn dữ liệu ở DB (T8: SYS-62). */
   pendingDb?: boolean;
+  /**
+   * `self` = dữ liệu của RIÊNG người gọi (lọc `user_id = người dùng của phiên`, HANDLER-OBLIGATIONS #7): route không nhận
+   * tham số chọn người dùng khác, và owner / admin cũng không đọc hộ người khác. Mặc định `workspace`.
+   */
+  scope?: RouteScope;
 }
 
 export interface RouteDraft<Q extends RequestSpec = RequestSpec, S extends ResponseSpec = ResponseSpec> {
@@ -201,6 +252,7 @@ export interface RouteDraft<Q extends RequestSpec = RequestSpec, S extends Respo
   readonly noCli?: string;
   readonly cliOnly?: string;
   readonly pendingDb: boolean;
+  readonly scope: RouteScope;
 }
 
 /** Route đã vào registry: thêm `fs` (mã màn / thành phần FRONTEND-SPEC) dẫn xuất từ bảng §3.11 (`coverage.ts`). */
@@ -222,7 +274,7 @@ export function expectedLane(id: string): Lane | null {
     case 'WRK':
       return n >= 1 && n <= 43 ? 'L-WORK' : null;
     case 'OPS':
-      return n >= 1 && n <= 36 ? 'L-OPS' : null;
+      return n >= 1 && n <= 37 ? 'L-OPS' : null;
     case 'EXT':
       return n >= 1 && n <= 4 ? 'L-SEC' : n === 5 ? 'L-RT' : null;
     default:
@@ -273,6 +325,7 @@ export function defineLane(lane: Lane) {
       ...(input.noCli ? { noCli: input.noCli } : {}),
       ...(input.cliOnly ? { cliOnly: input.cliOnly } : {}),
       pendingDb: input.pendingDb ?? false,
+      scope: input.scope ?? 'workspace',
     };
   };
 }

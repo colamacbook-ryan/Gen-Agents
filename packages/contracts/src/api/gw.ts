@@ -133,9 +133,21 @@ export const GW_03 = gw({
   id: 'GW-03',
   method: 'PUT',
   path: '/engines/{engineSlug}/pin',
-  auth: 'A',
+  // Ghim phiên bản CLI hãng chạy trong container của mọi Role ⇒ owner (Gen: mọi update / pin = owner).
+  // Dịch vụ KHÔNG nội suy slug / version vào shell: chỉ dùng EXEC_ARGV cố định (HANDLER-OBLIGATIONS #16).
+  auth: 'O',
   o4: 'blocked',
-  request: { params: EngineParams, body: z.strictObject({ version: str(64, 1).nullable() }) },
+  request: {
+    params: EngineParams,
+    body: z.strictObject({
+      // Chỉ ký tự của semver / tag (không khoảng trắng, không ký tự shell); `null` = bỏ ghim.
+      version: z
+        .string()
+        .regex(/^[0-9A-Za-z.+-]{1,64}$/)
+        .meta({ example: '1.2.3' })
+        .nullable(),
+    }),
+  },
   response: ok(EngineRow),
   cli: ['engines pin'],
 });
@@ -144,7 +156,9 @@ export const GW_04 = gw({
   id: 'GW-04',
   method: 'POST',
   path: '/engines/{engineSlug}/update',
-  auth: 'A',
+  // Cập nhật CLI hãng = chạy mã mới trong container có credential ⇒ owner (Gen: mọi update / pin = owner). Slug chỉ đi qua
+  // EXEC_ARGV, không vào shell (HANDLER-OBLIGATIONS #16).
+  auth: 'O',
   o4: 'blocked',
   request: { params: EngineParams },
   // Bản mới ngoài `testedVersions` thì gắn cờ "chưa kiểm tương thích" (`compat`).

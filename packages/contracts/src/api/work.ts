@@ -24,6 +24,7 @@ import {
   Ts,
 } from './common.ts';
 import { accepted, defineLane, noContent, ok } from './define.ts';
+import { Redacted } from './masking.ts';
 import { EngineSlug, I18nParams, LEDGER_ENTRY_TYPES, ROLE_RUNTIMES, TgUserId } from './shapes.ts';
 
 // L-WORK — Telegram, chủ động, việc, kinh tế (₲), Polaris, Trọng thương, Brain (BACKEND-TRIAL §3.5: 43 route).
@@ -918,6 +919,7 @@ const MemoryRow = z.strictObject({
   createdAt: Ts,
   lastRecalledAt: Ts.nullable(),
   recallCount: Nat,
+  redacted: Redacted,
 });
 const MemoryParams = z.strictObject({ memoryRef: Ref('MM') });
 

@@ -13,7 +13,7 @@ import { WORK_ROUTES } from './work.ts';
 export * from './define.ts';
 
 // Registry route (BACKEND-TRIAL §3.1): MỘT nguồn cho edge (quyền, CSRF, RecoveryGuard), CLI, frontend và contract test.
-// 196 route M2 (SYS 85 = L-SYS 35 + L-HR 50, GW 32, WRK 43, OPS 36) + 5 route có chủ ở M1 (EXT-01…05, L-SEC / L-RT).
+// 197 route M2 (SYS 85 = L-SYS 35 + L-HR 50, GW 32, WRK 43, OPS 37 — OPS-37 locate do round 4) + 5 route có chủ ở M1 (EXT-01…05, L-SEC / L-RT).
 
 const DRAFTS: readonly RouteDraft[] = [
   ...AUTH_ROUTES,
@@ -27,7 +27,7 @@ const DRAFTS: readonly RouteDraft[] = [
 /** Mọi route. `fs` dẫn xuất từ bảng độ phủ §3.11 (`coverage.ts`). */
 export const ROUTES: readonly Route[] = DRAFTS.map((d) => ({ ...d, fs: fsOf(d.id) }));
 
-/** 196 route M2 (không gồm EXT-01…05 đã có chủ ở M1). */
+/** 197 route M2 (không gồm EXT-01…05 đã có chủ ở M1). */
 export const M2_ROUTES: readonly Route[] = ROUTES.filter((r) => !r.id.startsWith('EXT-'));
 
 const BY_ID = new Map(ROUTES.map((r) => [r.id, r] as const));
@@ -46,7 +46,14 @@ export function requestSchemaOf(route: Pick<Route, 'request'>): z.ZodType {
   if (r.query) shape.query = r.query;
   if (r.headers) shape.headers = r.headers;
   if (r.body) shape.body = r.body;
-  return z.strictObject(shape);
+  const refine = r.refine;
+  if (!refine) return z.strictObject(shape);
+  return z.strictObject(shape).superRefine((value, ctx) => {
+    const v = value as { params?: Record<string, unknown>; query?: Record<string, unknown>; body?: unknown };
+    for (const message of refine({ params: v.params ?? {}, query: v.query ?? {}, body: v.body })) {
+      ctx.addIssue({ code: 'custom', message });
+    }
+  });
 }
 
 /** Schema của response JSON (`null` nếu route trả 204 / luồng / tệp). */
