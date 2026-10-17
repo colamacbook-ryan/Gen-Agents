@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: chuỗi đột biến là MÃ NGUỒN TS cần khớp nguyên văn (có `${…}`)
 // Đột biến khung http/ của control plane — chứng minh test bắt được từng lỗi bảo mật. KHÔNG sửa worktree đang làm việc:
 // mỗi đột biến = patch dựng từ HEAD trong thư mục tạm, chạy bằng scripts/mutate.sh (git worktree TẠM tách rời).
 //   node apps/control-plane/test/meta/mutants.mjs [id…]      (mặc định: mọi đột biến)
