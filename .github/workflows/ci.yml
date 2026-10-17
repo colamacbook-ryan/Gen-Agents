@@ -36,6 +36,7 @@ jobs:
       - run: pnpm lint:rules --selftest
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm --filter @ga/fakes test
       - run: pnpm license:check
       - run: pnpm license:check --selftest
 

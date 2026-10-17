@@ -2,8 +2,13 @@
   "files": [],
   "references": [
     { "path": "apps/control-plane" },
+    { "path": "apps/egress" },
+    { "path": "apps/runner" },
+    { "path": "apps/supervisor" },
     { "path": "packages/contracts" },
     { "path": "packages/db" },
-    { "path": "packages/security" }
+    { "path": "packages/engines" },
+    { "path": "packages/security" },
+    { "path": "testing/fakes" }
   ]
 }
