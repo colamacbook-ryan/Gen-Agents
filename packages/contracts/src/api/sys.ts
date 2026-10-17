@@ -424,7 +424,8 @@ export const SYS_16 = sys({
   id: 'SYS-16',
   method: 'GET',
   path: '/threads',
-  auth: 'V',
+  // Nội dung hội thoại với AI: cùng mức với RECORD_ACCESS TH / MSG và SSE `chat.*` = A (review PR #7, round 5).
+  auth: 'A',
   o4: 'blocked',
   request: {
     query: z.strictObject({
@@ -507,7 +508,8 @@ export const SYS_18 = sys({
   id: 'SYS-18',
   method: 'GET',
   path: '/threads/{threadRef}/messages',
-  auth: 'V',
+  // Nội dung hội thoại với AI: cùng mức với RECORD_ACCESS TH / MSG và SSE `chat.*` = A (review PR #7, round 5).
+  auth: 'A',
   o4: 'blocked',
   request: {
     params: z.strictObject({ threadRef: Ref('TH') }),
@@ -594,7 +596,8 @@ export const SYS_22 = sys({
   id: 'SYS-22',
   method: 'GET',
   path: '/threads/{threadRef}/ui-actions',
-  auth: 'V',
+  // Nội dung hội thoại với AI: cùng mức với RECORD_ACCESS TH / MSG và SSE `chat.*` = A (review PR #7, round 5).
+  auth: 'A',
   o4: 'blocked',
   request: {
     params: z.strictObject({ threadRef: Ref('TH') }),

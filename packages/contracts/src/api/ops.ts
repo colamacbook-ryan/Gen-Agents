@@ -114,6 +114,8 @@ export const SettingRow = z.strictObject({
   writers: list(z.enum(SETTING_WRITERS), SETTING_WRITERS.length),
   writable: z.boolean(),
   locked: z.enum(['harness_fixed', 'core_agent_locked']).nullable(),
+  // Viewer: `value` và `default.value` bị che (chỉ thấy khoá, writers, trạng thái) — V_MASKED_FIELDS.
+  redacted: Redacted,
 });
 
 export const OPS_02 = ops({

@@ -759,7 +759,8 @@ export const WRK_28 = work({
   id: 'WRK-28',
   method: 'GET',
   path: '/roles/{roleRef}/wound',
-  auth: 'V',
+  // Có danh sách tin nhắn (MSG = A) và bài học (nội dung trí nhớ) của Role bị thương ⇒ A, cùng mức RECORD_ACCESS (review PR #7, round 5).
+  auth: 'A',
   o4: 'blocked',
   request: { params: RoleParams },
   // `v_role_wounds`, `v_wound_messages`.

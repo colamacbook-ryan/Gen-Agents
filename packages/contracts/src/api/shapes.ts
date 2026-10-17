@@ -3,6 +3,7 @@ import { AUTH_METHODS, ENGINE_INSTALL_STATES, LOGIN_CHECK_STATUSES } from '../en
 import { EFFORT_RE, EngineSlugFormat, MODEL_ID_MAX, MODEL_ID_RE } from '../runner.ts';
 import { ObservedState } from '../supervisor.ts';
 import { IdOf, Int, idShape, KeyStr, Lang, Nat, Pct, str, Ts } from './common.ts';
+import { Redacted } from './masking.ts';
 
 // Kiểu dùng chung giữa các lane (một nơi, không lặp). Kiểu của MỘT lane nằm trong tệp lane đó.
 
@@ -208,6 +209,8 @@ export const AccountRow = z.strictObject({
   }),
   cli: z.strictObject({ state: z.enum(ENGINE_INSTALL_STATES), version: str(64).nullable() }),
   container: ContainerState,
+  // Viewer: `accountHint` (danh tính tài khoản, PII) bị che — V_MASKED_FIELDS.
+  redacted: Redacted,
 });
 export const AccountSummary = AccountRow.pick({
   id: true,
