@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import {
   AnyId,
+  type ApiErrorBody,
   ApiErrorEnvelope,
   authAtLeast,
   ConfirmName,
@@ -163,6 +164,13 @@ describe('lỗi: envelope + detail', () => {
       ApiErrorEnvelope.safeParse({ error: { code: 'not_found', i18nKey: 'k', requestId: 'r', stack: 'x' } }).success,
     ).toBe(false);
     expect(ErrorDetail.safeParse({ attemptsLeft: -1 }).success).toBe(false);
+  });
+
+  it('kiểu: thân lỗi zod gán được vào ApiErrorBody của errors.ts (cùng hình dạng, có detail)', () => {
+    const parsed = ApiErrorEnvelope.parse(env('telegram.code_invalid', { attemptsLeft: 2 }));
+    const body: ApiErrorBody = parsed;
+    expect(body.error.detail?.attemptsLeft).toBe(2);
+    expectTypeOf(parsed.error.code).toMatchTypeOf<ApiErrorBody['error']['code']>();
   });
 
   it('expandRouteErrors mở `db.*` thành mọi mã DB; mã thường giữ nguyên', () => {
