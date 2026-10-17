@@ -18,6 +18,52 @@ export const API_ERROR_CODES = [
   'not_found',
   'conflict',
   'internal',
+  // ---- BACKEND-TRIAL §3.0 (L-API, M2): mã mới của hợp đồng `api/*`; bảng HTTP ở `api/common.ts` (`API_ERROR_HTTP`).
+  /** Đủ phiên nhưng thiếu quyền (admin gọi route chỉ owner). */
+  'auth.forbidden',
+  /** Tạo Role / phiên AI Hệ thống / thử việc khi Core agent chưa sẵn sàng (DB `roles_core_agent_ready_i`). */
+  'gate.core_agent_not_ready',
+  /** SYS-07 khi còn mục OB `err`. */
+  'gate.onboarding_incomplete',
+  /** Cổng Ký (`detail.reason`: unconfirmed_inferred | budget_exceeded). */
+  'gate.sign_blocked',
+  /** Cổng Cấp thẻ (`detail.reason` = khoá của `card_block_reason`). */
+  'gate.card_blocked',
+  /** Thiếu đồng ý Clause 6. */
+  'consent.required',
+  /** `noticeHash` không khớp văn bản của `noticeVersion`. */
+  'consent.notice_mismatch',
+  /** CLI chưa cài hoặc đang cài (`detail.reason`: not_installed | installing | failed). */
+  'engine.not_installed',
+  /** Đã có PTY đang mở cho tài khoản này. */
+  'engine.login_busy',
+  /** Model / effort không có trong registry của tài khoản (STD-10). */
+  'capability.unavailable',
+  /** `runTurn` từ chối; `detail.reason` ∈ TURN_REJECTIONS. */
+  'turn.rejected',
+  /** Đổi loại Core agent khi không phải sự cố. */
+  'recovery.not_incident',
+  /** `getMe` thất bại. */
+  'telegram.token_invalid',
+  /** Cửa sổ bắt user ID 5 phút đã hết. */
+  'telegram.capture_expired',
+  /** Mã 6 chữ số sai (`detail.attemptsLeft`). */
+  'telegram.code_invalid',
+  /** Mã 6 chữ số hết hạn 10 phút. */
+  'telegram.code_expired',
+  /** Vượt trần ST-0018 hoặc avatar 5 MB. */
+  'upload.too_large',
+  'upload.type_rejected',
+  /** Tệp chưa `clean`. */
+  'upload.not_clean',
+  /** Ô truy vấn sai ngữ pháp hoặc cột ngoài whitelist (DATABASE §8.2). */
+  'query.invalid',
+  /** `ConfirmName` sai (bước 2 của ConfirmModal). */
+  'confirm.mismatch',
+  /** Cùng `Idempotency-Key`, khác body. */
+  'idempotency.conflict',
+  /** Quá `economy.reflection_max_runs`. */
+  'reflection.limit',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
@@ -71,7 +117,13 @@ export function mapDbError(message: string): DbErrorCode {
 
 /** Lỗi API trả cho client: chỉ mã + khoá i18n, không lộ chuỗi DB / stack. */
 export interface ApiErrorBody {
-  error: { code: ApiErrorCode | DbErrorCode; i18nKey: string; requestId: string };
+  error: {
+    code: ApiErrorCode | DbErrorCode;
+    i18nKey: string;
+    requestId: string;
+    /** BACKEND-TRIAL §3.0: chỉ khoá enum hoặc số (`reason`, `field`, `attemptsLeft`, `gate`, `retryAfterS`) — không chuỗi DB / stack. */
+    detail?: Readonly<Record<string, string | number>>;
+  };
 }
 
 export function i18nKeyFor(code: ApiErrorCode | DbErrorCode): string {
