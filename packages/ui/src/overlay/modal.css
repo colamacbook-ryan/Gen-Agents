@@ -1,0 +1,130 @@
+body.ga-scroll-lock {
+  overflow: hidden;
+}
+
+.ga-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ga-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ga-sp-6);
+  background: var(--ga-bg-overlay);
+}
+
+.ga-scrim--drawer {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.ga-scrim--top {
+  align-items: flex-start;
+  padding-top: 20vh;
+}
+
+.ga-modal {
+  display: flex;
+  flex-direction: column;
+  width: 520px;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-modal);
+  background: var(--ga-bg-raised);
+  box-shadow: var(--ga-shadow-modal);
+}
+
+.ga-modal--sm {
+  width: 400px;
+}
+
+.ga-modal--lg {
+  width: 640px;
+}
+
+.ga-modal:focus {
+  outline: none;
+}
+
+.ga-modal__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ga-sp-3);
+  padding: var(--ga-sp-4) var(--ga-sp-4) 0;
+}
+
+.ga-modal__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.ga-modal__body {
+  min-height: 0;
+  padding: var(--ga-sp-3) var(--ga-sp-4);
+  overflow-y: auto;
+}
+
+.ga-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ga-sp-2);
+  padding: var(--ga-sp-3) var(--ga-sp-4) var(--ga-sp-4);
+  border-top: 1px solid var(--ga-border-subtle);
+}
+
+/* drawer phải (O2 Thông báo, 400px) */
+.ga-drawer {
+  display: flex;
+  flex-direction: column;
+  width: var(--ga-panel-inspector);
+  max-width: 100%;
+  height: 100%;
+  border-left: 1px solid var(--ga-border-strong);
+  background: var(--ga-bg-raised);
+  box-shadow: var(--ga-shadow-modal);
+}
+
+.ga-drawer:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ga-modal {
+    animation: ga-pop var(--ga-dur) var(--ga-ease);
+  }
+
+  .ga-drawer {
+    animation: ga-slide-in var(--ga-dur) var(--ga-ease);
+  }
+}
+
+@keyframes ga-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ga-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

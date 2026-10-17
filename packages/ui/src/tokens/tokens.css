@@ -1,0 +1,171 @@
+/* Design tokens — bộ mặc định STD-07 §8 (Gen-Agents). Dark mặc định; light khi <html data-theme="light">.
+   Thang khoảng cách DUY NHẤT: 4 · 8 · 12 · 16 · 24 · 32 (test spacing-scale ép trên mọi tệp .css). */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* nền */
+  --ga-bg-canvas: #111012;
+  --ga-bg-surface: #18171a;
+  --ga-bg-raised: #201f23;
+  --ga-bg-sunken: #0c0b0d;
+  --ga-bg-grid-id: #141316;
+  --ga-bg-hover: #1c1b1f;
+  --ga-bg-overlay: rgb(17 16 18 / 78%);
+
+  /* viền */
+  --ga-border-subtle: #26252a;
+  --ga-border-strong: #34333a;
+
+  /* chữ */
+  --ga-text-primary: #eceae6;
+  --ga-text-secondary: #a8a49d;
+  --ga-text-muted: #8a857e;
+
+  /* accent duy nhất của thương hiệu */
+  --ga-accent: #e8a33d;
+  --ga-accent-hover: #f2b85c;
+  --ga-accent-soft: #e8a33d1a;
+  --ga-on-accent: #111012;
+
+  /* Document (giấy): giữ nguyên cả hai mode */
+  --ga-doc-paper: #f3eee3;
+  --ga-doc-ink: #2a2622;
+  --ga-doc-seal: #a4362b;
+
+  /* trạng thái (luôn kèm icon + chữ) */
+  --ga-ok: #4cb782;
+  --ga-info: #6fa8dc;
+  --ga-warn: #e8c547;
+  --ga-danger: #e5604d;
+  --ga-idle: #8a8580;
+  --ga-ok-soft: rgb(76 183 130 / 14%);
+  --ga-info-soft: rgb(111 168 220 / 14%);
+  --ga-warn-soft: rgb(232 197 71 / 14%);
+  --ga-danger-soft: rgb(229 96 77 / 14%);
+  --ga-idle-soft: rgb(138 133 128 / 14%);
+
+  /* Trọng thương: trạng thái con người, KHÔNG dùng danger */
+  --ga-wound-ring: #6b6862;
+  --ga-wound-text: #b4bfcc;
+  --ga-wound-bg: rgb(138 151 168 / 14%);
+  --ga-wound-dot: #8a97a8;
+  --ga-wound-tear: #8fb3d9;
+
+  --ga-shadow-pop: 0 8px 24px rgb(0 0 0 / 35%);
+  --ga-shadow-modal: 0 16px 48px rgb(0 0 0 / 50%);
+  --ga-shadow-paper: 0 1px 2px rgb(0 0 0 / 40%), 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ga-bg-canvas: #f6f4ef;
+  --ga-bg-surface: #fff;
+  --ga-bg-raised: #fbfaf7;
+  --ga-bg-sunken: #efece5;
+  --ga-bg-grid-id: #f3f0e9;
+  --ga-bg-hover: #f1eee7;
+  --ga-bg-overlay: rgb(246 244 239 / 82%);
+
+  --ga-border-subtle: #e6e2d9;
+  --ga-border-strong: #d3cec2;
+
+  --ga-text-primary: #1c1b1e;
+  --ga-text-secondary: #5e5a53;
+  --ga-text-muted: #8e897f;
+
+  --ga-accent: #b9741a;
+  --ga-accent-hover: #a46514;
+  --ga-accent-soft: #b9741a14;
+  --ga-on-accent: #fff;
+
+  /* STD-07 chỉ cho màu trạng thái bản dark; bản light đậm hơn để chữ đạt AA trên nền trắng (lựa chọn của L-DS, chờ Gen duyệt) */
+  --ga-ok: #1f7a4d;
+  --ga-info: #2f6fa8;
+  --ga-warn: #8a6d00;
+  --ga-danger: #b33a28;
+  --ga-idle: #6b6862;
+  --ga-ok-soft: rgb(31 122 77 / 12%);
+  --ga-info-soft: rgb(47 111 168 / 12%);
+  --ga-warn-soft: rgb(138 109 0 / 14%);
+  --ga-danger-soft: rgb(179 58 40 / 12%);
+  --ga-idle-soft: rgb(107 104 98 / 12%);
+
+  --ga-wound-text: #4f5a68;
+  --ga-wound-tear: #4a79ab;
+
+  --ga-shadow-pop: 0 8px 24px rgb(0 0 0 / 12%);
+  --ga-shadow-modal: 0 16px 48px rgb(0 0 0 / 18%);
+}
+
+:root {
+  /* màu nhận diện thực thể (Role, thành viên): 12 sắc đã cân contrast. Dùng tiết chế: ring avatar, dải 3px, chấm nhỏ */
+  --ga-entity-saffron: #e0a43a;
+  --ga-entity-coral: #e4785f;
+  --ga-entity-rose: #d9708f;
+  --ga-entity-orchid: #b97bd0;
+  --ga-entity-iris: #8c86e0;
+  --ga-entity-azure: #5b9bd5;
+  --ga-entity-teal: #2bb3a3;
+  --ga-entity-jade: #4fb57a;
+  --ga-entity-moss: #8da65a;
+  --ga-entity-olive: #b5a642;
+  --ga-entity-clay: #c08463;
+  --ga-entity-slate: #8a97a8;
+
+  /* khoảng cách */
+  --ga-sp-0: 0;
+  --ga-sp-1: 4px;
+  --ga-sp-2: 8px;
+  --ga-sp-3: 12px;
+  --ga-sp-4: 16px;
+  --ga-sp-6: 24px;
+  --ga-sp-8: 32px;
+
+  /* bo góc */
+  --ga-r-input: 4px;
+  --ga-r-control: 6px;
+  --ga-r-modal: 10px;
+  --ga-r-doc: 2px;
+
+  /* font */
+  --ga-font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --ga-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --ga-font-serif: "Newsreader", Georgia, serif;
+
+  /* thang cỡ: 11 micro · 12 metadata · 13 mặc định · 14 chat · 18 tiêu đề trang (KHÔNG chữ > 20 trong Console) */
+  --ga-fs-micro: 11px;
+  --ga-fs-meta: 12px;
+  --ga-fs-base: 13px;
+  --ga-fs-chat: 14px;
+  --ga-fs-title: 18px;
+  --ga-fs-kpi: 20px;
+  --ga-lh-text: 1.45;
+  --ga-lh-table: 1.25;
+
+  /* khung */
+  --ga-sidebar-w: 216px;
+  --ga-rail-w: 56px;
+  --ga-header-h: 44px;
+  --ga-page-h: 48px;
+  --ga-tabbar-h: 36px;
+  --ga-toolbar-h: 36px;
+  --ga-formula-h: 32px;
+  --ga-row-h: 28px;
+  --ga-nav-item-h: 30px;
+  --ga-panel-chat: 380px;
+  --ga-panel-inspector: 400px;
+
+  /* chuyển động: 120–180ms ease-out; tắt khi prefers-reduced-motion (base.css) */
+  --ga-dur-fast: 120ms;
+  --ga-dur: 180ms;
+  --ga-ease: ease-out;
+
+  /* lớp */
+  --ga-z-pop: 50;
+  --ga-z-toast: 60;
+  --ga-z-modal: 70;
+  --ga-z-block: 80;
+}

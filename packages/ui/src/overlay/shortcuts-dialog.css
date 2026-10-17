@@ -1,0 +1,44 @@
+.ga-shortcuts__search {
+  margin-bottom: var(--ga-sp-3);
+}
+
+.ga-shortcuts__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ga-sp-4) var(--ga-sp-6);
+}
+
+.ga-shortcuts__group-title {
+  margin-bottom: var(--ga-sp-2);
+  padding-bottom: var(--ga-sp-1);
+  border-bottom: 1px solid var(--ga-border-subtle);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ga-shortcuts__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ga-shortcuts__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ga-sp-2);
+}
+
+.ga-shortcuts__label {
+  color: var(--ga-text-secondary);
+}
+
+.ga-shortcuts__empty {
+  color: var(--ga-text-muted);
+}

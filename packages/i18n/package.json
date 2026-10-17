@@ -1,0 +1,30 @@
+{
+  "name": "@ga/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "i18n (vi / en): một nguồn chữ giao diện duy nhất (FRONTEND-SPEC §1.8, CNS-179). Khung + vi.json; L-COPY chép chuỗi nguyên văn theo namespace.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react.ts",
+    "./check": "./src/check.ts",
+    "./vi.json": "./vi.json",
+    "./en.json": "./en.json"
+  },
+  "scripts": {
+    "test": "node ../../scripts/vitest-run.mjs"
+  },
+  "dependencies": {
+    "i18next": "26.4.7",
+    "react": "19.3.1",
+    "react-i18next": "17.0.20"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "@types/react": "19.3.0",
+    "happy-dom": "21.0.3",
+    "react-dom": "19.3.1"
+  }
+}

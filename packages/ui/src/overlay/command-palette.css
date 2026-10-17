@@ -1,0 +1,104 @@
+.ga-palette {
+  display: flex;
+  flex-direction: column;
+  width: 640px;
+  max-width: 100%;
+  max-height: 60vh;
+  overflow: hidden;
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-modal);
+  background: var(--ga-bg-raised);
+  box-shadow: var(--ga-shadow-modal);
+}
+
+.ga-palette:focus {
+  outline: none;
+}
+
+.ga-palette__search {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  padding: 0 var(--ga-sp-4);
+  border-bottom: 1px solid var(--ga-border-subtle);
+  color: var(--ga-text-muted);
+}
+
+.ga-palette__input {
+  flex: 1;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ga-text-primary);
+  font-size: var(--ga-fs-chat);
+}
+
+.ga-palette__input:focus-visible {
+  outline: none;
+}
+
+.ga-palette__list {
+  flex: 1;
+  min-height: 0;
+  padding: var(--ga-sp-1);
+  overflow-y: auto;
+}
+
+.ga-palette__group {
+  padding: var(--ga-sp-2) var(--ga-sp-2) var(--ga-sp-1);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ga-palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  height: 32px;
+  padding: 0 var(--ga-sp-2);
+  border-radius: var(--ga-r-input);
+  color: var(--ga-text-secondary);
+  cursor: pointer;
+}
+
+.ga-palette__item[aria-selected="true"] {
+  background: var(--ga-bg-hover);
+  box-shadow: inset 2px 0 0 var(--ga-accent);
+  color: var(--ga-text-primary);
+}
+
+.ga-palette__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ga-palette__hint {
+  color: var(--ga-text-muted);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-palette__danger {
+  color: var(--ga-danger);
+}
+
+.ga-palette__empty {
+  padding: var(--ga-sp-6) var(--ga-sp-4);
+  color: var(--ga-text-muted);
+  text-align: center;
+}
+
+.ga-palette__foot {
+  display: flex;
+  gap: var(--ga-sp-4);
+  padding: var(--ga-sp-2) var(--ga-sp-4);
+  border-top: 1px solid var(--ga-border-subtle);
+  color: var(--ga-text-muted);
+  font-size: var(--ga-fs-micro);
+}

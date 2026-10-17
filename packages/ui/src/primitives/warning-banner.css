@@ -1,0 +1,79 @@
+.ga-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ga-sp-3);
+  padding: var(--ga-sp-2) var(--ga-sp-3);
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-bg-surface);
+  font-size: var(--ga-fs-base);
+}
+
+.ga-banner--info {
+  border-color: var(--ga-info);
+  background: var(--ga-info-soft);
+}
+
+.ga-banner--warn {
+  border-color: var(--ga-warn);
+  background: var(--ga-warn-soft);
+}
+
+.ga-banner--danger {
+  border-color: var(--ga-danger);
+  background: var(--ga-danger-soft);
+}
+
+/* dải mảnh (vd HTTP không mã hoá trên đầu màn) */
+.ga-banner--strip {
+  align-items: center;
+  padding-top: var(--ga-sp-1);
+  padding-bottom: var(--ga-sp-1);
+  border-width: 0 0 1px;
+  border-radius: 0;
+}
+
+.ga-banner__icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.ga-banner--info .ga-banner__icon {
+  color: var(--ga-info);
+}
+
+.ga-banner--warn .ga-banner__icon {
+  color: var(--ga-warn);
+}
+
+.ga-banner--danger .ga-banner__icon {
+  color: var(--ga-danger);
+}
+
+.ga-banner__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ga-banner__title {
+  font-weight: 600;
+}
+
+.ga-banner__text {
+  color: var(--ga-text-secondary);
+}
+
+.ga-banner__ack {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ga-sp-2);
+  margin-top: var(--ga-sp-2);
+  cursor: pointer;
+}
+
+.ga-banner__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ga-sp-2);
+}

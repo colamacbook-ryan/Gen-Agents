@@ -1,0 +1,112 @@
+.ga-toasts[hidden] {
+  display: none;
+}
+
+.ga-toasts {
+  position: fixed;
+  right: var(--ga-sp-4);
+  bottom: var(--ga-sp-4);
+  z-index: var(--ga-z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-2);
+  width: 348px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.ga-toast {
+  display: flex;
+  gap: var(--ga-sp-3);
+  padding: var(--ga-sp-3) var(--ga-sp-2) var(--ga-sp-3) var(--ga-sp-3);
+  border: 1px solid var(--ga-border-strong);
+  border-radius: var(--ga-r-control);
+  background: var(--ga-bg-raised);
+  box-shadow: var(--ga-shadow-pop);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ga-toast {
+    animation: ga-toast-in var(--ga-dur) var(--ga-ease);
+  }
+}
+
+@keyframes ga-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ga-toast__icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.ga-toast--ok .ga-toast__icon {
+  color: var(--ga-ok);
+}
+
+.ga-toast--info .ga-toast__icon {
+  color: var(--ga-accent);
+}
+
+.ga-toast--warn .ga-toast__icon {
+  color: var(--ga-warn);
+}
+
+.ga-toast--danger .ga-toast__icon {
+  color: var(--ga-danger);
+}
+
+.ga-toast__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ga-toast__title {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ga-toast__detail {
+  margin-top: var(--ga-sp-1);
+  overflow: hidden;
+  color: var(--ga-text-secondary);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ga-toast__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-3);
+  margin-top: var(--ga-sp-2);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-toast__ref {
+  overflow: hidden;
+  color: var(--ga-text-muted);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ga-toast__action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ga-accent);
+  font-size: var(--ga-fs-meta);
+  text-decoration: underline;
+}

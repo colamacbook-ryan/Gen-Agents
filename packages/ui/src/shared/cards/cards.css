@@ -1,0 +1,317 @@
+/* Document (giấy): nền ngà, chữ serif, số hiệu mono — "giấy tờ hành chính" có trọng lượng (STD-07 §7). */
+.ga-card,
+.ga-cert {
+  /* chữ phụ trên giấy: ink pha giấy, đạt AA (≥ 6:1) — không dùng opacity vì opacity kéo contrast xuống dưới 4,5:1 */
+  --ga-doc-ink-soft: #5c564e;
+}
+
+.ga-card {
+  --ga-card-w: 340px;
+
+  position: relative;
+  width: var(--ga-card-w);
+  max-width: 100%;
+  aspect-ratio: 85.6 / 54; /* tỷ lệ ID-1 */
+  overflow: hidden;
+  border-radius: var(--ga-r-doc);
+  margin: 0;
+  background: var(--ga-doc-paper);
+  box-shadow: var(--ga-shadow-paper);
+  color: var(--ga-doc-ink);
+}
+
+.ga-card__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-2);
+  padding: var(--ga-sp-4);
+}
+
+.ga-card__face[hidden] {
+  display: none;
+}
+
+.ga-card__top {
+  display: flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  color: var(--ga-doc-ink);
+  font-size: var(--ga-fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ga-card__no {
+  margin-left: auto;
+  font-family: var(--ga-font-mono);
+  letter-spacing: 0.02em;
+}
+
+.ga-card__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--ga-sp-4);
+  min-height: 0;
+}
+
+.ga-card__name {
+  font-family: var(--ga-font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.ga-card__position {
+  color: var(--ga-doc-ink-soft);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-card__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--ga-sp-2);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-card__lines {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--ga-sp-1) var(--ga-sp-3);
+  margin: 0;
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-card__lines dt {
+  color: var(--ga-doc-ink-soft);
+}
+
+.ga-card__lines dd {
+  margin: 0;
+  font-family: var(--ga-font-mono);
+}
+
+.ga-card__code {
+  align-self: flex-end;
+  margin-left: auto;
+  padding: var(--ga-sp-1) var(--ga-sp-2);
+  border: 1px solid var(--ga-doc-ink);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  padding: 0 var(--ga-sp-2);
+  border: 1px solid var(--ga-doc-ink);
+  border-radius: var(--ga-r-doc);
+  font-family: var(--ga-font-sans);
+  font-size: var(--ga-fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* trạng thái thẻ */
+/* mờ = bớt màu + viền đứt, KHÔNG dùng opacity (giữ chữ đạt AA); trạng thái luôn có chữ trên thẻ */
+.ga-card--pending {
+  outline: 1px dashed var(--ga-doc-ink-soft);
+  outline-offset: -4px;
+  filter: grayscale(0.6) brightness(0.94);
+}
+
+.ga-card--suspended .ga-card__main {
+  filter: grayscale(0.5);
+}
+
+.ga-card--revoked,
+.ga-card--superseded {
+  filter: grayscale(0.7) brightness(0.92);
+}
+
+.ga-card--revoked .ga-card__name,
+.ga-card--superseded .ga-card__name {
+  text-decoration: line-through;
+}
+
+.ga-card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ga-sp-2);
+  align-items: flex-start;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ga-card__face:not([hidden]) {
+    animation: ga-fade-in var(--ga-dur) var(--ga-ease);
+  }
+}
+
+@keyframes ga-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Giấy khai sinh — dạng Data Console (văn bản + bảng), căn giữa, max-width 640px */
+.ga-cert {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--ga-sp-8);
+  border-radius: var(--ga-r-doc);
+  background: var(--ga-doc-paper);
+  box-shadow: var(--ga-shadow-paper);
+  color: var(--ga-doc-ink);
+}
+
+.ga-cert__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ga-sp-3);
+  padding-bottom: var(--ga-sp-3);
+  border-bottom: 1px solid var(--ga-doc-ink);
+}
+
+.ga-cert__title {
+  font-family: var(--ga-font-serif);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.ga-cert__no {
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-cert__template {
+  color: var(--ga-doc-ink-soft);
+  font-family: var(--ga-font-mono);
+  font-size: var(--ga-fs-micro);
+}
+
+.ga-cert__section {
+  margin-top: var(--ga-sp-6);
+}
+
+.ga-cert__section-title {
+  margin-bottom: var(--ga-sp-2);
+  font-family: var(--ga-font-serif);
+  font-size: var(--ga-fs-chat);
+  font-variant: small-caps;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.ga-cert__fields {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
+  gap: var(--ga-sp-2) var(--ga-sp-4);
+  margin: 0;
+}
+
+.ga-cert__fields dt {
+  color: var(--ga-doc-ink-soft);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-cert__fields dd {
+  margin: 0;
+  font-family: var(--ga-font-serif);
+  font-size: var(--ga-fs-chat);
+}
+
+/* trên giấy: nguồn AI suy ra vẫn gạch chân ember, nhưng nền soft hợp với giấy */
+.ga-cert .ga-prov--ai {
+  background: rgb(185 116 26 / 12%);
+}
+
+.ga-cert .ga-prov__tag,
+.ga-cert .ga-prov--ai .ga-prov__tag {
+  color: var(--ga-doc-ink-soft);
+}
+
+.ga-trait {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ga-sp-2);
+  font-family: var(--ga-font-sans);
+  font-size: var(--ga-fs-meta);
+}
+
+.ga-trait__dots {
+  display: inline-flex;
+  gap: var(--ga-sp-1);
+}
+
+.ga-trait__dot {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--ga-doc-ink);
+  border-radius: 50%;
+}
+
+.ga-trait__dot--on {
+  background: var(--ga-doc-ink);
+}
+
+.ga-cert__sign {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ga-sp-4);
+  margin-top: var(--ga-sp-6);
+  padding-top: var(--ga-sp-3);
+  border-top: 1px solid var(--ga-doc-ink);
+  font-size: var(--ga-fs-meta);
+}
+
+/* con dấu: chỉ có sau khi ký; vẽ bằng CSS, không ảnh */
+.ga-cert__seal {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border: 2px solid var(--ga-doc-seal);
+  border-radius: 50%;
+  color: var(--ga-doc-seal);
+  font-size: var(--ga-fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: rotate(-8deg);
+}
+
+.ga-cert__seal-date {
+  font-family: var(--ga-font-mono);
+  font-weight: 400;
+}
+
+.ga-cert__unsigned {
+  color: var(--ga-doc-ink-soft);
+}
+
+/* nút trên giấy: dùng ink (màu chữ của console không đủ tương phản trên nền ngà) */
+.ga-cert .ga-btn,
+.ga-cert .ga-btn--ghost {
+  color: var(--ga-doc-ink);
+}
+
+.ga-cert .ga-btn--ghost:hover:not(:disabled, [aria-disabled="true"]) {
+  background: rgb(42 38 34 / 8%);
+  color: var(--ga-doc-ink);
+}

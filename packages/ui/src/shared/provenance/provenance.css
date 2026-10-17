@@ -1,0 +1,52 @@
+.ga-prov {
+  display: inline;
+}
+
+/* AI suy ra: gạch chân ember + nền accent soft (FRONTEND-SPEC §5 ProvenanceMark) */
+.ga-prov--ai {
+  border-bottom: 1.5px solid var(--ga-accent);
+  background: var(--ga-accent-soft);
+}
+
+/* hệ thống: mono */
+.ga-prov--system {
+  font-family: var(--ga-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ga-prov__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ga-sp-1);
+  margin-left: var(--ga-sp-1);
+  padding: 0 var(--ga-sp-1);
+  border-radius: var(--ga-r-input);
+  color: var(--ga-text-muted);
+  font-family: var(--ga-font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.ga-prov--ai .ga-prov__tag {
+  color: var(--ga-accent);
+}
+
+.ga-prov__actions {
+  display: inline-flex;
+  gap: var(--ga-sp-1);
+  margin-left: var(--ga-sp-2);
+  vertical-align: middle;
+}
+
+.ga-prov-legend {
+  display: flex;
+  gap: var(--ga-sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ga-text-secondary);
+  font-size: var(--ga-fs-meta);
+}

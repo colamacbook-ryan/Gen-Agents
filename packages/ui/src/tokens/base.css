@@ -1,0 +1,163 @@
+/* Reset tối thiểu + nền app. Không có style nội tuyến ở đâu trong sản phẩm (CSP style-src 'self'). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ga-bg-canvas);
+  color: var(--ga-text-primary);
+  font-family: var(--ga-font-sans);
+  font-size: var(--ga-fs-base);
+  line-height: var(--ga-lh-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--ga-accent);
+}
+
+a:hover {
+  color: var(--ga-accent-hover);
+}
+
+::placeholder {
+  color: var(--ga-text-muted);
+  opacity: 1;
+}
+
+/* focus nhìn thấy được, accent (STD-07 §10) */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ga-accent);
+  outline-offset: -2px;
+}
+
+::selection {
+  background: var(--ga-accent-soft);
+}
+
+.ga-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.ga-mono {
+  font-family: var(--ga-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* chỉ cho trình đọc màn hình */
+.ga-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* màu nhận diện thực thể: gán qua lớp (không style nội tuyến) */
+.ga-entity-saffron {
+  --ga-entity: var(--ga-entity-saffron);
+}
+.ga-entity-coral {
+  --ga-entity: var(--ga-entity-coral);
+}
+.ga-entity-rose {
+  --ga-entity: var(--ga-entity-rose);
+}
+.ga-entity-orchid {
+  --ga-entity: var(--ga-entity-orchid);
+}
+.ga-entity-iris {
+  --ga-entity: var(--ga-entity-iris);
+}
+.ga-entity-azure {
+  --ga-entity: var(--ga-entity-azure);
+}
+.ga-entity-teal {
+  --ga-entity: var(--ga-entity-teal);
+}
+.ga-entity-jade {
+  --ga-entity: var(--ga-entity-jade);
+}
+.ga-entity-moss {
+  --ga-entity: var(--ga-entity-moss);
+}
+.ga-entity-olive {
+  --ga-entity: var(--ga-entity-olive);
+}
+.ga-entity-clay {
+  --ga-entity: var(--ga-entity-clay);
+}
+.ga-entity-slate {
+  --ga-entity: var(--ga-entity-slate);
+}
+
+@keyframes ga-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* quầng thở của chấm "đang chạy" */
+@keyframes ga-breath {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(76 183 130 / 50%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 3px rgb(76 183 130 / 0%);
+  }
+}
+
+/* biome-ignore-start lint/complexity/noImportantStyles: prefers-reduced-motion phải thắng mọi animation của component */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: prefers-reduced-motion */

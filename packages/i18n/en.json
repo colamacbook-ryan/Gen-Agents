@@ -1,0 +1,88 @@
+{
+  "brand": {
+    "tagline": "The HR department of an AI company."
+  },
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "close": "Close",
+    "dismiss": "Dismiss",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "save": "Save"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "username": "Username",
+      "password": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "language": "Language",
+      "lockedCountdown": "Try again in {time}.",
+      "version": "Version {version}"
+    },
+    "changePassword": {
+      "title": "Set a new password",
+      "intro": "This is your first sign-in. The starting password is single-use — set a password of your own.",
+      "current": "Current password",
+      "new": "New password",
+      "newHint": "Use a long phrase that is easy for you to remember.",
+      "confirm": "Repeat the new password",
+      "mismatch": "The two passwords do not match.",
+      "submit": "Change password",
+      "submitting": "Changing…",
+      "logout": "Sign out",
+      "done": "Password changed."
+    },
+    "session": {
+      "checking": "Checking your session…"
+    }
+  },
+  "errors": {
+    "unknown": "Something went wrong. Try again, or check the log if it keeps happening.",
+    "network": "Cannot reach the server. Check your network and try again.",
+    "bad_response": "The server returned data that could not be read.",
+    "auth": {
+      "required": "Your session has ended. Sign in again to continue.",
+      "csrf": "The request was refused because the session did not match. Reload the page and try again.",
+      "rate_limited": "Too many attempts. Wait a moment and try again.",
+      "must_change_password": "You need to change your password before continuing.",
+      "invalid_credentials": "The username or password is incorrect.",
+      "locked": "The account is temporarily locked after too many failed attempts.",
+      "weak_password": "The new password is not strong enough.",
+      "password": {
+        "too_short": "The new password is too short. Use a longer phrase.",
+        "too_long": "The new password is too long.",
+        "too_repetitive": "The new password repeats too much. Use more different characters.",
+        "contains_username": "The new password must not contain your username.",
+        "same_as_current": "The new password must differ from the current one."
+      }
+    },
+    "validation": {
+      "failed": "Some input is not valid. Check the fields and try again."
+    }
+  },
+  "banner": {
+    "http": {
+      "title": "This connection is not encrypted.",
+      "body": "You are using plain HTTP: passwords and sessions can be read on the network. Enable TLS at the edge (domain + HTTPS) before using this beyond this machine."
+    }
+  },
+  "palette": {
+    "group": {
+      "nav": "Navigation",
+      "actions": "Actions"
+    }
+  },
+  "locale": {
+    "short": {
+      "vi": "VI",
+      "en": "EN"
+    },
+    "name": {
+      "vi": "Tiếng Việt",
+      "en": "English"
+    }
+  }
+}
