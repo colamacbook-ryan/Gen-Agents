@@ -16,6 +16,16 @@ export type Lane = (typeof LANES)[number];
 export const AUTH_LEVELS = ['public', 'V', 'A', 'O'] as const;
 export type AuthLevel = (typeof AUTH_LEVELS)[number];
 
+const AUTH_RANK: Record<AuthLevel, number> = { public: 0, V: 1, A: 2, O: 3 };
+/** `have` đủ quyền cho `need`? (public < V < A < O). */
+export function authAtLeast(have: AuthLevel, need: AuthLevel): boolean {
+  return AUTH_RANK[have] >= AUTH_RANK[need];
+}
+/** Quyền cao hơn trong hai mức. */
+export function maxAuth(a: AuthLevel, b: AuthLevel): AuthLevel {
+  return AUTH_RANK[a] >= AUTH_RANK[b] ? a : b;
+}
+
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'WS'] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
 

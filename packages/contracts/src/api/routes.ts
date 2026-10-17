@@ -117,11 +117,6 @@ export function expandRouteErrors(codes: readonly RouteErrorCode[]): ErrorCode[]
   return [...out];
 }
 
-const LEVEL_RANK: Record<AuthLevel, number> = { public: 0, V: 1, A: 2, O: 3 };
-export function authAtLeast(have: AuthLevel, need: AuthLevel): boolean {
-  return LEVEL_RANK[have] >= LEVEL_RANK[need];
-}
-
 /** Trạng thái ĐÃ LƯU của đối tượng đích (dịch vụ tra DB theo ref, cùng workspace) — dùng cho `ownerWhen` theo chiều thay đổi. */
 export interface StoredState {
   /** `egress_rules.action` của luật bị xoá (OPS-08). */

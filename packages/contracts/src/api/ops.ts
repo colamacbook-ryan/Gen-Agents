@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ACTOR_KINDS } from '../actors.ts';
 import { REMOTE_ANCHOR_URL_RE, SETTING_WRITERS } from '../settings.ts';
 import { UPDATE_STEPS, UpdaterStatus } from '../update.ts';
+import { READABLE_PREFIXES } from './access.ts';
 import { WorkspaceView } from './auth.ts';
 import {
   AnyId,
@@ -715,7 +716,9 @@ export const OPS_35 = ops({
   auth: 'V',
   o4: 'blocked',
   request: {
-    params: z.strictObject({ recordRef: Ref('*') }),
+    // Chỉ prefix đọc được (`READABLE_PREFIXES`): US / SEC / BK ⇒ 404 như ref lạ. ULID: dịch vụ tra prefix THẬT rồi
+    // `effectiveReadAuth(route, prefix)` (HANDLER-OBLIGATIONS #1, #8).
+    params: z.strictObject({ recordRef: Ref(READABLE_PREFIXES) }),
     query: z.strictObject({ cols: queryList(ColumnName, 64, 'status').optional() }),
   },
   // Mọi prefix của `ENTITY_TYPES`. Thanh công thức / Inspector / giá trị đích của Soi.

@@ -221,6 +221,8 @@ export const GridView = z.strictObject({
 export const GridInfo = z.strictObject({
   key: GridKey,
   prefix: EntityPrefixStr,
+  /** Quyền đọc tối thiểu của lưới (= `GRID_MIN_AUTH[key]` của access.ts; client V không thấy lưới A). Dịch vụ lọc OPS-32 theo đây. */
+  minAuth: z.enum(['V', 'A', 'O']),
   /** Bảng / view nguồn (đối chiếu DATABASE §6). */
   source: str(64, 1),
   exportable: z.boolean(),

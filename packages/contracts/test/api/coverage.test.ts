@@ -239,6 +239,7 @@ describe('Data Console (STD-07 §5, DATABASE §8): grid phân trang, lọc, sắ
     const grid = {
       key: 'instructions',
       prefix: 'IN',
+      minAuth: 'V',
       source: 'instructions',
       exportable: true,
       defaultSort: ['layer', 'ordinal'],

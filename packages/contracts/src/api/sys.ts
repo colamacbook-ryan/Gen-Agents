@@ -4,6 +4,7 @@ import { EngineInstallStatus } from '../engine.ts';
 import { FIXED_CODES } from '../ids.ts';
 import { Anchor } from '../mcp.ts';
 import { TURN_REJECTIONS } from '../sessions.ts';
+import { ReadableAnchor } from './access.ts';
 import {
   AnyId,
   IanaTimezone,
@@ -448,7 +449,7 @@ export const SYS_17 = sys({
       roleRef: Ref('RL').optional(),
       screenRoute: str(200).optional(),
       // "Nhờ AI chỉnh" = intent `adjust`.
-      context: z.strictObject({ intent: z.literal('adjust'), anchors: z.array(Anchor).max(20) }).optional(),
+      context: z.strictObject({ intent: z.literal('adjust'), anchors: z.array(ReadableAnchor).max(20) }).optional(),
     }),
   },
   response: ok(ThreadRow),
@@ -527,7 +528,8 @@ export const SYS_19 = sys({
     headers: IdempotencyHeaders,
     body: z.strictObject({
       text: str(CHAT_TEXT_MAX, 1),
-      anchors: z.array(Anchor).max(20),
+      // ReadableAnchor: không ghim bản ghi US / SEC / BK vào chat (snapshot sẽ vào prompt model) — review bảo mật PR #7.
+      anchors: z.array(ReadableAnchor).max(20),
       attachmentRefs: z.array(Ref('AT')).max(10),
       screen: z.strictObject({
         route: str(200, 1),
@@ -608,7 +610,8 @@ export const SYS_23 = sys({
   path: '/anchors/resolve',
   auth: 'V',
   o4: 'blocked',
-  request: { query: z.strictObject({ anchor: Anchor }) },
+  // ReadableAnchor: không resolve ra bản ghi deny; prefix mức A (AL / TG…) dịch vụ kiểm bằng `effectiveReadAuth` (HANDLER-OBLIGATIONS #8).
+  request: { query: z.strictObject({ anchor: ReadableAnchor }) },
   response: ok(
     z.strictObject({
       state: z.enum(['ok', 'changed', 'gone']),
