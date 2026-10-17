@@ -7,22 +7,13 @@
 //   - CHÉO TENANT: mọi trường Ref (params / query / body) mang ref của tenant B ⇒ 404 (body / query: 404 hoặc 400), không
 //     bao giờ 2xx; đối chứng: ref của chính tenant A ⇒ không 404 / 400 / 500. Prefix chưa có seeder ⇒ ĐỎ.
 //   - mọi response JSON qua findCredentialLike (client testkit) + header bảo mật.
-import {
-  API_LIMITS,
-  ApiErrorEnvelope,
-  ENTITY_TYPES,
-  type EntityPrefix,
-  isSettingKey,
-  type Route,
-  requiresCsrf,
-  SETTINGS,
-  settingWritableBy,
-} from '@ga/contracts';
+import { API_LIMITS, isSettingKey, type Route, requiresCsrf, SETTINGS, settingWritableBy } from '@ga/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Handler } from '../../src/http/define-handler.ts';
 import { PRODUCTION_HANDLERS } from '../../src/http/handlers.ts';
 import { DEMO_HANDLERS } from '../http/demo-handlers.ts';
-import { type CallInput, type CallResult, makeTestApp, type TestApp, tk, type Who } from '../http/harness.ts';
+import { type CallInput, makeTestApp, type TestApp, tk, type Who } from '../http/harness.ts';
+import { expectError, makeProbe, type Probe } from './probe.ts';
 
 const prodIds = new Set(PRODUCTION_HANDLERS.map((h) => h.route.id));
 const HANDLERS: readonly Handler[] = [...PRODUCTION_HANDLERS, ...DEMO_HANDLERS.filter((h) => !prodIds.has(h.route.id))];
@@ -36,68 +27,13 @@ beforeAll(() => {
 });
 afterAll(() => t.close());
 
-// ---------------------------------------------------------------- dữ liệu seed theo tenant
-type Seeded = import('@ga/testkit').Seeded;
-const seedCache = new Map<string, Seeded>();
-function seedFor(tenant: 'A' | 'B', prefix: EntityPrefix, fresh = false): Seeded | null {
-  const key = `${tenant}:${prefix}`;
-  const cached = seedCache.get(key);
-  if (cached && !fresh) return cached;
-  const seeder = tk.CROSS_TENANT_SEEDERS[prefix];
-  if (!seeder) return null;
-  const s = seeder({ world: t.world, tenant: t.world.tenants[tenant], seeded: new Map() });
-  if (!fresh) seedCache.set(key, s);
-  return s;
-}
-/** Hàng mới của tenant B mà display_id KHÔNG trùng hàng nào của A (display_id đánh số theo workspace — trùng thì "RL-0001"
- *  hợp lệ trỏ tới hàng của CHÍNH A, không phải rò chéo tenant). */
-function seedTheirs(prefix: EntityPrefix): Seeded {
-  const table = ENTITY_TYPES[prefix];
-  for (let i = 0; i < 64; i++) {
-    const s = seedFor('B', prefix, true) as Seeded;
-    const clash = t.world.reader.db
-      .prepare(`SELECT 1 AS x FROM "${table}" WHERE workspace_id = ? AND display_id = ?`)
-      .get(t.world.tenants.A.workspaceId, s.displayId);
-    if (clash === undefined) return s;
-  }
-  throw new Error(`không seed được hàng ${prefix} của B có display_id khác A`);
-}
-
-const refForTenant =
-  (tenant: 'A' | 'B') =>
-  (prefixes: readonly EntityPrefix[] | '*'): string | undefined => {
-    for (const p of tk.proofPrefixes(prefixes)) {
-      const s = seedFor(tenant, p);
-      if (s) return s.displayId;
-    }
-    return undefined;
-  };
-
-/** Request HỢP LỆ (mẫu từ hợp đồng, Ref = hàng thật của tenant A). */
-function validInput(route: Route, extra: Partial<CallInput> = {}): CallInput {
-  const s = tk.sampleRequest(route, { refFor: refForTenant('A') });
-  const headers = { ...(s.headers ?? {}) };
-  delete headers['idempotency-key']; // client tự sinh khoá mới mỗi lần
-  return {
-    ...(s.params ? { params: s.params } : {}),
-    ...(s.query ? { query: s.query } : {}),
-    ...(s.body !== undefined ? { body: s.body } : {}),
-    headers,
-    ...extra,
-  };
-}
-
-async function callCounted(route: Route, who: Who, input: CallInput): Promise<{ res: CallResult; ran: number }> {
-  const before = t.calls.get(route.id) ?? 0;
-  const res = await t.as(who).call(route.id, input);
-  return { res, ran: (t.calls.get(route.id) ?? 0) - before };
-}
-
-function expectError(res: CallResult, status: number, code: string): void {
-  expect(res.status, `${res.status} ${res.text.slice(0, 200)}`).toBe(status);
-  expect(res.code).toBe(code);
-  expect(ApiErrorEnvelope.safeParse(res.json).success).toBe(true);
-}
+const p = () => probe;
+let probe: Probe;
+beforeAll(() => {
+  probe = makeProbe(t);
+});
+const validInput = (r: Route, extra: Partial<CallInput> = {}) => p().validInput(r, extra);
+const callCounted = (r: Route, who: Who, input: CallInput) => p().callCounted(r, who, input);
 
 it('meta-test không rỗng: có route public / V / A / O / ownerWhen / Ref path / Ref query / Ref body / core / idempotent', () => {
   const has = (p: (r: Route) => boolean) => ROUTES.some(p);
@@ -309,40 +245,7 @@ describe('CHÉO TENANT (IDOR) — mọi trường Ref ở params / query / body'
     expect(cases.length).toBeGreaterThan(0);
   });
   it.each(cases)('%s: ref của tenant B ⇒ không bao giờ 2xx; ref của A ⇒ đối chứng qua', async (_label, r, field) => {
-    const missing = tk.missingSeederPrefixes(field.prefixes);
-    if (missing.length > 0) {
-      throw new Error(
-        `chưa chứng minh chống IDOR cho ${missing.join(', ')} (${r.id} ${field.path}) — thêm seeder vào @ga/testkit`,
-      );
-    }
-    const who: Who = r.auth === 'public' ? 'anon' : 'A.owner';
-    for (const prefix of tk.proofPrefixes(field.prefixes)) {
-      const theirs = seedTheirs(prefix);
-      for (const value of [theirs.displayId, theirs.id]) {
-        const s = tk.sampleRequest(r, { refFor: refForTenant('A'), targetField: field, targetValue: value });
-        const input: CallInput = {
-          ...(s.params ? { params: s.params } : {}),
-          ...(s.query ? { query: s.query } : {}),
-          ...(s.body !== undefined ? { body: s.body } : {}),
-          // gợi ý workspace từ client PHẢI bị bỏ qua (workspace chỉ từ phiên)
-          headers: { 'x-ga-workspace-id': t.world.tenants.B.workspaceId },
-        };
-        const { res } = await callCounted(r, who, input);
-        expect(res.status, `${field.path}=${value}: ${res.text.slice(0, 160)}`).toBeGreaterThanOrEqual(400);
-        if (field.part === 'params') expectError(res, 404, 'not_found');
-        else expect(['not_found', 'validation.failed'], res.text.slice(0, 160)).toContain(res.code);
-        expect(res.text).not.toContain(theirs.id === value ? theirs.displayId : theirs.id);
-      }
-      // đối chứng: cùng request với ref của CHÍNH tenant A ⇒ không bị coi là "không thấy" (test không rỗng nghĩa)
-      const mine = seedFor('A', prefix) as Seeded;
-      const s = tk.sampleRequest(r, { refFor: refForTenant('A'), targetField: field, targetValue: mine.displayId });
-      const ctl = await t.as(who).call(r.id, {
-        ...(s.params ? { params: s.params } : {}),
-        ...(s.query ? { query: s.query } : {}),
-        ...(s.body !== undefined ? { body: s.body } : {}),
-      });
-      expect([404, 400, 500], `đối chứng ${r.id} ${field.path}: ${ctl.text.slice(0, 160)}`).not.toContain(ctl.status);
-    }
+    await p().checkCrossTenant(r, field);
   });
 });
 

@@ -190,7 +190,7 @@ try {
     });
     const out = `${r.stdout}${r.stderr}`;
     const verdict = r.status === 0 ? 'ĐỎ (bị bắt)' : r.status === 3 ? 'SỐNG' : `LỖI DỰNG (${r.status})`;
-    const firstFail = (/FAIL\s+(.+)/.exec(out)?.[1] ?? '').slice(0, 160);
+    const firstFail = (/^\s*(?:FAIL|×)\s+(.+)$/m.exec(out)?.[1] ?? '').trim().slice(0, 160);
     const expectedLive = m.equivalentExpected !== undefined;
     if ((r.status !== 0 && !expectedLive) || r.status === 2) failed++;
     rows.push({ id: m.id, verdict, firstFail, note: expectedLive && r.status === 3 ? m.equivalentExpected : '' });
