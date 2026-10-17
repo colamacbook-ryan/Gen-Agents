@@ -305,6 +305,11 @@ export function DataGrid<R>(props: DataGridProps<R>) {
   }, [cache, query]);
   const version = useSyncExternalStore(cache.subscribe, cache.getVersion, cache.getVersion);
   const total = cache.total;
+  // lỗi tải: banner trong lưới + báo màn (onError) đúng một lần cho mỗi lỗi
+  const loadError: unknown = cache.error;
+  useEffect(() => {
+    if (loadError !== null && loadError !== undefined) report(loadError);
+  }, [loadError, report]);
 
   useEffect(() => {
     if (!groupBy || !source.groups) {

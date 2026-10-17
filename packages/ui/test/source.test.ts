@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMemorySource } from '../src/datagrid/memory-source.ts';
-import { RowCache } from '../src/datagrid/row-cache.ts';
+import { GridRowError, RowCache } from '../src/datagrid/row-cache.ts';
 import {
   type GridDataSource,
   type GridQuery,
@@ -195,6 +195,20 @@ describe('RowCache', () => {
     const cache = new RowCache(c.src, (r) => r.id, Q(), { blockSize: 10, maxBlocks: 5 });
     for (let k = 0; k < 20; k++) cache.ensure(k * 10, k * 10 + 10);
     expect(cache.blockCount).toBeLessThanOrEqual(5);
+  });
+
+  it('validate: một hàng sai (vd display_id không thuộc bảng) ⇒ cả khối thành lỗi GridRowError, không lộ hàng nào', async () => {
+    const c = controlled(50);
+    const cache = new RowCache(c.src, (r) => r.id, Q(), {
+      blockSize: 100,
+      validate: (r) => (r.id === 'AU-00007' ? 'display_id không thuộc bảng' : null),
+    });
+    cache.ensure(0, 10);
+    c.answer(0);
+    await tick();
+    expect(cache.error).toBeInstanceOf(GridRowError);
+    expect(cache.row(0)).toBeUndefined();
+    expect(cache.total).toBeNull();
   });
 
   it('replace: thay hàng đã tải theo display_id, phát thay đổi', async () => {

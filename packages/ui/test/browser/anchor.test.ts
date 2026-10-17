@@ -214,6 +214,17 @@ describe.skipIf(!enabled)('DataGrid — ảo hoá, anchor, CSP, axe trong Chromi
     }
   });
 
+  it('nguồn trả display_id không thuộc bảng của lưới ⇒ fail-closed: không dựng hàng / anchor nào, banner lỗi + onError', async () => {
+    const { page } = await lab.open('fixture=instructions&table=skills');
+    await page.locator('.ga-dg-banner[role="alert"]').waitFor();
+    expect(await page.locator('.ga-dg-banner').textContent()).toContain('Không tải được dữ liệu');
+    expect(await page.locator('.ga-dg-body [data-anchor]').count()).toBe(0);
+    const errs = await page.evaluate(
+      () => (window as unknown as { __h: { calls: { errors: string[] } } }).__h.calls.errors,
+    );
+    expect(errs).toEqual(['display_id không thuộc bảng skills']); // lỗi tải: banner + onError (màn ghi log)
+  });
+
   it('CSP chặt: header không unsafe-inline / unsafe-eval; thao tác đủ kiểu ⇒ 0 vi phạm, 0 lỗi console, không thẻ <style>', async () => {
     const s = await lab.open('fixture=instructions');
     const { page } = s;

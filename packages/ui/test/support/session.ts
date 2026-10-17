@@ -46,8 +46,8 @@ export async function startLab(): Promise<Lab> {
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
       const res = await page.goto(`${server.url}/harness.html?${query}`);
       await page.waitForFunction(() => (window as unknown as { __h?: { ready: boolean } }).__h?.ready === true);
-      // khối đầu đã về: có ít nhất một hàng mang anchor, hoặc trạng thái trống
-      await page.waitForSelector('.ga-dg-body [role="row"][data-anchor], .ga-dg-empty');
+      // khối đầu đã về: có ít nhất một hàng mang anchor, hoặc trạng thái trống / banner lỗi
+      await page.waitForSelector('.ga-dg-body [role="row"][data-anchor], .ga-dg-empty, .ga-dg-banner');
       return {
         page,
         errors,

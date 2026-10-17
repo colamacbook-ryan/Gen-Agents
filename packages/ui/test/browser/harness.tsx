@@ -149,7 +149,7 @@ function App() {
   return (
     <DataGrid<InstructionRow>
       ref={ref}
-      table="instructions"
+      table={params.get('table') === 'skills' ? 'skills' : 'instructions'}
       label="Instructions của Mai"
       columns={INSTRUCTION_COLUMNS}
       source={source as GridDataSource<InstructionRow>}
