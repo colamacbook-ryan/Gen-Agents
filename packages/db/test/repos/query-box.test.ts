@@ -1,5 +1,7 @@
 // Ô truy vấn (DATABASE §8): parser §8.1, whitelist §8.2, biên dịch an toàn §8.3, ví dụ §8.4 + chạy thật trên fixture
 // (lọc / FTS / id + id_aliases / keyset / cô lập tenant) + EXPLAIN QUERY PLAN cho MỌI trường whitelist (§8.3.5).
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { ENTITY_TYPES } from '@ga/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newUlid } from '../../src/ids/index.ts';
@@ -7,6 +9,7 @@ import {
   type CompiledQuery,
   compileGridQuery,
   type FieldDef,
+  findField,
   GRIDS,
   type GridDef,
   type GridPage,
@@ -388,7 +391,32 @@ const tableInfo = (table: string) =>
     nn: number;
   }[];
 
+/** Ảnh chụp GRID_COLUMNS của hợp đồng API (L-API, feat/m2-api) — thay bằng import @ga/contracts khi m2-api vào nền. */
+const API_GRIDS = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../fixtures/grid-columns.m2-api.json', import.meta.url)), 'utf8'),
+).grids as Record<
+  string,
+  { prefix: string; columns: { name: string; aliases: string[]; queryable: boolean; sortable: boolean }[] }
+>;
+
 describe('whitelist §8.2 (meta)', () => {
+  it('hợp đồng API: 37 lưới GRID_COLUMNS ⇔ GRIDS 1:1 (tên + alias + sort; cột chỉ hiển thị không tra cứu được)', () => {
+    const prefixes = Object.values(API_GRIDS).map((g) => g.prefix);
+    expect(Object.keys(API_GRIDS)).toHaveLength(37);
+    expect([...prefixes].sort()).toEqual(Object.keys(GRIDS).sort());
+    for (const [name, g] of Object.entries(API_GRIDS)) {
+      const grid = GRIDS[g.prefix] as GridDef;
+      const want = g.columns
+        .filter((c) => c.queryable)
+        .map((c) => `${[c.name, ...c.aliases].join('|')}${c.sortable && c.name !== 'id' ? '*' : ''}`)
+        .sort();
+      const have = grid.fields.map((x) => `${x.names.join('|')}${x.sortable ? '*' : ''}`).sort();
+      expect(have, name).toEqual(want);
+      for (const c of g.columns.filter((x) => !x.queryable))
+        expect(findField(grid, c.name), `${name}.${c.name}`).toBeNull();
+    }
+  });
+
   it('lưới khớp sổ prefix + bảng có cột tenant / display_seq / deleted_at đúng khai báo', () => {
     for (const [key, g] of Object.entries(GRIDS)) {
       expect(g.prefix, key).toBe(key);

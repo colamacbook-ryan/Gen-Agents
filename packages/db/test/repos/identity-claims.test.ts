@@ -55,6 +55,9 @@ describe('chat.append: danh tính tác giả = actor giao dịch', () => {
 describe('wallet.post: không khai người duyệt qua tham số', () => {
   it('approvedBy truyền lậu (ép kiểu) bị bỏ qua — approved_by luôn NULL ở M1', () => {
     const role = f.roles[0] as RoleRow;
+    // khai người duyệt là admin hợp lệ (DB sẽ nhận) ⇒ nếu repo còn chuyển tham số thì lộ ra ở dòng assert, không ở trigger
+    const u = f.store.createUser({ username: 'quantri', displayName: 'QT', passwordHash: 'argon2id$x' });
+    const admin = as(f.ownerActorId, (tx) => tx.workspace.addMember({ userId: u.id, accessLevel: 'admin' })).actor.id;
     const { w, ev } = as(f.ownerActorId, (tx) => ({
       w: tx.wallet.openRoleWallet(role.id),
       ev: tx.audit.append({ action: 'wallet.grant_request', entity: { type: 'roles', id: role.id } }),
@@ -67,7 +70,7 @@ describe('wallet.post: không khai người duyệt qua tham số', () => {
         amountMinor: 5000,
         reason: 'cấp vốn',
         evidenceAuditId: ev.id,
-        approvedBy: f.systemActorId,
+        approvedBy: admin,
       } as never),
     );
     expect(e.approved_by).toBeNull();
