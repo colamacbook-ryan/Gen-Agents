@@ -288,6 +288,16 @@ export function list<T extends z.ZodType>(item: T, max: number = API_LIMITS.grid
   return z.array(item).max(max);
 }
 
+/** `?cols=a,b,c` (danh sách phân tách bằng dấu phẩy, mỗi phần tử theo `item`, ≤ `maxItems`). `example` = giá trị mẫu hợp lệ. */
+export function queryList<T extends z.ZodType<unknown, string>>(item: T, maxItems: number, example: string) {
+  return z
+    .string()
+    .max(512)
+    .meta({ example })
+    .transform((s) => s.split(','))
+    .pipe(z.array(item).max(maxItems));
+}
+
 // ---------------------------------------------------------------- phân trang
 export const CursorStr = str(API_LIMITS.cursorChars, 1).meta({ example: 'cursor' });
 
@@ -402,6 +412,8 @@ export const ErrorDetail = z.strictObject({
   gate: DetailKey.optional(),
   attemptsLeft: Nat.optional(),
   retryAfterS: Nat.optional(),
+  /** Vị trí ký tự (từ 0) của mệnh đề lỗi trong ô truy vấn (`query.invalid`) — để vẽ chip đỏ đúng chỗ. */
+  position: Nat.optional(),
 });
 
 /** Thân lỗi (mở rộng `ApiErrorBody` của errors.ts với `detail`). */
@@ -419,4 +431,6 @@ export type ApiErrorEnvelope = z.infer<typeof ApiErrorEnvelope>;
 export const ERROR_DETAIL_REASONS = {
   'gate.sign_blocked': ['unconfirmed_inferred', 'budget_exceeded'],
   'engine.not_installed': ['not_installed', 'installing', 'failed'],
+  /** DATABASE §8.3: lỗi cú pháp / cột ngoài whitelist hiện thành chip đỏ, không chạy truy vấn nửa vời. */
+  'query.invalid': ['syntax', 'unknown_field', 'op_not_allowed', 'bad_value', 'too_complex', 'timeout'],
 } as const satisfies Partial<Record<ErrorCode, readonly string[]>>;

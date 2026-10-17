@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { SseEvent } from '../events.ts';
 import { TURN_REJECTIONS } from '../sessions.ts';
 import { DisplayId, Int, KeyStr, Nat, Pct, str, Ts, Ulid } from './common.ts';
-import { GridKey } from './shapes.ts';
+import { GridKey } from './grids.ts';
 
 // Sự kiện SSE `GET /api/v1/stream` (BACKEND-TRIAL §3.7): 26 loại. 13 loại đầu đã có ở `events.ts` (dùng lại NGUYÊN, không
 // định nghĩa trùng); 12 loại mới ở đây + `log.line` (chỉ trên `/logs/stream`).

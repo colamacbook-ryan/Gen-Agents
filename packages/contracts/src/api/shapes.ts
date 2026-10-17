@@ -9,16 +9,6 @@ import { IdOf, Int, idShape, KeyStr, Lang, Nat, Pct, str, Ts } from './common.ts
 /** Mức nghiêm trọng (= CHECK `notifications.severity`). */
 export const Severity = z.enum(['ok', 'info', 'warn', 'danger']);
 
-/**
- * Khoá lưới (DATABASE §6.1–§6.2). CHỖ GIỮ: L-OPS thay bằng enum sinh từ DATABASE §8.2 trong `api/grids.ts`; trước đó chỉ
- * kiểm hình dạng (chữ thường + `_`) để các lane khác không phải chờ.
- */
-export const GridKey = z
-  .string()
-  .max(64)
-  .regex(/^[a-z][a-z0-9_]{0,63}$/)
-  .meta({ example: 'roles' });
-
 /** Slug loại CLI (registry engines): đúng hình dạng của contracts (`ENGINE_SLUG_RE`). */
 export const EngineSlug = EngineSlugFormat.meta({ example: 'engine-x' });
 /** id model từ capability registry (STD-10): đúng `MODEL_ID_RE`, không bao giờ dạng cờ `-…`. */
