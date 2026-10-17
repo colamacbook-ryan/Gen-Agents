@@ -168,12 +168,28 @@ function guardMemberChange(ctx: Ctx, userId: string, what: string): void {
   if (target?.access_level === 'owner') throw permissionDenied(`${what}: không đổi / gỡ owner`);
 }
 
-/** Thao tác trên user `userId`: chính người đó (actor user cùng user_id) hoặc mức trong `who`. */
-function selfOr(ctx: Ctx, userId: string, what: string, who: readonly Who[]): void {
+/**
+ * DB v2.3.5 (SYS_SYS): users / auth_sessions là bảng toàn cục — ngoài chính người đó, chỉ actor system của WORKSPACE HỆ THỐNG
+ * (dịch vụ đăng nhập / app sau khi đã kiểm quyền) được ghi. Actor system của tenant, owner, admin đều không.
+ */
+function sysSys(ctx: Ctx, what: string): void {
+  const a = actorOf(ctx);
+  requireW(ctx);
+  if (
+    a.kind === 'system' &&
+    a.system_key === 'system' &&
+    a.workspace_id === SYSTEM_WORKSPACE_ID &&
+    a.purged_at === null
+  ) {
+    return;
+  }
+  throw permissionDenied(`${what}: chỉ actor system của workspace hệ thống (actor ${a.kind})`);
+}
+
+function selfOrSys(ctx: Ctx, userId: string, what: string): void {
   const actor = actorOf(ctx);
-  const level = accessOf(ctx);
-  if (actor.kind === 'user' && actor.user_id === userId && level !== null) return;
-  allow(ctx, what, who);
+  if (actor.kind === 'user' && actor.user_id === userId && accessOf(ctx) !== null) return;
+  sysSys(ctx, what);
 }
 
 function memberUpdate(ctx: Ctx, userId: string, set: string, params: unknown[], action: string): MemberRow {
@@ -257,25 +273,28 @@ export function userRepo(ctx: Ctx): UserRepo {
       return m === undefined ? null : u;
     },
     setPassword: (id, i) => {
-      selfOr(ctx, id, 'users.setPassword', ['system']);
+      selfOrSys(ctx, id, 'users.setPassword');
+      // v2.3.5: chính người đó không đụng khoá đăng nhập (failed_login_count / locked_until) — chỉ dịch vụ app (SYS_SYS) mở khoá
+      const actor = actorOf(ctx);
+      const self = actor.kind === 'user' && actor.user_id === id;
       return upd(
         id,
         {
           password_hash: i.passwordHash,
           must_change_password: i.mustChangePassword ? 1 : 0,
           password_changed_at: nowTs(ctx),
-          failed_login_count: 0,
-          locked_until: null,
+          failed_login_count: self ? undefined : 0,
+          locked_until: self ? undefined : null,
         },
         'user.password_change',
       );
     },
     recordLoginSuccess: (id) => {
-      allow(ctx, 'users.recordLoginSuccess', ['system']);
+      sysSys(ctx, 'users.recordLoginSuccess');
       return upd(id, { last_login_at: nowTs(ctx), failed_login_count: 0, locked_until: null }, 'user.login_ok');
     },
     recordLoginFailure: (id, i) => {
-      allow(ctx, 'users.recordLoginFailure', ['system']);
+      sysSys(ctx, 'users.recordLoginFailure');
       const u = assertUserInScope(ctx, id);
       return upd(
         id,
@@ -287,7 +306,7 @@ export function userRepo(ctx: Ctx): UserRepo {
       );
     },
     updateProfile: (id, p) => {
-      selfOr(ctx, id, 'users.updateProfile', ['owner', 'system']);
+      selfOrSys(ctx, id, 'users.updateProfile');
       return upd(
         id,
         { display_name: p.displayName, email: p.email, locale: p.locale, timezone: p.timezone },
@@ -312,8 +331,11 @@ export function authSessionRepo(ctx: Ctx): AuthSessionRepo {
     if (row === null) throw notFound(`auth_session ${id}`);
     return row;
   };
-  const set = (id: string, sql: string, params: unknown[]): AuthSessionRow => {
-    selfOr(ctx, mustGet(id).user_id, 'authSessions.update', ['system']);
+  // DB v2.3.5: chính người đó chỉ thu hồi phiên của mình; mọi sửa khác (touch) = dịch vụ đăng nhập (SYS_SYS)
+  const set = (id: string, sql: string, params: unknown[], selfMay: boolean): AuthSessionRow => {
+    const owner = mustGet(id).user_id;
+    if (selfMay) selfOrSys(ctx, owner, 'authSessions.revoke');
+    else sysSys(ctx, 'authSessions.touch');
     const [row] = dml(requireW(ctx)).write(`UPDATE auth_sessions SET ${sql} WHERE id = ? RETURNING *`, [...params, id])
       .rows as AuthSessionRow[];
     if (row === undefined) throw notFound(`auth_session ${id}`);
@@ -323,7 +345,7 @@ export function authSessionRepo(ctx: Ctx): AuthSessionRepo {
     byTokenHash: (h) => scoped(ctx.r.get<AuthSessionRow>('SELECT * FROM auth_sessions WHERE token_hash = ?', [h])),
     create: (i) => {
       assertUserInScope(ctx, i.userId);
-      selfOr(ctx, i.userId, 'authSessions.create', ['system']);
+      sysSys(ctx, 'authSessions.create');
       const [row] = dml(requireW(ctx)).write(
         'INSERT INTO auth_sessions (id, user_id, token_hash, expires_at, last_seen_at, ip, user_agent, created_at) ' +
           'VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
@@ -333,11 +355,11 @@ export function authSessionRepo(ctx: Ctx): AuthSessionRepo {
       return row;
     },
     touch: (id, i) =>
-      set(id, 'last_seen_at = ?, expires_at = COALESCE(?, expires_at)', [nowTs(ctx), i?.expiresAt ?? null]),
-    revoke: (id) => set(id, 'revoked_at = COALESCE(revoked_at, ?)', [nowTs(ctx)]),
+      set(id, 'last_seen_at = ?, expires_at = COALESCE(?, expires_at)', [nowTs(ctx), i?.expiresAt ?? null], false),
+    revoke: (id) => set(id, 'revoked_at = COALESCE(revoked_at, ?)', [nowTs(ctx)], true),
     revokeAllForUser: (userId) => {
       assertUserInScope(ctx, userId);
-      selfOr(ctx, userId, 'authSessions.revokeAllForUser', ['owner', 'system']);
+      selfOrSys(ctx, userId, 'authSessions.revokeAllForUser');
       return dml(requireW(ctx)).write(
         'UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
         [nowTs(ctx), userId],

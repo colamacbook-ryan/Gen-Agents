@@ -675,22 +675,29 @@ describe('screenToolPayload — ca âm propose_edit / annotate', () => {
 
 // ---------------------------------------------------------------- STD-11 1.10: chặn kích thước trước khi quét + quét tuyến tính
 const MB = 1 << 20;
+/**
+ * Best of 3 runs; each run = min(wall time, this PROCESS's CPU time). On a shared machine (load ≫ number of cores) wall time
+ * stretches 10–100× while waiting for CPU ⇒ false reds (Gen 2026-10-17: load 18 on 4 cores, every case > 2 s). CPU time
+ * only measures work actually done. vitest runs each file in its own process (pool `forks`, the default) so
+ * `process.cpuUsage()` doesn't count other files.
+ */
 function fastest(fn: () => unknown): number {
   let best = Number.POSITIVE_INFINITY;
   for (let i = 0; i < 3; i++) {
+    const c0 = process.cpuUsage();
     const t0 = performance.now();
     fn();
-    best = Math.min(best, performance.now() - t0);
+    const wall = performance.now() - t0;
+    const c = process.cpuUsage(c0);
+    best = Math.min(best, wall, (c.user + c.system) / 1000);
   }
   return best;
 }
 
-// Trần thời gian chỉ để tách TUYẾN TÍNH (~10–30 ms / MiB cho cả bộ) khỏi SIÊU TUYẾN TÍNH (bậc hai trên 1 MiB ≈ 10^12 bước,
-// hàng phút). Trần 2000 ms (trước là 200 ms): đo trên máy dùng chung tải nặng (load average ~24, nhiều lane chạy song song)
-// các ca TUYẾN TÍNH chạy tới ~480 ms ⇒ trần 200 ms đỏ giả và chặn cổng commit; ReDoS bậc hai ≫ 10^5 ms nên 2000 ms vẫn tách rõ.
-// Phép kiểm tỉ lệ (1 MiB / 256 KiB) bên dưới không phụ thuộc tải.
+// The time cap only separates LINEAR (~10–30 ms / MiB for the whole set) from SUPER-LINEAR (quadratic on 1 MiB ≈ 10^12 steps,
+// minutes). Measured as CPU time (`fastest`), so it doesn't stretch on a shared machine: 200 ms of CPU still leaves ~7× headroom.
 // Ở runtime chuỗi không bao giờ tới 1 MiB: payloadLimitExceeded chặn > 16 KiB / chuỗi, > 64 KiB / payload TRƯỚC khi quét.
-const SCAN_BUDGET_MS = 2000;
+const SCAN_BUDGET_MS = 200;
 
 describe('hiệu năng bộ quét (ReDoS) — chuỗi 1 MiB, mỗi lượt dưới trần tuyến tính', () => {
   const adversarial: Record<string, string> = {

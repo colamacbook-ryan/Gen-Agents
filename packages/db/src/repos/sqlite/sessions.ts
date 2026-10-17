@@ -3,6 +3,7 @@ import { invalidInput, permissionDenied } from '../errors.ts';
 import type { ChatRepo, SessionRepo } from '../sessions.ts';
 import type { ChatMessageRow, ChatThreadRow, SessionRow } from '../types.ts';
 import {
+  accessOf,
   actorOf,
   allow,
   audited,
@@ -183,16 +184,19 @@ export function chatRepo(ctx: Ctx): ChatRepo {
       ref(ctx, 'actors', i.authorActorId);
       ref(ctx, 'sessions', i.sessionId);
       ref(ctx, 'chat_messages', i.replyToId);
-      if (
-        who.kind !== 'system' &&
-        i.authorActorId !== undefined &&
-        i.authorActorId !== null &&
-        i.authorActorId !== who.id
-      ) {
-        throw permissionDenied('chat.append: không ghi tin thay actor khác');
+      // Danh tính tác giả lấy từ actor giao dịch, không tin tham số (review bảo mật MEDIUM): ngoài actor system, author_kind
+      // phải đúng loại của actor (user ⇒ 'owner' nếu là owner, còn lại 'user'; Role ⇒ 'role') và author_actor_id = actor.id.
+      if (who.kind !== 'system') {
+        const ownKind = who.kind === 'role' ? 'role' : accessOf(ctx) === 'owner' ? 'owner' : 'user';
+        if (i.authorKind !== ownKind) {
+          throw permissionDenied(`chat.append: actor ${who.kind} chỉ ghi tin với author_kind '${ownKind}'`);
+        }
+        if (i.authorActorId !== undefined && i.authorActorId !== who.id) {
+          throw permissionDenied('chat.append: không ghi tin thay actor khác');
+        }
       }
       const thread = mustGetRow<ChatThreadRow>(ctx, 'chat_threads', i.threadId);
-      if (who.kind === 'role' && (i.authorKind !== 'role' || thread.role_id !== who.role_id)) {
+      if (who.kind === 'role' && thread.role_id !== who.role_id) {
         throw permissionDenied('chat.append: Role chỉ ghi tin của chính mình trong thread của mình');
       }
       const actor = actorOf(ctx);

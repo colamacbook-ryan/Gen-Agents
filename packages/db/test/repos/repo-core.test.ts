@@ -1,4 +1,6 @@
 // Repo SQLite thật — họ workspace / users / auth / settings / secrets / roles / avatar / change set → revision.
+
+import { SYSTEM_WORKSPACE_ID } from '@ga/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFixture, type Fixture } from '../../src/repos/fixture/index.ts';
 import { DbRuleError } from '../../src/repos/index.ts';
@@ -21,13 +23,33 @@ describe('workspace / users / auth_sessions', () => {
       expect(tx.workspace.systemActor('scheduler').kind).toBe('system');
       expect(tx.users.byUsername('owner')?.id).toBe(f.ownerUserId);
     });
-    const u = f.store.write(f.systemActorId, (tx) => tx.users.recordLoginFailure(f.ownerUserId, { lockUntil: null }));
+    // v2.3.5 SYS_SYS: users / auth_sessions toàn cục — dịch vụ đăng nhập = actor system của workspace HỆ THỐNG
+    const sys = f.store.systemActorId(SYSTEM_WORKSPACE_ID);
+    const denied = rule('permission.denied');
+    const u = f.store.write(sys, (tx) => tx.users.recordLoginFailure(f.ownerUserId, { lockUntil: null }));
     expect(u.failed_login_count).toBe(1);
-    const s = f.store.write(f.ownerActorId, (tx) =>
-      tx.authSessions.create({ userId: f.ownerUserId, tokenHash: 'h1', expiresAt: '2026-10-18T08:00:00.000Z' }),
-    );
+    expect(() =>
+      f.store.write(f.systemActorId, (tx) => tx.users.recordLoginFailure(f.ownerUserId, { lockUntil: null })),
+    ).toThrow(denied);
+    const create = (actor: string, tokenHash: string) =>
+      f.store.write(actor, (tx) =>
+        tx.authSessions.create({ userId: f.ownerUserId, tokenHash, expiresAt: '2026-10-18T08:00:00.000Z' }),
+      );
+    expect(() => create(f.ownerActorId, 'h0')).toThrow(denied);
+    expect(() => create(f.systemActorId, 'h0')).toThrow(denied);
+    const s = create(sys, 'h1');
     expect(f.store.read(f.workspaceId, (tx) => tx.authSessions.byTokenHash('h1')?.id)).toBe(s.id);
+    // chính người đó: chỉ thu hồi (không touch); dịch vụ đăng nhập touch được
+    expect(() => f.store.write(f.ownerActorId, (tx) => tx.authSessions.touch(s.id))).toThrow(denied);
+    expect(f.store.write(sys, (tx) => tx.authSessions.touch(s.id)).id).toBe(s.id);
     expect(f.store.write(f.ownerActorId, (tx) => tx.authSessions.revokeAllForUser(f.ownerUserId))).toBe(1);
+    // chính người đó đổi mật khẩu được; owner đặt lại mật khẩu NGƯỜI KHÁC ⇒ phải qua dịch vụ app (SYS_SYS)
+    const pw = { passwordHash: 'argon2id$moi', mustChangePassword: false };
+    expect(f.store.write(f.ownerActorId, (tx) => tx.users.setPassword(f.ownerUserId, pw)).must_change_password).toBe(0);
+    const m = f.store.createUser({ username: 'thanhvien', displayName: 'TV', passwordHash: 'argon2id$x' });
+    f.store.write(f.ownerActorId, (tx) => tx.workspace.addMember({ userId: m.id, accessLevel: 'operator' }));
+    expect(() => f.store.write(f.ownerActorId, (tx) => tx.users.setPassword(m.id, pw))).toThrow(denied);
+    expect(f.store.write(sys, (tx) => tx.users.setPassword(m.id, pw)).id).toBe(m.id);
   });
 
   it('workspace.update ghi audit; workspace lạ ⇒ repo.not_found', () => {

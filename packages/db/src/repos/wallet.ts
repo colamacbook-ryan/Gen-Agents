@@ -48,8 +48,8 @@ export interface PostLedgerInput {
   /** Bằng chứng audit: repo chụp display_id + row_hash (evidence_hash) của dòng audit đó. */
   evidenceAuditId?: string | null;
   reversesEntryId?: string | null;
-  /** Người duyệt thứ hai (≠ người ghi). */
-  approvedBy?: string | null;
+  // Không có tham số approvedBy (review bảo mật MEDIUM): danh tính người duyệt không được nhận từ tham số. Duyệt thứ hai là
+  // bước riêng do chính người duyệt ghi — ledger_entries append-only nên cần thay đổi DB (đề xuất lane DB), M1 approved_by = NULL.
   /** Trùng khoá ⇒ DB từ chối 'unique.duplicate'; gọi entryByIdempotencyKey trước nếu muốn idempotent. */
   idempotencyKey?: string | null;
 }

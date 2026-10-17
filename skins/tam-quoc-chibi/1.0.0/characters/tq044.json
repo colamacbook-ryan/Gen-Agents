@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "id": "tq044",
+  "name": "Quan Vũ",
+  "han": "關羽",
+  "role": "Đại tướng",
+  "faction": "Thục",
+  "kind": "vo",
+  "gender": "nam",
+  "own": "#E4785F",
+  "crop": [0, 0, 192],
+  "anim": {
+    "phase": "-1.7s",
+    "breath": "3.9s",
+    "blink": "3.6s",
+    "bdelay": "-2.4s"
+  },
+  "note": "vuốt râu tự đắc, lấp lánh trên râu; \"bị chê râu\" thì phồng má bốc khói; nghỉ dưỡng thương: khóc nước mắt thác mà vẫn vuốt râu giữ thể diện (vui, không diễn hèn)",
+  "p": {
+    "skin": "#CF4A3E",
+    "earSkin": "#F0C8A4",
+    "blush": "#E9705F",
+    "mask": "red",
+    "armor": true,
+    "robe": "#2F8052",
+    "trim": "#1E5A3A",
+    "sash": "#D9A62E",
+    "buckle": "#F2D06B",
+    "inner": "#E9E4CF",
+    "sleeve": 30,
+    "glow": "#A4622E",
+    "crownY": 8,
+    "cap": "wrap",
+    "capColor": "#3FA466",
+    "capAccent": "#1E6B43",
+    "brow": "silk",
+    "eyes": "phoenix",
+    "liner": true,
+    "mouth": "calm",
+    "beard": "long",
+    "beardColor": "#1B1620",
+    "prop": "glaive",
+    "armL": [-35, 32],
+    "armR": [-30, 28],
+    "holdL": true
+  },
+  "identity": {
+    "p1": "face",
+    "must": [
+      {
+        "p": 1,
+        "label": "Mặt đỏ (面如重棗) vẽ kiểu mặt nạ kinh kịch (viền mắt, sống mũi)",
+        "check": {
+          "all": [
+            {
+              "fill": "face",
+              "is": "red"
+            },
+            {
+              "part": "mask-lines"
+            }
+          ]
+        }
+      },
+      {
+        "p": 2,
+        "label": "Râu dài ba chòm (飄三縷美髯)",
+        "check": {
+          "part": "beard-long",
+          "attr": {
+            "locks": "3"
+          }
+        }
+      },
+      {
+        "p": 3,
+        "label": "Thanh Long Yển Nguyệt đao (lưỡi dài cong, vây + đầu rồng)",
+        "check": {
+          "all": [
+            {
+              "part": "prop-glaive"
+            },
+            {
+              "part": "blade-fins"
+            },
+            {
+              "part": "dragon-head"
+            }
+          ]
+        }
+      }
+    ],
+    "extra": [
+      {
+        "label": "Mắt phượng (丹鳳眼)",
+        "check": {
+          "part": "eyes-phoenix"
+        }
+      },
+      {
+        "label": "Mày tằm nằm (臥蠶眉)",
+        "check": {
+          "part": "brow-silkworm"
+        }
+      },
+      {
+        "label": "Bào lục + giáp vàng (綠袍金鎧)",
+        "check": {
+          "all": [
+            {
+              "fill": "robe",
+              "is": "green"
+            },
+            {
+              "part": "armor-gold"
+            }
+          ]
+        }
+      },
+      {
+        "label": "Nghỉ dưỡng thương: khóc nước mắt thác + vuốt râu giữ thể diện (không diễn hèn)",
+        "check": {
+          "all": [
+            {
+              "phase": {
+                "state": "rest",
+                "where": {
+                  "eyes": "sob"
+                }
+              }
+            },
+            {
+              "token": {
+                "state": "rest",
+                "has": "beardStrokeLoop"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "colors": ["#CF4A3E đỏ (mặt)", "#2F8052 lục (bào)", "#E2B13C vàng (giáp)", "#1B1620 đen (râu)"],
+    "props": ["Thanh Long Yển Nguyệt đao"],
+    "face": "đỏ = trung nghĩa (hồng kiểm kinh kịch)",
+    "source": "TQDN-001, TQDN-025, TQDN-027, TQDN-083; TQC-36; kịch: Jing role + 脸谱 (research §4.1 #2, §6.7)"
+  }
+}

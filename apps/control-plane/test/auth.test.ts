@@ -45,17 +45,18 @@ function setup(): Env {
   const clock = new FakeClock();
   const conn = openWriter(join(dir, 'gen.sqlite'), { clock });
   migrate(conn, { dir: SQLITE_MIGRATIONS_DIR, appVersion: '0.0.0' });
-  // workspace hệ thống + actor system (bản cài thật: seed tham chiếu CNS-170 làm việc này)
-  conn.db
-    .prepare(
+  // workspace hệ thống + actor system (bản cài thật: seed tham chiếu CNS-170 làm việc này). DB v2.3.5: tạo workspace / actor
+  // system đầu tiên chỉ trong conn.bootstrap của chính workspace đó (app_bootstrap() = id) — không ghi thô ngoài giao dịch.
+  conn.bootstrap({ workspaceId: SYSTEM_WORKSPACE_ID, systemActorId: SYS_ACTOR }, (w) => {
+    w.run(
       "INSERT INTO workspaces (id, kind, slug, name, short_code) VALUES (?, 'system', 'system', 'System', 'SYS0')",
-    )
-    .run(SYSTEM_WORKSPACE_ID);
-  conn.db
-    .prepare(
+      [SYSTEM_WORKSPACE_ID],
+    );
+    w.run(
       "INSERT INTO actors (id, workspace_id, kind, system_key, label) VALUES (?, ?, 'system', 'system', 'System')",
-    )
-    .run(SYS_ACTOR, SYSTEM_WORKSPACE_ID);
+      [SYS_ACTOR, SYSTEM_WORKSPACE_ID],
+    );
+  });
   const firstPath = join(dir, 'first-password');
   const service = new AuthService({
     store: new SqliteAuthStore(conn),

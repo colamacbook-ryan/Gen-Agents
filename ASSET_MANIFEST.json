@@ -1,5 +1,72 @@
 {
   "$comment": "Mọi asset (ảnh, font, âm thanh, tham số nhân vật trong skins/) phải có mục ở đây: nguồn + license + sha256 (STD-04 §6). Cổng: pnpm license:check. M0 chưa có asset; gói tam-quoc-chibi 1.0.0 vào ở M3 (L-CHIBI, BUILD-PLAN §D.5).",
   "version": 1,
-  "assets": []
+  "assets": [
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/manifest.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "cace6ab1640df61be275f642ebc40ebbafa21f0d911a23dadcfb8c6877c26c64"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq046.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "68e1017c4750ec13d2952fd0959334d6a5f884a1a619154cd82ea0022ceee963"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq044.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "102d1fe809c08f489b059dfd0119c0d95187d036b056c70828e3aee3ec6e3fc9"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq080.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "a30ad5b56d648170cf18ce6627b4a0d3f832da3ba0df27d06c3548b9781b86e3"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq043.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "125f152468ad74cd5b9df1441d6eb69bd80c18165dece1d00535d16ee35f4cfd"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq045.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "d3e15f4b2cd20253d68edd558eefcf35613e9e5b4e51013e0f6bb7d82ffe0e2b"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq047.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "c64eba3b2cbe0531707a139a9efb572e91a674276d404c56de7166a73e5ce81f"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq010.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "bceec19a4234c64ae3864932567d115b57e7b3fa93771f1339d6cb0d9cb93bd8"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq141.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "25c5eb73846579c978f2cf0664fa8c65a7bd75482ea0e3f7d4597044c8dc7d0f"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tq031.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "eda2e265f43d5b5ee49fc8b8696bbca819cc1dad1d8a38bb56b4d6c7fdb41222"
+    },
+    {
+      "path": "skins/tam-quoc-chibi/1.0.0/characters/tqx001.json",
+      "source": "Afi Labs — vẽ bằng code (SVG + CSS)",
+      "license": "Proprietary — Afi Labs",
+      "sha256": "e068f095651796cd5cf4a706032742873d1228c27577765f7e0915091a044d22"
+    }
+  ]
 }

@@ -130,6 +130,16 @@ describe('createTenantWorkspace: workspaces → seed → owner đầu tiên (m�
     expect(count(conn, 'SELECT count(*) FROM workspaces WHERE id = ?', WS_B)).toBe(0);
   });
 
+  it('ca âm: actor CÙNG workspace nhưng không phải actor system (actor user owner / tác tử scheduler) ⇒ từ chối trước bootstrap', () => {
+    createTenantWorkspace(conn, seed, inputA());
+    const ids = actorIdsFor('A');
+    for (const wrong of [OWNER_A, ids.scheduler as string]) {
+      expect(() => createTenantWorkspace(conn, seed, inputA({ actorIds: { ...ids, system: wrong } })), wrong).toThrow(
+        SeedReferenceError,
+      );
+    }
+  });
+
   it('ca âm: chạy lại tenant A bằng id actor system KHÁC ⇒ bootstrap từ chối (không đổi actor system)', () => {
     createTenantWorkspace(conn, seed, inputA());
     expect(() => createTenantWorkspace(conn, seed, inputA({ actorIds: actorIdsFor('B') }))).toThrow(
