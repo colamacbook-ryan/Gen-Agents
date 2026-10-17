@@ -1635,7 +1635,7 @@ export function createFakeStore(opts: { clock?: Clock; newId?: IdGenerator } = {
           evidence_audit_id: i.evidenceAuditId ?? null,
           reverses_entry_id: i.reversesEntryId ?? null,
           recorded_by: by,
-          approved_by: i.approvedBy ?? null,
+          approved_by: null,
           idempotency_key: i.idempotencyKey ?? null,
         });
         for (const [w, bal] of [
