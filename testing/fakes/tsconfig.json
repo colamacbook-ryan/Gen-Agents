@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": ".", "outDir": "dist" },
+  "include": ["lib", "agy", "claude", "vendor", "telegram", "update-feed", "engine-source", "test", "*.ts"],
+  "references": [{ "path": "../../packages/contracts" }]
+}
