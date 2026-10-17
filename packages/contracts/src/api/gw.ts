@@ -616,7 +616,6 @@ export const GW_26 = gw({
   },
   response: ok(PageOf(SessionRow)),
   cli: ['sessions', 'task show', 'diag'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_27 = gw({
@@ -635,7 +634,6 @@ export const GW_27 = gw({
     }),
   ),
   cli: ['session show'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 // ---------------------------------------------------------------- GW-28…32 quyền tool
@@ -668,7 +666,6 @@ export const GW_28 = gw({
   request: { query: z.strictObject({ status: z.enum(PERMISSION_STATUSES).optional() }) },
   response: ok(list(PermissionRow)),
   cli: ['perms'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_29 = gw({
@@ -688,7 +685,6 @@ export const GW_29 = gw({
   // `conflict` khi đã quyết. B-REL: duyệt bằng CLI (Q-B5: không có nút duyệt nhanh trên Telegram).
   response: ok(z.strictObject({ request: PermissionRow, grant: IdOf('GR').nullable() })),
   cli: ['perm allow', 'perm ask', 'perm deny'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_30 = gw({
@@ -700,7 +696,6 @@ export const GW_30 = gw({
   request: { params: z.strictObject({ roleRef: Ref('RL') }) },
   response: ok(list(GrantRow)),
   cli: ['grants'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_31 = gw({
@@ -716,7 +711,6 @@ export const GW_31 = gw({
   response: ok(GrantRow),
   errors: ['db.*'],
   cli: ['grants set'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_32 = gw({
@@ -743,7 +737,6 @@ export const GW_32 = gw({
     ),
   ),
   cli: ['tools'],
-  cliOnly: 'chưa có màn ở §3.11 (CLI / lưới chung); không thuộc màn FRONTEND-SPEC nào',
 });
 
 export const GW_ROUTES = [

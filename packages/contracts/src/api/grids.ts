@@ -50,11 +50,110 @@ export const GRID_PREFIX = {
   notifications: 'NT',
   characters: 'SN',
   avatars: 'AV',
+  // Toàn bộ trạng thái hệ thống phải xem được ở Data Console (owner chốt 2026-10-17): phiên, yêu cầu quyền, quyền tool, tool.
+  // Chỉ-đọc; ghi (nếu có) đi qua route của miền ở `GRID_WRITE_ROUTES`.
+  sessions: 'SS',
+  permission_requests: 'PM',
+  tool_grants: 'GR',
+  tools: 'TL',
 } as const satisfies Record<string, EntityPrefix>;
 
 export type GridKeyName = keyof typeof GRID_PREFIX;
 export const GRID_KEYS = Object.keys(GRID_PREFIX) as [GridKeyName, ...GridKeyName[]];
 export const GridKey = z.enum(GRID_KEYS);
+
+/** Một thao tác ghi gắn với lưới (route của miền sở hữu; KHÔNG có route ghi chung). */
+export interface GridWrite {
+  /** "+ Thêm hàng" → route tạo (POST) của miền; `null` = không thêm tay. */
+  create: string | null;
+  /** Sửa ô: tên cột → route ghi (PATCH / PUT / POST) của miền. */
+  edit: Readonly<Record<string, string>>;
+  /** Xoá hàng → route xoá của miền; `null` = không xoá tại lưới. */
+  remove: string | null;
+  /** Hành động theo hàng (menu `⋯`): khoá hành động → route. */
+  actions: Readonly<Record<string, string>>;
+  /** Route đọc của miền (danh sách / chi tiết) cùng dữ liệu với lưới — để bảng độ phủ §3.11 ghi nhận. */
+  reads: readonly string[];
+}
+
+const NONE: GridWrite = { create: null, edit: {}, remove: null, actions: {}, reads: [] };
+
+/**
+ * Route ghi / hành động theo lưới. QUYỀN do CHÍNH route quyết (giữ nguyên `auth` / `ownerWhen` của route gốc, không nới ở
+ * lưới). KHÔNG nối route chạm credential (`touchesCredential`) hay nhận secret: ô lưới không phải nơi gõ secret (test giữ).
+ * Lưới chỉ-đọc ⇔ `NONE`. Tên cột phải có trong whitelist `GRID_COLUMNS` của lưới đó (test giữ).
+ */
+export const GRID_WRITE_ROUTES: Record<GridKeyName, GridWrite> = {
+  roles: {
+    ...NONE,
+    create: 'SYS-31',
+    edit: { name: 'SYS-33', color: 'SYS-33' },
+    actions: { clone: 'SYS-34', archive: 'SYS-35', delete: 'SYS-36' },
+  },
+  dna: { ...NONE, edit: { value: 'SYS-38', prompt: 'SYS-38' }, actions: { confirm: 'SYS-39' } },
+  instructions: {
+    ...NONE,
+    create: 'SYS-47',
+    edit: { name: 'SYS-48', content: 'SYS-48', cond: 'SYS-48', engine: 'SYS-48', on: 'SYS-48', ordinal: 'SYS-48' },
+  },
+  skills: {
+    ...NONE,
+    create: 'SYS-50',
+    edit: { description: 'SYS-51', content: 'SYS-51', engine: 'SYS-51', cat: 'SYS-51', on: 'SYS-53' },
+    actions: { import: 'SYS-52' },
+  },
+  knowledge: { ...NONE, remove: 'SYS-57', actions: { dup: 'SYS-56' } },
+  memories: {
+    ...NONE,
+    create: 'WRK-36',
+    edit: { content: 'WRK-37', scope: 'WRK-39', status: 'WRK-39' },
+    remove: 'WRK-40',
+    actions: { decision: 'WRK-38', restore: 'WRK-41' },
+  },
+  tasks: { ...NONE, edit: { role: 'WRK-17', verification: 'WRK-19' }, actions: { stop: 'WRK-18' } },
+  commitments: NONE,
+  // Sổ ₲ chỉ-ghi-thêm: bút toán tạo bằng WRK-23…26 (có Idempotency-Key, không qua ô lưới); hành động theo hàng = đảo.
+  ledger: { ...NONE, actions: { reverse: 'WRK-26' } },
+  audit: NONE,
+  events: NONE,
+  capabilities: NONE,
+  taxonomy: { ...NONE, create: 'SYS-59' },
+  polaris_checks: NONE,
+  wounds: NONE,
+  engine_accounts: NONE,
+  engine_bindings: { ...NONE, edit: { model: 'GW-10', effort: 'GW-10', on: 'GW-10' }, actions: { order: 'GW-09' } },
+  containers: NONE,
+  model_ranks: { ...NONE, actions: { order: 'GW-24' } },
+  system_agents: { ...NONE, edit: { model: 'SYS-15', effort: 'SYS-15' } },
+  telegram_bots: NONE,
+  telegram_allowlist: { ...NONE, remove: 'WRK-09' },
+  proactive_policies: NONE,
+  proactive_jobs: NONE,
+  proactive_sends: NONE,
+  update_runs: NONE,
+  app_versions: NONE,
+  change_sets: { ...NONE, actions: { apply: 'SYS-27', reject: 'SYS-28' } },
+  employee_cards: { ...NONE, actions: { suspend: 'SYS-77', resume: 'SYS-78', revoke: 'SYS-79' } },
+  trial_runs: NONE,
+  notifications: { ...NONE, actions: { read: 'SYS-84' } },
+  characters: { ...NONE, edit: { on: 'SYS-66' }, actions: { assign: 'SYS-65' } },
+  avatars: { ...NONE, actions: { restore: 'SYS-69' } },
+  sessions: { ...NONE, reads: ['GW-26', 'GW-27'] },
+  permission_requests: { ...NONE, edit: { status: 'GW-29' }, reads: ['GW-28'] },
+  tool_grants: { ...NONE, edit: { mode: 'GW-31' }, reads: ['GW-30'] },
+  tools: { ...NONE, reads: ['GW-32'] },
+};
+
+/** Mọi route được nối vào một lưới (tạo, sửa ô, xoá, hành động, đọc của miền). */
+export function gridRouteIds(): string[] {
+  const out = new Set<string>();
+  for (const w of Object.values(GRID_WRITE_ROUTES)) {
+    if (w.create) out.add(w.create);
+    if (w.remove) out.add(w.remove);
+    for (const id of [...Object.values(w.edit), ...Object.values(w.actions), ...w.reads]) out.add(id);
+  }
+  return [...out];
+}
 
 export const GRID_PAGE_MAX = 500;
 export const GRID_PAGE_DEFAULT = 200;

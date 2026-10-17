@@ -488,7 +488,6 @@ export const WRK_19 = work({
   response: ok(TaskRow),
   errors: ['db.check_failed'],
   cli: ['task verify'],
-  cliOnly: 'xác minh việc chưa có màn riêng ở §3.11 (menu `⋯` của Việc: WRK-16…18)',
 });
 
 export const WRK_20 = work({
@@ -684,7 +683,6 @@ export const WRK_26 = work({
   response: ok(z.strictObject({ entry: IdOf('LG') })),
   errors: ['db.ledger_rule'],
   cli: ['reverse'],
-  cliOnly: 'đảo bút toán chưa có màn riêng ở §3.11',
 });
 
 // ---------------------------------------------------------------- WRK-27…33 Polaris, Trọng thương, bảng xếp hạng

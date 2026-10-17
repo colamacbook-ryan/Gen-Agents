@@ -429,7 +429,8 @@ export const SYS_44 = hr({
   request: { params: z.strictObject({ positionRef: Ref('PS') }) },
   response: ok(PositionRow),
   cli: ['position'],
-  cliOnly: 'Position chỉ-đọc ở FS (DATABASE §6.1: cột Position GĐ2); không có màn riêng ở §3.11',
+  cliOnly:
+    'Position chưa có lưới ở Data Console (prefix PS có trong ENTITY_TYPES; chờ quyết định thêm khoá lưới `positions`); FS: cột Position GĐ2',
 });
 
 export const SYS_45 = hr({
@@ -452,7 +453,8 @@ export const SYS_45 = hr({
   response: ok(PositionRow),
   errors: ['db.*'],
   cli: ['position set'],
-  cliOnly: 'Position chỉ-đọc ở FS (DATABASE §6.1: cột Position GĐ2); không có màn riêng ở §3.11',
+  cliOnly:
+    'Position chưa có lưới ở Data Console (prefix PS có trong ENTITY_TYPES; chờ quyết định thêm khoá lưới `positions`); FS: cột Position GĐ2',
 });
 
 // ---------------------------------------------------------------- Instructions, Skills, Knowledge (A2 Bảng)

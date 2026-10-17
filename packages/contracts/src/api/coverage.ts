@@ -1,3 +1,5 @@
+import { gridRouteIds } from './grids.ts';
+
 // Độ phủ FRONTEND-SPEC → route (BACKEND-TRIAL §3.11) và cây lệnh `genagents` → route (§3.10).
 // Đây là DỮ LIỆU của hợp đồng: test `api:coverage` đối chiếu với ROUTES (mỗi mã màn có ≥ 1 route; mỗi route trỏ tới có thật; route
 // nào không thuộc màn nào phải khai `cliOnly` kèm lý do). Frontend (Data Console là MVP, owner chốt 2026-10-17) và `ga-cli` chỉ
@@ -112,7 +114,7 @@ export const FS_COVERAGE = {
     'WRK-30',
   ),
   // Data Console (STD-07 §5): DataGrid, FormulaBar, ô truy vấn — route ghi của từng miền; KHÔNG có PATCH chung.
-  DataGrid: ids('OPS-32..35'),
+  DataGrid: [...new Set([...ids('OPS-32..35'), ...gridRouteIds()])],
   TokenMeter: ids('GW-22'),
   'QuotaBar/CapabilityCard': ids('GW-05', 'GW-18'),
   ChatPanel: ids('SYS-16..24', 'SYS-85'),
