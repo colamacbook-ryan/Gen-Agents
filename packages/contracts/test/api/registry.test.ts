@@ -194,7 +194,9 @@ describe('registry — quyền', () => {
     expect(routeById('WRK-06')?.auth).toBe('A');
     // OPS-03: `backup.remote_anchor` chỉ owner (admin không ghi được); khoá chung vẫn A; khoá lạ ⇒ O (fail-closed).
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'backup.remote_anchor' } })).toBe('O');
-    expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'purge.grace_days' } })).toBe('A');
+    // H4: purge.grace_days nới hàng rào (giữ dữ liệu xoá) ⇒ owner; khoá thuần giao diện vẫn A.
+    expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'purge.grace_days' } })).toBe('O');
+    expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'ui.avatar_motion' } })).toBe('A');
     expect(ops03 && requiredAccess(ops03, { params: { settingKey: 'no.such_key' } })).toBe('O');
     expect(ops03 && requiredAccess(ops03, {})).toBe('O');
     // OPS-07: thêm luật `allow` (mở đường dữ liệu đi ra) = nới ⇒ O; thêm `deny` = siết ⇒ A.
