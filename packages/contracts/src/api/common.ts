@@ -254,12 +254,16 @@ export function secretKindOf(schema: z.ZodType): SecretKind | undefined {
 }
 
 // ---------------------------------------------------------------- Idempotency-Key, ConfirmName
-/** Header `Idempotency-Key` (bắt buộc ở SYS-19, SYS-74, WRK-23…26): ghi vào `ledger_entries.idempotency_key` (UNIQUE). */
+/**
+ * Header `Idempotency-Key` (bắt buộc ở SYS-19, SYS-74, WRK-23…26): ghi vào `ledger_entries.idempotency_key` (UNIQUE).
+ * KHÔNG chứa `:` (review bảo mật PR #7, M9): hệ thống đặt khoá nội bộ dạng `activate:<ulid>`, `reverse:<ulid>`… cùng cột UNIQUE;
+ * client không được tự đặt khoá giả danh (đụng khoá ⇒ chặn việc ghi sổ hợp lệ, hoặc phát lại bút toán của hệ thống).
+ */
 export const IdempotencyKey = z
   .string()
   .min(8)
   .max(API_LIMITS.idempotencyKeyChars)
-  .regex(/^[A-Za-z0-9._:-]+$/)
+  .regex(/^[A-Za-z0-9._-]+$/)
   .meta({ example: 'idem-0001-abcdef' });
 export const IdempotencyHeaders = z.strictObject({ [API_AUTH.idempotencyHeader]: IdempotencyKey });
 

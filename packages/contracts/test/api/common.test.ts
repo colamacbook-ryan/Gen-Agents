@@ -106,6 +106,10 @@ describe('Idempotency-Key, ConfirmName, Job', () => {
     expect(IdempotencyKey.safeParse('a'.repeat(129)).success).toBe(false);
     expect(IdempotencyKey.safeParse('a'.repeat(7)).success).toBe(false);
     expect(IdempotencyKey.safeParse('abc def ghi').success).toBe(false);
+    // M9: `:` dành cho khoá nội bộ của hệ thống (`activate:<ulid>`) — client không được đặt.
+    expect(IdempotencyKey.safeParse(`activate:${'01JABCDEFGHJKMNPQRSTVWXYZ0'}`).success).toBe(false);
+    expect(IdempotencyKey.safeParse('reverse:abcdefgh').success).toBe(false);
+    expect(IdempotencyKey.safeParse('idem.0001_abc-def').success).toBe(true);
     expect(IdempotencyKey.safeParse('abc\ndefghi').success).toBe(false);
   });
 
